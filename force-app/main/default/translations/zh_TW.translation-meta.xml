@@ -52,4 +52,16 @@
         <label>儲存並下載</label>
         <name>DocGenRunner_SaveAndDownload</name>
     </customLabels>
+    <customLabels>
+        <label>選擇記錄</label>
+        <name>DocGenRunner_SelectRecord</name>
+    </customLabels>
+    <customLabels>
+        <label>搜尋記錄...</label>
+        <name>DocGenRunner_SearchRecords</name>
+    </customLabels>
+    <customLabels>
+        <label>請在上方搜尋記錄以開始。</label>
+        <name>DocGenRunner_ChooseRecordPrompt</name>
+    </customLabels>
 </Translations>

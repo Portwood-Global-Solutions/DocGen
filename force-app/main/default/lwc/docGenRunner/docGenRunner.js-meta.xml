@@ -17,6 +17,13 @@
         <targetConfig targets="lightning__RecordPage">
             <property name="showDownloadOption" type="Boolean" label="Show Download Option" default="true" />
             <property name="showSaveToRecordOption" type="Boolean" label="Show Save to Record Option" default="true" />
+            <property
+                name="showSaveAndDownloadOption"
+                type="Boolean"
+                label="Show Save &amp; Download Option"
+                default="true"
+                description="Offers the combined Save-to-Record-and-Download destination. Only appears when Download and Save to Record are both enabled."
+            />
             <property name="showDocumentPacketOption" type="Boolean" label="Show Document Packet Mode" default="true" />
             <property name="showCombinePdfsOption" type="Boolean" label="Show Combine PDFs Mode" default="true" />
             <property
@@ -31,8 +38,33 @@
             </supportedFormFactors>
         </targetConfig>
         <targetConfig targets="lightning__AppPage">
+            <property
+                name="recordPickerObject"
+                type="String"
+                label="Record Search Object API Name"
+                description="Lets users search for the record to generate against — e.g. Account, Opportunity, My_Object__c. Leave blank to use the fixed Record ID below instead. Set one or the other, not both."
+            />
+            <property
+                name="recordId"
+                type="String"
+                label="Record ID (fixed)"
+                description="Optional. Always generate against this one record. When set, the search box does not appear — clear this field to let users choose their own record."
+            />
+            <property
+                name="objectApiName"
+                type="String"
+                label="Object API Name (for fixed Record ID)"
+                description="Object API name of the fixed Record ID above. Not needed when using record search."
+            />
             <property name="showDownloadOption" type="Boolean" label="Show Download Option" default="true" />
             <property name="showSaveToRecordOption" type="Boolean" label="Show Save to Record Option" default="true" />
+            <property
+                name="showSaveAndDownloadOption"
+                type="Boolean"
+                label="Show Save &amp; Download Option"
+                default="true"
+                description="Offers the combined Save-to-Record-and-Download destination. Only appears when Download and Save to Record are both enabled."
+            />
             <property name="showDocumentPacketOption" type="Boolean" label="Show Document Packet Mode" default="true" />
             <property name="showCombinePdfsOption" type="Boolean" label="Show Combine PDFs Mode" default="true" />
             <property
@@ -49,8 +81,21 @@
         <targetConfig targets="lightning__FlowScreen">
             <property name="recordId" type="String" label="Record ID" />
             <property name="objectApiName" type="String" label="Object API Name" />
+            <property
+                name="recordPickerObject"
+                type="String"
+                label="Record Search Object API Name"
+                description="Optional. When no Record ID is passed in, lets the user search for one — e.g. Account."
+            />
             <property name="showDownloadOption" type="Boolean" label="Show Download Option" default="true" />
             <property name="showSaveToRecordOption" type="Boolean" label="Show Save to Record Option" default="true" />
+            <property
+                name="showSaveAndDownloadOption"
+                type="Boolean"
+                label="Show Save &amp; Download Option"
+                default="true"
+                description="Offers the combined Save-to-Record-and-Download destination. Only appears when Download and Save to Record are both enabled."
+            />
             <property name="showDocumentPacketOption" type="Boolean" label="Show Document Packet Mode" default="true" />
             <property name="showCombinePdfsOption" type="Boolean" label="Show Combine PDFs Mode" default="true" />
             <property
@@ -73,6 +118,13 @@
                 label="Object API Name"
                 description="Object API name for the recordId. Optional — engine resolves from the Id prefix when blank."
             />
+            <!--
+                No recordPickerObject here on purpose. lightning-record-picker resolves
+                records through UI API, which guest users cannot call — a guest would get
+                a search box that silently returns nothing. Community placements bind
+                {!recordId} from page context instead. Revisit only with a real
+                guest-context test behind it.
+            -->
             <property
                 name="showDownloadOption"
                 type="Boolean"
@@ -86,6 +138,13 @@
                 label="Show Save to Record Option"
                 default="false"
                 description="Save back to records is internal-context only. Leave off for community placements."
+            />
+            <property
+                name="showSaveAndDownloadOption"
+                type="Boolean"
+                label="Show Save &amp; Download Option"
+                default="false"
+                description="Combined Save-to-Record-and-Download destination. Internal-context only — leave off for community placements."
             />
             <property
                 name="showDocumentPacketOption"

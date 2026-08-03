@@ -50,6 +50,9 @@ import LBL_COMBINE_PDFS_ACTION from '@salesforce/label/c.DocGenRunner_CombinePdf
 import LBL_DOWNLOAD from '@salesforce/label/c.DocGenRunner_Download';
 import LBL_SAVE_TO_RECORD from '@salesforce/label/c.DocGenRunner_SaveToRecord';
 import LBL_SAVE_AND_DOWNLOAD from '@salesforce/label/c.DocGenRunner_SaveAndDownload';
+import LBL_SELECT_RECORD from '@salesforce/label/c.DocGenRunner_SelectRecord';
+import LBL_SEARCH_RECORDS from '@salesforce/label/c.DocGenRunner_SearchRecords';
+import LBL_CHOOSE_RECORD_PROMPT from '@salesforce/label/c.DocGenRunner_ChooseRecordPrompt';
 
 export default class DocGenRunner extends NavigationMixin(LightningElement) {
     // Exposed to the template as {label.X}. Custom Labels resolve to the
@@ -62,16 +65,66 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         outputDestination: LBL_OUTPUT_DESTINATION,
         download: LBL_DOWNLOAD,
         saveToRecord: LBL_SAVE_TO_RECORD,
-        saveAndDownload: LBL_SAVE_AND_DOWNLOAD
+        saveAndDownload: LBL_SAVE_AND_DOWNLOAD,
+        selectRecord: LBL_SELECT_RECORD,
+        searchRecords: LBL_SEARCH_RECORDS,
+        chooseRecordPrompt: LBL_CHOOSE_RECORD_PROMPT
     };
 
-    @api recordId;
-    @api objectApiName;
+    /**
+     * Record the runner generates against.
+     *
+     * On a record page the framework injects this. On an App Page (or a
+     * standalone tab) there is no record context, so it comes from one of two
+     * places instead: a fixed Id typed into App Builder (still this setter), or
+     * the runtime record picker (`_pickedRecordId`, below). The picker wins
+     * when both are present — it is the user's explicit choice for this run.
+     *
+     * This is an accessor rather than a plain field so the ~25 `this.recordId`
+     * read sites and the `$recordId` wire config need no change: they all see
+     * the resolved value. Wire reactivity still works because the getter reads
+     * reactive fields.
+     */
+    @api
+    get recordId() {
+        return this._pickedRecordId || this._recordId;
+    }
+    set recordId(value) {
+        this._recordId = value;
+    }
+
+    /**
+     * Object API name for `recordId`. Injected on record pages; on an App Page
+     * it falls back to the picker's configured object once a record is picked,
+     * so the template wire has something to filter on.
+     */
+    @api
+    get objectApiName() {
+        if (this._objectApiName) {
+            return this._objectApiName;
+        }
+        return this._pickedRecordId ? this.recordPickerObject : undefined;
+    }
+    set objectApiName(value) {
+        this._objectApiName = value;
+    }
+
+    /**
+     * App Builder: object API name to search when the runner is placed
+     * somewhere without record context. Blank = no picker.
+     */
+    @api recordPickerObject;
+
     @api showDownloadOption;
     @api showSaveToRecordOption;
+    @api showSaveAndDownloadOption;
     @api showDocumentPacketOption;
     @api showCombinePdfsOption;
     @api showCombineWithExistingPdfsOption;
+
+    _recordId;
+    _objectApiName;
+    @track _pickedRecordId = '';
 
     @track templateOptions = [];
     @track selectedTemplateId = '';
@@ -128,6 +181,9 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     get canSaveToRecord() {
         return this._isEnabled(this.showSaveToRecordOption);
     }
+    get canSaveAndDownload() {
+        return this._isEnabled(this.showSaveAndDownloadOption);
+    }
     get canUseDocumentPacket() {
         return this._isEnabled(this.showDocumentPacketOption);
     }
@@ -170,6 +226,48 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         return this.modernModeOptions.length > 1;
     }
 
+    // --- Record picker (App Page / no record context) ---
+
+    /**
+     * The picker renders only where it is both configured AND needed: an admin
+     * set an object to search, and the placement gave us no record of its own.
+     * A record page always injects recordId, so the picker never appears there
+     * even if the property is somehow set.
+     */
+    get showRecordPicker() {
+        return !!this.recordPickerObject && !this._recordId;
+    }
+
+    get pickedRecordId() {
+        return this._pickedRecordId || null;
+    }
+
+    /**
+     * True when the runner has no record to work with and the user still has a
+     * way to give it one. Suppresses the template/output UI (and its "no
+     * templates for this record" empty state) until a record is chosen.
+     */
+    get awaitingRecordSelection() {
+        return this.showRecordPicker && !this._pickedRecordId;
+    }
+
+    handleRecordPicked(event) {
+        const newId = event.detail ? event.detail.recordId : null;
+        this._pickedRecordId = newId || '';
+        // Everything below is scoped to the previous record — templates reload
+        // through the wire, but these were fetched imperatively and would
+        // otherwise offer the old record's files against the new one.
+        this.error = '';
+        this.recordPdfOptions = [];
+        this.selectedPdfCvIds = [];
+        this.mergeEnabled = false;
+        this.packetExistingPdfIds = [];
+        this.packetIncludeExisting = false;
+        this.childPdfsLoaded = false;
+        this.childRecordGroups = [];
+        this.selectedChildPdfCvIds = [];
+    }
+
     get _isMobile() {
         return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     }
@@ -205,10 +303,11 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         if (this.canSaveToRecord) {
             modes.push('save');
         }
-        // Save & Download is offered only when the admin left BOTH destinations
-        // enabled — it is the combination of the two, not a third destination, so
-        // it must not reintroduce one the admin deliberately turned off.
-        if (this.canDownload && this.canSaveToRecord) {
+        // Save & Download has its own App Builder checkbox, but it is still the
+        // combination of the other two rather than a third destination — so it
+        // also requires BOTH to be enabled. It must never reintroduce a
+        // destination the admin deliberately turned off.
+        if (this.canDownload && this.canSaveToRecord && this.canSaveAndDownload) {
             modes.push('both');
         }
         return modes;

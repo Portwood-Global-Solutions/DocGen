@@ -17,6 +17,19 @@
                 <div class="error-alert"><strong>Error:</strong> {error}</div>
             </template>
 
+            <!-- Record picker — App Page / standalone placements with no record context -->
+            <template lwc:if={showRecordPicker}>
+                <div class="slds-form-element slds-var-m-bottom_medium">
+                    <lightning-record-picker
+                        label={label.selectRecord}
+                        placeholder={label.searchRecords}
+                        object-api-name={recordPickerObject}
+                        value={pickedRecordId}
+                        onchange={handleRecordPicked}
+                    ></lightning-record-picker>
+                </div>
+            </template>
+
             <template lwc:if={isLoading}>
                 <div class="loading-state">
                     <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
@@ -29,6 +42,12 @@
                             <p class="progress-bar-label">{progressPercent}%</p>
                         </div>
                     </template>
+                </div>
+            </template>
+
+            <template lwc:elseif={awaitingRecordSelection}>
+                <div class="slds-box slds-theme_shade" style="text-align: center">
+                    <p class="slds-text-body_regular slds-text-color_weak">{label.chooseRecordPrompt}</p>
                 </div>
             </template>
 
