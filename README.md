@@ -4,12 +4,12 @@ Generate PDF, Word, Excel, and PowerPoint documents from any Salesforce record. 
 
 [Join the Community Channel](https://portwood.dev/community) | [Website](https://portwood.dev) | [Roadmap](https://portwood.dev/roadmap)
 
-[![Version](https://img.shields.io/badge/version-3.49.0-blue.svg)](#install)
+[![Version](https://img.shields.io/badge/version-3.51.0-blue.svg)](#install)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Salesforce-00A1E0.svg)](https://www.salesforce.com)
 [![Namespace](https://img.shields.io/badge/namespace-portwoodglobal-purple.svg)](#install)
-[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1777_passing-brightgreen)](#code-quality)
-[![Coverage](https://img.shields.io/badge/Coverage-78%25-brightgreen)](#code-quality)
+[![Apex Tests](https://img.shields.io/badge/Apex_Tests-1890_passing-brightgreen)](#security)
+[![Coverage](https://img.shields.io/badge/Coverage-78%25-brightgreen)](#security)
 [![Security](https://img.shields.io/badge/Code_Analyzer-0%2F0%2F0-brightgreen)](#security)
 [![Website](https://img.shields.io/badge/website-portwood.dev-blue)](https://portwood.dev)
 
@@ -56,17 +56,30 @@ Download example templates from [portwood.dev](https://portwood.dev).
 
 ### Template Formats
 
-| Format            | Template                | Output Options | Best For                                                   |
-| ----------------- | ----------------------- | -------------- | ---------------------------------------------------------- |
-| **Word**          | `.docx`                 | PDF or DOCX    | Contracts, proposals, invoices, letters                    |
-| **HTML** (v1.61+) | `.html`, `.htm`, `.zip` | PDF            | Google Docs, Notion, ChatGPT, Apple Pages, any HTML source |
-| **PDF** (v3.03+)  | `.pdf`                  | PDF            | Fillable PDF forms / AcroForm mapping (testing)            |
-| **Excel**         | `.xlsx`                 | XLSX           | Data exports, reports, financial summaries                 |
-| **PowerPoint**    | `.pptx`                 | PPTX           | Presentations, slide decks                                 |
+| Format                   | Template                | Output Options | Best For                                                   |
+| ------------------------ | ----------------------- | -------------- | ---------------------------------------------------------- |
+| **Word**                 | `.docx`                 | PDF or DOCX    | Contracts, proposals, invoices, letters                    |
+| **HTML** (v1.61+)        | `.html`, `.htm`, `.zip` | PDF            | Google Docs, Notion, ChatGPT, Apple Pages, any HTML source |
+| **PDF** (v3.03+)         | `.pdf`                  | PDF            | Fillable PDF forms / AcroForm field mapping                |
+| **Excel** _(alpha)_      | `.xlsx`                 | XLSX           | Data exports, reports, financial summaries                 |
+| **PowerPoint** _(alpha)_ | `.pptx`                 | PPTX           | Presentations, slide decks                                 |
 
-Word and HTML both support images, rich text, headers/footers, and PDF output. Word adds barcodes and QR codes. Excel and PowerPoint render in their native formats only.
+Word and HTML are the fully supported authoring formats — both handle images, rich text, headers/footers, barcodes, charts, and PDF output. **Excel and PowerPoint are alpha:** core merge mechanics work (fields, parent lookups, loops including PowerPoint slide-table rows, format suffixes), but expect rough edges — PowerPoint→PDF isn't supported by the Salesforce platform, and complex Excel formulas may not survive merging. For mission-critical decks and spreadsheets today, render to PDF or DOCX. See [UserGuide § 2](UserGuide.md#2-what-portwood-does).
 
 **HTML templates** accept Google Docs "Download → Web Page" zips directly — the admin UI unzips client-side, extracts each image into a ContentVersion, and rewrites the HTML to reference them. Inline `data:image/...` URIs from Notion / ChatGPT / rich-text paste are handled the same way. Optional `Header HTML` / `Footer HTML` fields with a WYSIWYG editor (and a **Show HTML** toggle for raw-source edits) support merge tags including `{PageNumber}` and `{TotalPages}`.
+
+### Template Designer (v3.34+)
+
+You don't have to leave Salesforce to author a template. The **Visual Designer** edits an HTML template on a real page canvas — WYSIWYG or raw source, switchable at any time:
+
+- **Insert panel** — blocks, tables, charts, barcodes, special characters (or press `` ` `` anywhere on the page)
+- **Tags panel** — your query's merge fields as clickable chips, styled inline like ordinary text
+- **Images** — shared Asset Library, drag to place, corner-resize, align, double-click to edit the tag
+- **Query panel** — the same click-to-build query tree used everywhere else, editable without leaving the designer
+- **Versions, Header/Footer, and Watermark panels** — including background watermarks with baked-in opacity so canvas and PDF match
+- **PDF Preview** — opens your unsaved draft in the native viewer, with nothing written to Files
+
+**Generate with Agentforce (v3.46+)** — describe the document and Portwood writes the template; ask for a change in plain English and it revises what's on the canvas. Everything the model produces is validated against the PDF engine first (invisible `rgba()` tints flattened to hex, ignored `border-radius`/`box-shadow` stripped, stranded loop tags moved into cells), and any merge tag that went missing on an edit is reported by name. Reached through `ConnectApi`, not an HTTP callout. Requires the optional [Agentforce Extension](#optional--ai-template-authoring); **Copy AI Prompt** gives you the same brief for your own assistant without it.
 
 ### Merge Tags
 
@@ -81,6 +94,12 @@ Word and HTML both support images, rich text, headers/footers, and PDF output. W
 | `{^Field}...{/Field}`                   | Show when field is false/blank              | `{^HasDiscount}No discount applied{/HasDiscount}`            |
 | `{#IF Field op Value}...{/IF}`          | Compare field against value                 | `{#IF Amount > 50000}Premium{:else}Standard{/IF}`            |
 | `{RichTextField}`                       | Rich text with formatting and images        | `{Description}` renders bold, italic, lists                  |
+| `{RowNumber}` (v3.49+)                  | 1-based row counter inside any loop         | `{#Contacts}{RowNumber}. {Name}{/Contacts}`                  |
+| `{Today}` / `{Now}`                     | Generation date / date-time                 | `{Today:MMMM d, yyyy}`                                       |
+| `{RunningUser.Field}`                   | Who generated the document                  | `Prepared by {RunningUser.Name}`                             |
+| `{#Approvals}...{/Approvals}` (v1.92+)  | Classic approval history related list       | `{#Approvals}{StepStatus} — {ActorName}{/Approvals}`         |
+
+`{RowNumber}` restarts per nested loop and per `{#GroupBy}` group, and counts straight through on giant-query tables. Full reference in [UserGuide § 7](UserGuide.md#7-merge-tag-reference).
 
 ### Formatting
 
@@ -123,7 +142,7 @@ Rich text fields render with full formatting (bold, italic, lists, images) in PD
 
 ### Barcodes & QR Codes
 
-PDF output only. No external services required.
+Word **and** HTML templates (HTML support added in v3.15), across PDF and DOCX output. Generated natively in Apex — no external services required.
 
 | Tag                             | What You Get                     |
 | ------------------------------- | -------------------------------- |
@@ -132,7 +151,7 @@ PDF output only. No external services required.
 | `{*Website:qr}`                 | QR code (150px default)          |
 | `{*TrackingUrl:qr:200}`         | QR code at 200px square          |
 
-QR codes are generated natively in Salesforce with Level Q error correction and support values up to 600 characters. For printed or mailed documents, short URLs or tokens under 120 characters scan most reliably at 1 inch square.
+QR codes use Level Q error correction and support values up to 600 characters. For printed or mailed documents, short URLs or tokens under 120 characters scan most reliably at 1 inch square. **Only `code128` and `qr` are supported** — an unsupported type (e.g. `code39`) renders nothing, silently.
 
 ### Charts (v1.99+)
 
@@ -235,6 +254,8 @@ Backward compatible: `{@Signature_Buyer}` still works (treated as `:1:Full`).
 - **Sender notifications** — email alerts when each signer completes, when all are done, or when someone declines
 - **Sender preview** — see the fully merged document with highlighted signature placements before sending
 - **Resume support** — per-placement persistence; signers pick up exactly where they left off
+- **Signer form fields** — collect input during signing (text, picklist, checkbox, date) and write the answers back to the related record automatically
+- **In-person signing** — bypass the email PIN for signing on the spot, on freshly-created or previously-sent requests
 - **Automated reminders** — configurable reminder emails for signers who haven't responded
 - **Setup validation** — automated checklist verifies site, permissions, OWA, and email deliverability
 
@@ -277,14 +298,26 @@ The builder parses the query, displays the field tree with parent lookups highli
 
 ### Automation
 
-| Action                 | Inputs                     | Use In                               |
-| ---------------------- | -------------------------- | ------------------------------------ |
-| `DocGenFlowAction`     | templateId, recordId       | Record-Triggered Flows, Screen Flows |
-| `DocGenBulkFlowAction` | templateId, queryCondition | Scheduled Flows, Bulk Processing     |
+Six Flow invocable actions ship with the package:
 
-### Bulk Generation
+| Flow Action                          | Class                          | Use In                                                      |
+| ------------------------------------ | ------------------------------ | ----------------------------------------------------------- |
+| Generate Document                    | `DocGenFlowAction`             | Record-Triggered Flows, Screen Flows                        |
+| Generate Bulk Documents              | `DocGenBulkFlowAction`         | Scheduled Flows, bulk processing (sort order, WHERE filter) |
+| Generate Document (Auto Giant Query) | `DocGenGiantQueryFlowAction`   | Records whose child-row count is unpredictable              |
+| Create Signature Request             | `DocGenSignatureFlowAction`    | Guided signing from a Flow — returns signing URLs           |
+| Write Back Signer Form Fields        | `DocGenFieldWritebackService`  | Retry/custom flows (writeback is automatic)                 |
+| Send Existing Document for Signature | `DocGenSignaturePdfFlowAction` | **Deprecated** — use Create Signature Request               |
 
-Generate documents for hundreds of records at once. Enter a filter condition, click Submit. Real-time progress tracking in the app.
+Templates can be addressed by **API Name** instead of Id (v3.28+), so a Flow survives a template rebuild. Three further helpers (`DocGenSignatureValidator`, `DocGenSignatureSubmitter`, `DocGenSignatureFinalizer`) support custom signing UIs. Full signatures and worked recipes in [UserGuide § 11](UserGuide.md#11-flow-automation-cookbook) and [§ 12.4](UserGuide.md#124-flow-invocable-actions-full-signatures).
+
+You can also call `DocGenService.generateDocument` directly from Apex, or feed a template from your own class through the [`DocGenDataProvider` interface](UserGuide.md#125-docgendataprovider-interface--custom-data-source) — computed values or external data, no query builder involved.
+
+### Generating & Bulk Generation
+
+From a record page, choose **Save to Record**, **Download**, or **Save & Download** (v3.49+) — the last generates once and does both, with no size limit on either half.
+
+Bulk generation runs the same templates across thousands of records: enter a filter condition, pick a **sort order** (any field, including a field on a related record), and submit. Real-time progress tracking in the app, and generated PDFs can be merged into a single combined download.
 
 ---
 
@@ -299,11 +332,12 @@ Generate documents for hundreds of records at once. Enter a filter condition, cl
 | Dynamic images from record fields (`{%Field}`) | Yes                          | Yes                            |
 | Rich text field formatting                     | Yes                          | Yes                            |
 | Rich text images                               | Yes                          | No — use `{%Field}` image tags |
-| Barcodes and QR codes                          | Yes                          | No                             |
+| Barcodes and QR codes                          | Yes                          | Yes                            |
+| Charts (`{Chart:…}`)                           | Yes                          | Yes                            |
+| Clickable hyperlinks                           | Yes (v1.1.3+)                | Yes                            |
 | Page numbers in headers/footers                | Yes                          | N/A (Word handles natively)    |
 | Cover page (no header on page 1)               | Yes                          | N/A (Word handles natively)    |
 | Custom fonts (Calibri, branded, etc.)          | No — falls back to Helvetica | Yes — preserves original fonts |
-| Clickable hyperlinks                           | No — rendered as styled text | Yes                            |
 
 ---
 
@@ -328,19 +362,20 @@ Starting with Spring '26, the renderer supports expanded multibyte character ren
 
 These are Salesforce platform limitations, not Portwood bugs:
 
-| Not Supported            | Why                                                                                                  | Workaround                                    |
-| ------------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Custom fonts             | `Blob.toPdf()` only has 4 built-in fonts                                                             | Generate as DOCX                              |
-| `@font-face` CSS         | Not supported by the PDF renderer                                                                    | Generate as DOCX                              |
-| Text boxes and shapes    | Word drawing objects aren't converted to HTML                                                        | Use tables for layout                         |
-| SmartArt and charts      | Not rendered in the HTML conversion                                                                  | Insert as images in your template             |
-| Clickable hyperlinks     | PDF renderer outputs styled text, not links                                                          | Links work in DOCX                            |
-| CSS Grid / Flexbox       | The PDF renderer supports CSS 2.1 only                                                               | Use tables                                    |
-| JavaScript               | Ignored by the renderer                                                                              | N/A                                           |
-| Even/odd page headers    | Not currently supported                                                                              | Same header on all pages                      |
-| Multiple section headers | One header/footer set per document                                                                   | Use page breaks, not section-specific headers |
-| Multi-column layouts     | CSS columns not supported by the PDF engine                                                          | Use tables for column layouts                 |
-| E-signatures (QES)       | SES signatures are built-in; Qualified Electronic Signatures (EU eIDAS) require a certified provider | Use built-in SES for most use cases           |
+| Not Supported              | Why                                                                                                  | Workaround                                            |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Custom fonts               | `Blob.toPdf()` only has 4 built-in fonts                                                             | Generate as DOCX                                      |
+| `@font-face` CSS           | Not supported by the PDF renderer                                                                    | Generate as DOCX                                      |
+| Text boxes and shapes      | Word drawing objects aren't converted to HTML                                                        | Use tables for layout                                 |
+| SmartArt, Word charts      | Word's own graphics aren't rendered in the HTML conversion                                           | Use Portwood's `{Chart:…}` tag, or insert as an image |
+| Wingdings / custom symbols | The PDF engine ships four fonts only — Wingdings glyphs render as empty boxes                        | Checkbox glyphs auto-translate; use Unicode symbols   |
+| CSS Grid / Flexbox         | The PDF renderer supports CSS 2.1 only                                                               | Use tables                                            |
+| JavaScript                 | Ignored by the renderer                                                                              | N/A                                                   |
+| Even/odd page headers      | Not currently supported                                                                              | Same header on all pages                              |
+| Multiple section headers   | One header/footer set per document                                                                   | Use page breaks, not section-specific headers         |
+| Multi-column layouts       | CSS columns not supported by the PDF engine                                                          | Use tables for column layouts                         |
+| PowerPoint → PDF           | The platform can't convert `.pptx` to PDF                                                            | Render PPTX natively, or author the deck in Word/HTML |
+| E-signatures (QES)         | SES signatures are built-in; Qualified Electronic Signatures (EU eIDAS) require a certified provider | Use built-in SES for most use cases                   |
 
 ---
 
@@ -376,6 +411,8 @@ Decompress → Merge XML tags → Recompress
 | `BarcodeGenerator`            | Code 128 + QR code generation (pure Apex)                            |
 | `DocGenController`            | LWC controller — template CRUD, generation endpoints                 |
 | `DocGenBatch`                 | Batch Apex for bulk document generation                              |
+| `DocGenGiantQueryAssembler`   | 2,000+ child-row path — chunked assembly, parent-tag resolution      |
+| `DocGenChartBucketResolver`   | Chart aggregation — in-memory and SOQL `GROUP BY` fallback           |
 | `DocGenSignatureController`   | Signing page — token validation, PIN verification, signature capture |
 | `DocGenSignatureService`      | Typed-name stamping, PDF generation, verification certificate        |
 | `DocGenSignatureEmailService` | Branded signature request and PIN emails with OWA support            |
@@ -386,7 +423,25 @@ Decompress → Merge XML tags → Recompress
 
 ## Releases
 
-Portwood ships on a **biweekly release cycle**. Latest release: **v3.51.0 — smarter AI template authoring**: the built-in AI template writer now knows Portwood's full tag vocabulary. Ask it for numbered rows, a separate table for each product family, a chart, or a section that only appears when there is something to put in it, and you get a template that works the first time instead of a near miss — because the AI is told about those capabilities up front rather than left to guess at them. This applies whether you write templates inside Salesforce with Agentforce or copy the prompt out to your own assistant. Separately, the **Agentforce Extension** is now free and installs with **no installation key**. Before that: **v3.50.0 — renamed to Portwood**: "DocGen" is gone from the interface — the app, its tabs, its objects, and its permission sets now read Portwood. No functional change and no action required; every API name is unchanged, so nothing you have built on top of the package needs updating. Before that: **v3.49.0 — bulk sort order, row numbering, and Save & Download**: bulk jobs can now be sorted by any field — including a field on a related record, like the Account name — so a combined PDF comes out in the order you expect instead of the order records happened to be created; the same control is available to Flows. Table rows can number themselves with a new `{RowNumber}` tag, which counts straight through even on very large tables. Generating a document no longer forces a choice between keeping a copy and filing it: a new **Save & Download** option does both from a single generation, with no size limit on either half. Also fixed: the Template Designer could silently load an older version of a template body when two versions were saved in the same second. Before that: **v3.48.0 — bulk generation: conditionals, charts, sorting, and Designer access**: conditional sections and filtered related lists now behave in bulk exactly as they do for a single record — a tag that only shows for certain records, or a related list limited to its first few rows, produced the wrong output in bulk jobs and reported success while doing it. Charts render in bulk jobs for the first time. Related lists can be sorted by more than one column, with a proper picker instead of typing a clause. Cloning a template now brings every file with it, including images and the HTML body. PowerPoint and Excel templates are no longer offered a combined-PDF mode they cannot produce — run them as individual files and you get one native file per record. **Template Designer access:** users who are not System Administrators could open a template and see an empty page; the Designer now loads correctly for anyone with the Portwood Admin permission set, and a template body can no longer be replaced by an empty document if the editor fails to load it. Before that: **v3.47.0 — PowerPoint table loops, GUID preservation, split-run merge tags**: PowerPoint templates now work with related lists — put merge tags in a slide table row and that row repeats once per related record, so an opportunity's products or a project's tasks fill the table automatically, the same way they already do in Word. Two further PowerPoint fixes land with it: a merge tag broken up by formatting (a stray spell-check underline was enough) now resolves instead of coming out blank, and slide tables keep the exact style you designed rather than falling back to a default. Word, HTML, Excel, and PDF output are unchanged. Before that: **v3.46.0 — AI template authoring with Agentforce**: describe the document you want and Portwood writes the template, right inside Salesforce; ask for a change in plain English and it revises what is on the canvas rather than starting over. Everything the model produces is checked against the PDF engine first — `rgba()` tints that would render invisible are converted to flat hex, `border-radius` and `box-shadow` are stripped because the engine ignores them, and loop tags stranded between table rows are moved into the cells — and you are told exactly what changed and why. On an edit, any merge tag that went missing is reported by name, because a lost tag renders as nothing and looks fine on screen. Reached through `ConnectApi`, not an HTTP callout, so nothing leaves the platform. Requires the optional **Agentforce Extension** package; without it nothing changes. Before that: **v3.45.0 — Visual Designer editing overhaul, running-header fixes, silent-degradation logging**: the visual Designer got a large quality pass — edit a merge tag straight from its menu, format a whole block of table cells at once, set table border thickness and colour, and see a preview of what you are dragging before you drop it; table controls are easier to find and stay put long enough to click. Documents with a running header keep it clear of the page content. Generation problems that used to pass silently — a logo that could not be loaded, a chart that came back empty — are now recorded in the Portwood Error Log. **Note for existing bulk jobs:** bulk generation now honours the template's Record Filter, so a job that relied on the old behaviour will produce fewer documents, because it was previously generating for records the template excludes. Before that: **v3.44.0 — e-signature certificate unification, multi-signer verify fix, Designer panel close fix**: the Certificate of Completion is now identical on both signing paths (same ESIGN/UETA attestation and verify-page link); uploading a completed multi-signer PDF to the verify page returns **every** signer, not just the last (the token link already did); and the Designer's slide-in panels — Insert, Tags, Images, Query, Versions, Header/Footer, Watermark — no longer hide behind the Salesforce tab bar in console / NPSP navigation, keeping a reachable close button and closing with Escape. Before that: **v3.43.0 — button-builder access hardening**: managing record-page document buttons is now a deliberately-assigned, least-privilege capability — a standalone **Portwood Button Manager** permission set (separate from Portwood Admin), and the builder tab appears only for admins who also hold Salesforce's metadata-customization permission (which the package never grants). Before that: **v3.42.0 — group-by tables, button builder, historical PIN bypass**: a new `{#GroupBy}` tag renders one table per category automatically (50 categories → 50 tables, no manual setup); a point-and-click **Buttons** tab in the Command Hub builds record-page document buttons — pick the object, template, and which record types show them — with no Setup navigation; and admins can bypass the email PIN on previously-sent signature requests, not just freshly-created ones. Before that: **v3.41.0 — designer save reliability**: new paragraphs and blocks you add in the visual designer's Visual mode now save reliably (a managed-package-only Lightning security sandbox dropped browser-added content when serializing the canvas back to HTML), and the starter templates size your logo correctly out of the box. Before that: **v3.40.0 — designer canvas stability**: backspacing at the page's top-left corner can no longer make the white canvas disappear — the caret is steered onto real content before any edit runs, and the page's styling self-heals if an editing quirk ever removes it. Before that: **v3.39.0 — designer reliability fix for installed orgs**: resolves designer freezes, Visual/Source switching losing changes, and silently dropped edits in orgs whose Lightning security sandbox lacks a modern DOM method; saves now stage by comparing actual content. Before that: **v3.38.0 — instant PDF previews**: the designer's PDF Preview opens your draft in a new tab in the native viewer with nothing saved to Files, the AI prompt now teaches image sizing, barcodes/QR, and charts (and points assistants at the full UserGuide), and barcode tags show at true printed size on the canvas. Before that: **v3.37.0 — one visual query builder everywhere**: the click-to-build query tree now powers the designer's Query panel and the Generate-with-AI step (parent lookups at any depth, filtered related lists, live-updating AI prompt), and designer images are first-class — drag to place, corner-resize, align, double-click to edit the tag. Recent releases: **v3.36.0** made merge tags style like text with a Google-Docs-style point-size box; **v3.35.0** brought Excel-level table editing, watermarks on HTML-template PDFs, scan-verified barcodes, and a landscape Certificate starter; **v3.34.0** introduced the HTML-first template wizard and the visual Template Designer (Beta).
+Portwood ships on a **biweekly release cycle**.
+
+| Version     | Headline                                                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **v3.51.0** | Smarter AI template authoring — the prompt now covers `{RowNumber}`, `{#GroupBy}`, `{#IF}`, charts, images, and signature types |
+| **v3.50.0** | Renamed to Portwood — display names only; every API name is unchanged, nothing you built needs updating                         |
+| **v3.49.0** | Bulk sort order, `{RowNumber}`, and **Save & Download** in a single generation                                                  |
+| **v3.48.0** | Bulk generation gets conditionals, charts, multi-column sorting; Template Designer opens for non-admins                         |
+| **v3.47.0** | PowerPoint table loops, GUID preservation, split-run merge tags                                                                 |
+| **v3.46.0** | AI template authoring with Agentforce — validated against the PDF engine before it reaches your canvas                          |
+| **v3.45.0** | Visual Designer editing overhaul, running-header fixes, silent-degradation logging to the Error Log                             |
+| **v3.34.0** | The HTML-first template wizard and the visual Template Designer (Beta)                                                          |
+
+<details>
+<summary>Longer narrative of recent releases</summary>
+
+**v3.51.0 — smarter AI template authoring**: the built-in AI template writer now knows Portwood's full tag vocabulary. Ask it for numbered rows, a separate table for each product family, a chart, or a section that only appears when there is something to put in it, and you get a template that works the first time instead of a near miss — because the AI is told about those capabilities up front rather than left to guess at them. This applies whether you write templates inside Salesforce with Agentforce or copy the prompt out to your own assistant. Separately, the **Agentforce Extension** is now free and installs with **no installation key**. Before that: **v3.50.0 — renamed to Portwood**: "DocGen" is gone from the interface — the app, its tabs, its objects, and its permission sets now read Portwood. No functional change and no action required; every API name is unchanged, so nothing you have built on top of the package needs updating. Before that: **v3.49.0 — bulk sort order, row numbering, and Save & Download**: bulk jobs can now be sorted by any field — including a field on a related record, like the Account name — so a combined PDF comes out in the order you expect instead of the order records happened to be created; the same control is available to Flows. Table rows can number themselves with a new `{RowNumber}` tag, which counts straight through even on very large tables. Generating a document no longer forces a choice between keeping a copy and filing it: a new **Save & Download** option does both from a single generation, with no size limit on either half. Also fixed: the Template Designer could silently load an older version of a template body when two versions were saved in the same second. Before that: **v3.48.0 — bulk generation: conditionals, charts, sorting, and Designer access**: conditional sections and filtered related lists now behave in bulk exactly as they do for a single record — a tag that only shows for certain records, or a related list limited to its first few rows, produced the wrong output in bulk jobs and reported success while doing it. Charts render in bulk jobs for the first time. Related lists can be sorted by more than one column, with a proper picker instead of typing a clause. Cloning a template now brings every file with it, including images and the HTML body. PowerPoint and Excel templates are no longer offered a combined-PDF mode they cannot produce — run them as individual files and you get one native file per record. **Template Designer access:** users who are not System Administrators could open a template and see an empty page; the Designer now loads correctly for anyone with the Portwood Admin permission set, and a template body can no longer be replaced by an empty document if the editor fails to load it. Before that: **v3.47.0 — PowerPoint table loops, GUID preservation, split-run merge tags**: PowerPoint templates now work with related lists — put merge tags in a slide table row and that row repeats once per related record, so an opportunity's products or a project's tasks fill the table automatically, the same way they already do in Word. Two further PowerPoint fixes land with it: a merge tag broken up by formatting (a stray spell-check underline was enough) now resolves instead of coming out blank, and slide tables keep the exact style you designed rather than falling back to a default. Word, HTML, Excel, and PDF output are unchanged. Before that: **v3.46.0 — AI template authoring with Agentforce**: describe the document you want and Portwood writes the template, right inside Salesforce; ask for a change in plain English and it revises what is on the canvas rather than starting over. Everything the model produces is checked against the PDF engine first — `rgba()` tints that would render invisible are converted to flat hex, `border-radius` and `box-shadow` are stripped because the engine ignores them, and loop tags stranded between table rows are moved into the cells — and you are told exactly what changed and why. On an edit, any merge tag that went missing is reported by name, because a lost tag renders as nothing and looks fine on screen. Reached through `ConnectApi`, not an HTTP callout, so nothing leaves the platform. Requires the optional **Agentforce Extension** package; without it nothing changes. Before that: **v3.45.0 — Visual Designer editing overhaul, running-header fixes, silent-degradation logging**: the visual Designer got a large quality pass — edit a merge tag straight from its menu, format a whole block of table cells at once, set table border thickness and colour, and see a preview of what you are dragging before you drop it; table controls are easier to find and stay put long enough to click. Documents with a running header keep it clear of the page content. Generation problems that used to pass silently — a logo that could not be loaded, a chart that came back empty — are now recorded in the Portwood Error Log. **Note for existing bulk jobs:** bulk generation now honours the template's Record Filter, so a job that relied on the old behaviour will produce fewer documents, because it was previously generating for records the template excludes. Before that: **v3.44.0 — e-signature certificate unification, multi-signer verify fix, Designer panel close fix**: the Certificate of Completion is now identical on both signing paths (same ESIGN/UETA attestation and verify-page link); uploading a completed multi-signer PDF to the verify page returns **every** signer, not just the last (the token link already did); and the Designer's slide-in panels — Insert, Tags, Images, Query, Versions, Header/Footer, Watermark — no longer hide behind the Salesforce tab bar in console / NPSP navigation, keeping a reachable close button and closing with Escape. Before that: **v3.43.0 — button-builder access hardening**: managing record-page document buttons is now a deliberately-assigned, least-privilege capability — a standalone **Portwood Button Manager** permission set (separate from Portwood Admin), and the builder tab appears only for admins who also hold Salesforce's metadata-customization permission (which the package never grants). Before that: **v3.42.0 — group-by tables, button builder, historical PIN bypass**: a new `{#GroupBy}` tag renders one table per category automatically (50 categories → 50 tables, no manual setup); a point-and-click **Buttons** tab in the Command Hub builds record-page document buttons — pick the object, template, and which record types show them — with no Setup navigation; and admins can bypass the email PIN on previously-sent signature requests, not just freshly-created ones. Before that: **v3.41.0 — designer save reliability**: new paragraphs and blocks you add in the visual designer's Visual mode now save reliably (a managed-package-only Lightning security sandbox dropped browser-added content when serializing the canvas back to HTML), and the starter templates size your logo correctly out of the box. Before that: **v3.40.0 — designer canvas stability**: backspacing at the page's top-left corner can no longer make the white canvas disappear — the caret is steered onto real content before any edit runs, and the page's styling self-heals if an editing quirk ever removes it. Before that: **v3.39.0 — designer reliability fix for installed orgs**: resolves designer freezes, Visual/Source switching losing changes, and silently dropped edits in orgs whose Lightning security sandbox lacks a modern DOM method; saves now stage by comparing actual content. Before that: **v3.38.0 — instant PDF previews**: the designer's PDF Preview opens your draft in a new tab in the native viewer with nothing saved to Files, the AI prompt now teaches image sizing, barcodes/QR, and charts (and points assistants at the full UserGuide), and barcode tags show at true printed size on the canvas. Before that: **v3.37.0 — one visual query builder everywhere**: the click-to-build query tree now powers the designer's Query panel and the Generate-with-AI step (parent lookups at any depth, filtered related lists, live-updating AI prompt), and designer images are first-class — drag to place, corner-resize, align, double-click to edit the tag. Recent releases: **v3.36.0** made merge tags style like text with a Google-Docs-style point-size box; **v3.35.0** brought Excel-level table editing, watermarks on HTML-template PDFs, scan-verified barcodes, and a landscape Certificate starter; **v3.34.0** introduced the HTML-first template wizard and the visual Template Designer (Beta).
+
+</details>
 
 See the [GitHub Releases](https://github.com/Portwood-Global-Solutions/Portwood/releases) page for every tagged release, or [CHANGELOG.md](CHANGELOG.md) for full version history.
 
@@ -400,7 +455,8 @@ Portwood is 100% free, open source, and community-driven. Built and published by
 | ----------------------------------------------------------------------------- | -------------------------------------------------- |
 | [Community Channel](https://portwood.dev/community)                           | Real-time help, feature requests, template sharing |
 | [GitHub Issues](https://github.com/Portwood-Global-Solutions/Portwood/issues) | Bug reports and tracked feature requests           |
-| [Roadmap](https://portwood.dev/changelog)                                     | What's shipped and what's coming next              |
+| [Changelog](https://portwood.dev/changelog)                                   | What's shipped, release by release                 |
+| [Roadmap](https://portwood.dev/roadmap)                                       | What's coming next                                 |
 | [Website](https://portwood.dev)                                               | Install links, feature overview                    |
 
 Need dedicated support? Contact us at [hello@portwood.dev](mailto:hello@portwood.dev).
@@ -415,25 +471,26 @@ We welcome contributions — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup in
 
 We run the [Salesforce Code Analyzer](https://developer.salesforce.com/docs/platform/salesforce-code-analyzer/guide/engine-sfge.html) with **Security + AppExchange** rule selectors on every release.
 
-| Severity     | Count | Status                         |
-| ------------ | ----- | ------------------------------ |
-| **Critical** | 0     | Clean                          |
-| **High**     | 0     | Clean                          |
-| **Moderate** | 41    | All documented false positives |
-| **Low**      | 0     | Not flagged                    |
+| Severity     | Count | Status |
+| ------------ | ----- | ------ |
+| **Critical** | 0     | Clean  |
+| **High**     | 0     | Clean  |
+| **Moderate** | 0     | Clean  |
+| **Low**      | 0     | Clean  |
 
-The 41 moderate findings are all PMD false positives that cannot be suppressed inline:
+Three PMD rules are disabled in [`code-analyzer.yml`](code-analyzer.yml). Each emits only name-pattern false positives on this codebase, on metadata that cannot carry an inline suppression:
 
-- **29** `ProtectSensitiveData` — PMD flags field names containing "Token", "Signature", "Email", "Hash", "PIN" in XML metadata. These are signature system fields plus the v1.9x signature-email branding settings (Signature_Email_Subject/Message/Footer/Logo/Brand_Color, Signature_OWA_Id, reminder fields). All intentionally sensitive, protected by permission sets, sharing model, and field history tracking.
-- **12** `AvoidLwcBubblesComposedTrue` — Required for recursive tree node event propagation in the visual query builder, plus the v1.9x runner LWC's cross-boundary events (chart-resolution status, signature-placement events, giant-query progress). Events must cross shadow DOM boundaries in nested components.
+- `ProtectSensitiveData` (29) — flags field _names_ containing "Token", "Signature", "Signer", "Email", "Hash", "PIN". Every hit is a legitimate signature/audit/branding field, protected structurally by permission sets, ControlledByParent sharing, field history tracking, and SHA-256 hashing at rest for the genuinely secret ones (`Secure_Token__c`, `PIN_Hash__c`).
+- `AvoidHardcodedCredentialsInFieldDecls` (39) — flags `TYPE_TOKENS` in `DocGenEmailTemplateController`, a map of merge-token _chip labels_ shown in the Email Templates editor. UI strings, not credentials.
+- `AvoidLwcBubblesComposedTrue` (9) — `composed: true` is required in the recursive `docGenTreeNode` LWC so tree events reach the tree builder outside the shadow boundary. The events carry node ids and field selections only.
 
-See [`code-analyzer.yml`](code-analyzer.yml) for full documentation of each accepted finding.
+Each disable is documented in `code-analyzer.yml` with the conditions under which it must be re-enabled. One `eslint:@lwc/lwc/no-inner-html` finding is suppressed **inline at its single call site** (the admin-authored email preview behind `lwc:dom="manual"`) rather than engine-wide, so every other component still enforces the rule.
 
 ### How Access Is Enforced
 
 | Layer                      | Mechanism                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **Object CRUD**            | `DocGen_Admin` and `DocGen_User` permission sets (platform-enforced)                                                                  |
+| **Object CRUD**            | `DocGen_Admin` / `DocGen_User` permission sets — labeled **Portwood Admin** / **Portwood User** (platform-enforced)                   |
 | **Field-level security**   | Same permission sets (platform-enforced)                                                                                              |
 | **Record sharing**         | Admin-context classes use `with sharing`; signature classes use `without sharing` with access gated by cryptographic token validation |
 | **Standard objects**       | `USER_MODE` + `Security.stripInaccessible()` (code-enforced)                                                                          |
@@ -456,6 +513,8 @@ No user can access Portwood data without an explicitly assigned permission set. 
 Found a vulnerability? See [SECURITY.md](SECURITY.md).
 
 ## Version History
+
+The optional **Portwood Agentforce Extension** versions independently: **v1.1.0** `04tVx000000zxUbIAI` (latest, free, no installation key), v1.0.0 `04tVx000000s80bIAA`.
 
 | Version | Channel                                 | Package ID           |
 | ------- | --------------------------------------- | -------------------- |
