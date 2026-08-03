@@ -52,4 +52,16 @@
         <label>Salvar e baixar</label>
         <name>DocGenRunner_SaveAndDownload</name>
     </customLabels>
+    <customLabels>
+        <label>Selecionar um registro</label>
+        <name>DocGenRunner_SelectRecord</name>
+    </customLabels>
+    <customLabels>
+        <label>Pesquisar registros...</label>
+        <name>DocGenRunner_SearchRecords</name>
+    </customLabels>
+    <customLabels>
+        <label>Pesquise um registro acima para começar.</label>
+        <name>DocGenRunner_ChooseRecordPrompt</name>
+    </customLabels>
 </Translations>

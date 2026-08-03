@@ -104,4 +104,28 @@
         <shortDescription>Runner save-to-record-and-download output option</shortDescription>
         <value>Save &amp; Download</value>
     </labels>
+    <labels>
+        <fullName>DocGenRunner_SelectRecord</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner record picker field label</shortDescription>
+        <value>Select a Record</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_SearchRecords</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner record picker placeholder</shortDescription>
+        <value>Search records...</value>
+    </labels>
+    <labels>
+        <fullName>DocGenRunner_ChooseRecordPrompt</fullName>
+        <categories>DocGenRunner</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Runner prompt shown until a record is picked</shortDescription>
+        <value>Search for a record above to get started.</value>
+    </labels>
 </CustomLabels>

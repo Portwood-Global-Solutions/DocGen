@@ -1,5 +1,55 @@
 # Changelog
 
+## v3.52.0 — Runner on any page + Save & Download toggle
+
+`04tVx000000zz6bIAA` (build 3.52.0-1, promoted 2026-08-03, ancestor 3.51.0). Build
+coverage 78%.
+
+**No action required.** Existing record-page placements of the runner behave
+exactly as before. Both changes are opt-in configuration.
+
+Both fixes come from Birte at Jedesto.
+
+### Added — a "Show Save & Download" checkbox
+
+The runner has always offered **Save & Download** as a third output destination,
+but there was no way to turn it off on its own — it appeared whenever Download
+and Save to Record were both enabled. It is now its own checkbox in the
+Lightning App Builder, alongside the other output options.
+
+It still requires Download and Save to Record to both be on, because it is the
+combination of the two rather than a separate destination — the new checkbox can
+only remove it, never reintroduce a destination an admin deliberately turned off.
+
+### Added — put the runner on any Lightning page, with record search
+
+The runner previously needed a record page to know what to generate from. It can
+now go on a Lightning app page or a standalone tab, with two ways to tell it
+which record to use:
+
+- **Record Search Object API Name** — set it to an object (`Account`,
+  `Opportunity`, `My_Object__c`) and the runner shows a search box. The user
+  picks a record and the rest of the runner appears, scoped to that record.
+  Switching records resets any per-record selections.
+- **Record ID (fixed)** — for a page that always generates from the same record.
+  When set, the search box does not appear.
+
+The same search option is available on screen flows for the case where no record
+Id is passed in. All modes work from the picked record: Create Document
+(download, save to record, or both), Document Packet, and Combine PDFs —
+including the giant-query path for records with thousands of child rows.
+
+Deliberately **not** offered on Experience Cloud placements: the record search
+resolves records through Salesforce's UI API, which guest users cannot call, so a
+guest would get a search box that silently returned nothing. Community pages
+continue to bind `{!recordId}` from page context.
+
+### Internationalization
+
+Three new Custom Labels (`DocGenRunner_SelectRecord`,
+`DocGenRunner_SearchRecords`, `DocGenRunner_ChooseRecordPrompt`) with
+translations for all ten shipped languages.
+
 ## v3.51.0 — Smarter AI template authoring
 
 `04tVx000000zxWDIAY` (build 3.51.0-1, promoted 2026-08-01, ancestor 3.50.0). Build

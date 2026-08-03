@@ -52,4 +52,16 @@
         <label>Opslaan en downloaden</label>
         <name>DocGenRunner_SaveAndDownload</name>
     </customLabels>
+    <customLabels>
+        <label>Selecteer een record</label>
+        <name>DocGenRunner_SelectRecord</name>
+    </customLabels>
+    <customLabels>
+        <label>Records zoeken...</label>
+        <name>DocGenRunner_SearchRecords</name>
+    </customLabels>
+    <customLabels>
+        <label>Zoek hierboven naar een record om te beginnen.</label>
+        <name>DocGenRunner_ChooseRecordPrompt</name>
+    </customLabels>
 </Translations>
