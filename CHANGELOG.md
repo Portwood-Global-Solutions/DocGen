@@ -2,6 +2,9 @@
 
 ## v3.53.0 — Excel files save as .xlsx + output format honored from Flow
 
+`04tVx0000010BvlIAE` (build 3.53.0-1, promoted 2026-08-04, ancestor 3.52.0). Build
+coverage 78%.
+
 Two document-generation fixes, both surfaced by a customer generating documents
 from a Flow using the **JSON Data** input. Neither is specific to JSON — JSON
 data is simply the only input that is Flow-only, so it was the first path where
