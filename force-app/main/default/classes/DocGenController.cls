@@ -2796,6 +2796,23 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             /* code-analyzer-suppress ApexFlsViolation */
             Database.update(template, AccessLevel.SYSTEM_MODE);
 
+            // 1b. Keep the active version's Output_Format__c in step with the
+            // template on a details-only save.
+            //
+            // The runner LWC reads Output_Format__c off the TEMPLATE record, but
+            // every server-side merge reads the ACTIVE VERSION snapshot first
+            // (generateDocumentData / generateDocumentDataFromCache) and only falls
+            // back to the template when the snapshot is null. A details-only save
+            // (createVersion = false) updated the template and left the snapshot
+            // alone, so the same template answered "PDF" in the runner and "Native"
+            // in the Flow action — a Word→PDF template silently produced a .docx
+            // from Flow. The rest of the v1.97 snapshot fields stay frozen by
+            // design; output format is the one the UI presents as a live
+            // template-level setting, so it has to track.
+            if (createVersion != true && fields.containsKey('Output_Format__c')) {
+                syncActiveVersionOutputFormat(templateId, (String) fields.get('Output_Format__c'));
+            }
+
             // 2. Create Version if requested
             if (createVersion == true) {
                 // Deactivate current active versions. We pull Content_Version_Id__c,
@@ -3065,6 +3082,38 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         /* code-analyzer-suppress ApexFlsViolation */
         Database.insert(cdl, AccessLevel.SYSTEM_MODE);
         return cv.Id;
+    }
+
+    /**
+     * Points the active version snapshot's Output_Format__c at the value just
+     * saved on the template, so the server-side merge (Flow action, queueables,
+     * bulk) resolves the same format the runner UI shows. No-op when there is no
+     * active version or the snapshot already agrees.
+     */
+    private static void syncActiveVersionOutputFormat(Id templateId, String outputFormat) {
+        if (templateId == null || String.isBlank(outputFormat)) {
+            return;
+        }
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c', 'Output_Format__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> activeVersions = [
+            SELECT Id, Output_Format__c
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+            ORDER BY CreatedDate DESC, Id DESC
+            LIMIT 1
+        ];
+        if (activeVersions.isEmpty() || activeVersions[0].Output_Format__c == outputFormat) {
+            return;
+        }
+        activeVersions[0].Output_Format__c = outputFormat;
+        DocGenFlsGuard.assertUpdateable(activeVersions, new Set<String>{ 'Output_Format__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        Database.update(activeVersions, AccessLevel.SYSTEM_MODE);
     }
 
     private static void deleteExistingPdfAcroFormSnapshots(String snapshotTitle) {

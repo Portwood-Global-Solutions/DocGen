@@ -1,5 +1,49 @@
 # Changelog
 
+## v3.53.0 — Excel files save as .xlsx + output format honored from Flow
+
+Two document-generation fixes, both surfaced by a customer generating documents
+from a Flow using the **JSON Data** input. Neither is specific to JSON — JSON
+data is simply the only input that is Flow-only, so it was the first path where
+both bugs were visible at once.
+
+**No action required.** No configuration changes, no template changes.
+
+### Fixed — Excel templates generated a file named `.docx`
+
+An Excel template generated anywhere outside the runner UI — the Flow action,
+the save-to-record queueable, bulk generation — produced a valid workbook saved
+under a `.docx` file name, which Word and Excel both refuse to open.
+
+`DocGenService.saveFile` chose the extension from the template type but only
+knew about PowerPoint: everything else fell through to `.docx`. The runner never
+showed the bug because the LWC assembles Office documents in the browser and
+picks its own extension (`docGenRunner.js` already had the full mapping).
+
+Excel now maps to `.xlsx` at both server-side save sites.
+
+### Fixed — a Word template set to PDF still produced a .docx from Flow
+
+A template whose Output Format read **PDF** generated a PDF from the runner but a
+`.docx` from a Flow — same template, same record, two different formats.
+
+The two paths were reading different fields. The runner reads `Output_Format__c`
+off the **template**; every server-side merge reads the **active version
+snapshot** first and only falls back to the template when the snapshot is null
+(the v1.97 change that made a version a true render snapshot). Saving the
+template's details did not carry the new output format onto that snapshot, so a
+template created as Native and later switched to PDF kept answering "Native"
+everywhere except the runner.
+
+Saving a template's details now re-points the active version's output format at
+the saved value. The remaining snapshot fields (page setup, header/footer HTML,
+title format) stay frozen to the version by design.
+
+Existing templates in the divergent state correct themselves the first time the
+template is saved — open it in Template Manager and click **Save**. Generating a
+new version has always fixed it too, because a new version snapshots the current
+value.
+
 ## v3.52.0 — Runner on any page + Save & Download toggle
 
 `04tVx000000zz6bIAA` (build 3.52.0-1, promoted 2026-08-03, ancestor 3.51.0). Build
