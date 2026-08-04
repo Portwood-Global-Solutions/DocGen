@@ -282,6 +282,131 @@ private class DocGenMiscTests {
         System.assertNotEquals(null, responses[0].contentVersionId);
     }
 
+    // ─── Excel output must be saved as .xlsx, not .docx ─────────────────────
+    //
+    // saveFile() named every non-PowerPoint result ".docx", so a server-side
+    // Excel render (Flow action / save-to-record queueable / bulk) produced a
+    // valid workbook that no reader would open. The runner never showed this —
+    // it assembles Office files client-side and picks its own extension.
+    @IsTest
+    static void testFlowAction_excelTemplateSavesAsXlsx() {
+        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Excel JSON Template',
+            Base_Object_API__c = 'FlowJsonData',
+            Type__c = 'Excel',
+            Output_Format__c = 'Native',
+            Query_Config__c = '{"v":4,"source":"flowJsonData"}'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+
+        ContentVersion cv = new ContentVersion(
+            Title = 'Excel JSON Template',
+            PathOnClient = 'book.xlsx',
+            VersionData = buildMinimalXlsx(),
+            FirstPublishLocationId = tpl.Id
+        );
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Is_Active__c = true,
+            Type__c = 'Excel',
+            Base_Object_API__c = 'FlowJsonData',
+            Query_Config__c = '{"v":4,"source":"flowJsonData"}',
+            Content_Version_Id__c = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1]
+            .Id
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateId = tpl.Id;
+        req.recordId = acc.Id;
+        req.saveToRecord = true;
+        req.jsonData = '{"Name":"Acme"}';
+
+        Test.startTest();
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+            new List<DocGenFlowAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, responses[0].success, 'Excel render should succeed: ' + responses[0].errorMessage);
+        ContentVersion saved = [
+            SELECT PathOnClient
+            FROM ContentVersion
+            WHERE Id = :responses[0].contentVersionId
+            LIMIT 1
+        ];
+        System.assert(
+            saved.PathOnClient.endsWith('.xlsx'),
+            'Excel template must save as .xlsx, got: ' + saved.PathOnClient
+        );
+    }
+
+    /** Smallest workbook the merge pipeline will accept. */
+    private static Blob buildMinimalXlsx() {
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry(
+            '[Content_Types].xml',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                    '<Default Extension="xml" ContentType="application/xml"/>' +
+                    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+                    '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+                    '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' +
+                    '</Types>'
+            )
+        );
+        zw.addEntry(
+            '_rels/.rels',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+                    '</Relationships>'
+            )
+        );
+        zw.addEntry(
+            'xl/_rels/workbook.xml.rels',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+                    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' +
+                    '</Relationships>'
+            )
+        );
+        zw.addEntry(
+            'xl/workbook.xml',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+                    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+                    '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>'
+            )
+        );
+        zw.addEntry(
+            'xl/sharedStrings.xml',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1">' +
+                    '<si><t>Hello {Name}</t></si></sst>'
+            )
+        );
+        zw.addEntry(
+            'xl/worksheets/sheet1.xml',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+                    '<row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>'
+            )
+        );
+        return zw.getArchive();
+    }
+
     @IsTest
     static void testFlowAction_templateApiName_unknownKeyFailsClearly() {
         DocGenFlowAction.Request req = new DocGenFlowAction.Request();

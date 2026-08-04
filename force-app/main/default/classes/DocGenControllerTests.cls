@@ -289,6 +289,62 @@ private class DocGenControllerTests {
         }
     }
 
+    // saveTemplate — a details-only save must carry Output_Format__c onto the
+    // active version snapshot.
+    //
+    // The runner LWC reads Output_Format__c off the TEMPLATE; every server-side
+    // merge reads the ACTIVE VERSION snapshot first and only falls back to the
+    // template when the snapshot is null. Leaving the snapshot behind on a
+    // details-only save let one template answer "PDF" in the runner and "Native"
+    // in the Flow action — a Word→PDF template silently emitting .docx from Flow.
+    @IsTest
+    static void testSaveTemplateSyncsOutputFormatOntoActiveVersion() {
+        User u = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
+        System.runAs(u) {
+            TestDataFactory.attachRealDocxToTestTemplate();
+            DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+            DocGen_Template_Version__c ver = TestDataFactory.getTestTemplateVersion();
+            ver.Output_Format__c = 'Native';
+            Database.update(ver, AccessLevel.SYSTEM_MODE);
+
+            Map<String, Object> fields = new Map<String, Object>{
+                'Id' => tpl.Id,
+                'Name' => tpl.Name,
+                'Type__c' => 'Word',
+                'Base_Object_API__c' => 'Account',
+                'Query_Config__c' => 'Name',
+                'Output_Format__c' => 'PDF'
+            };
+
+            Test.startTest();
+            DocGenController.saveTemplate(fields, false, null); // createVersion = false
+            Test.stopTest();
+
+            DocGen_Template_Version__c after = [
+                SELECT Output_Format__c
+                FROM DocGen_Template_Version__c
+                WHERE Id = :ver.Id
+                LIMIT 1
+            ];
+            System.assertEquals(
+                'PDF',
+                after.Output_Format__c,
+                'A details-only save must re-point the active version snapshot at the saved output format'
+            );
+
+            // And the envelope every server-side merge reads now agrees.
+            Map<String, Object> envelope = DocGenController.generateDocumentDataFromCache(
+                tpl.Id,
+                new Map<String, Object>{ 'Name' => 'Acme' }
+            );
+            System.assertEquals(
+                'PDF',
+                (String) envelope.get('outputFormat'),
+                'Server-side merge must resolve the same format the runner shows'
+            );
+        }
+    }
+
     // -----------------------------------------------------------------------
     // {#GroupBy <Relationship> by <Field>} — Conga-style table grouping: one
     // block per distinct field value, first-seen order, per-group members +

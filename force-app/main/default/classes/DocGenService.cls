@@ -8656,9 +8656,21 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return null;
     }
 
+    /**
+     * Names the saved file after the TEMPLATE type, not the merge path. Excel was
+     * missing from this map, so a server-side XLSX generation (Flow action, save-
+     * to-record queueable, bulk) wrote a valid workbook under a .docx name and
+     * every reader rejected it. The runner never showed this because the LWC
+     * assembles Office files client-side and picks its own extension.
+     */
     private static Id saveFile(Blob fileBlob, String title, Id recordId, String format, String type) {
         String baseName = title != null ? title : 'Generated_Document';
-        String ext = (type == 'PowerPoint') ? '.pptx' : '.docx';
+        String ext = '.docx';
+        if (type == 'PowerPoint') {
+            ext = '.pptx';
+        } else if (type == 'Excel') {
+            ext = '.xlsx';
+        }
         return saveContentVersion(fileBlob, baseName, baseName + ext, recordId);
     }
 
