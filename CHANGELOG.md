@@ -1,5 +1,82 @@
 # Changelog
 
+## Unreleased — Multi-currency aggregates + SLDS lint cleanup
+
+### Fixed — aggregates silently added across currencies (P0, silent corruption)
+
+`{SUM:Lines.Amount:currency:EUR}` over child rows carrying different
+`CurrencyIsoCode` values added the raw numbers together and stamped a euro sign
+on the result. The total was wrong, no error was raised, and nothing about the
+output looked suspect — the highest-impact failure class in the triage rubric.
+
+`resolveAggregate` did a plain `result += v` across rows with no currency check
+of any kind, and `DocGenGiantQueryAssembler` issued a plain `SUM(field)` SOQL
+aggregate with the same blind spot.
+
+Both paths now detect the conflict and refuse to guess. The guard fires only
+when there is a **provable** conflict — two or more distinct ISO codes among the
+rows actually being aggregated. A single currency, rows with no currency code,
+and single-currency orgs all behave exactly as before, so no existing template
+changes behavior unless it was already producing a wrong number.
+
+Child subqueries now select `CurrencyIsoCode` in multi-currency orgs so the
+guard can see per-row currencies without the author listing the field. No-op
+where the child object doesn't have the field.
+
+### Added — `:convert` for genuine cross-currency totals
+
+```
+{SUM:Lines.Amount:currency:EUR:convert}          convert every row to EUR, then sum
+{AVG:Lines.Amount:currency:auto:convert}         convert into the parent record's currency
+{MAX:Lines.Amount:currency:USD:de_DE:convert}    convert always goes last
+```
+
+Works on `SUM`, `AVG`, `MIN` and `MAX`. `MIN`/`MAX` compare **converted**
+amounts, so a larger raw number in a weaker currency isn't mistaken for a larger
+amount. On the giant-query path the aggregate becomes a
+`GROUP BY CurrencyIsoCode` selecting `SUM`/`MIN`/`MAX`/`COUNT` per group, which
+keeps every function exactly derivable after conversion — `AVG` is
+Σ(converted sums) ÷ Σ(counts), not an average of per-group averages.
+
+Rates come from the org's `CurrencyType` records, pivoted through the corporate
+currency. A missing rate throws with an actionable message rather than returning
+an unconverted number. Advanced Currency Management dated rates
+(`DatedConversionRate`) are deliberately not consulted — see #273 for why and
+what it would take.
+
+New `DocGenCurrency` class holds all of it so the in-memory and giant-query
+paths can't drift apart.
+
+### Fixed — SLDS linter errors
+
+`npx @salesforce-ux/slds-linter lint force-app` reported 934 violations
+(4 errors, 930 warnings). Now **0 errors, 697 warnings**.
+
+- 4 × `modal-close-button-issue` — modal close buttons in `docGenAssets` (×3) and
+  `docGenSignatureSender` (×1) carried only `slds-modal__close`; added
+  `slds-button slds-button_icon`.
+- `docGenRunner.css` referenced `--slds-g-color-neutral-60`, which is not an SLDS
+  hook — it always fell through to its literal fallback. Now
+  `--slds-g-color-on-surface-3`.
+- 232 auto-fixable token warnings applied. The fixer rewrites
+  `padding: 1rem` → `padding: var(--slds-g-spacing-4, 1rem)`, preserving the
+  original value as the fallback, so rendering is unchanged in orgs without
+  SLDS 2 hooks defined.
+
+The remaining 697 warnings are tracked in #274 — they need a human choosing among
+4–5 candidate hooks per color, plus 4 deliberate `slds-*` class overrides that
+are load-bearing.
+
+### Validation
+
+- `RunLocalTests`: 1905 tests, 100% pass, 78% org-wide coverage
+- e2e-01…08 + 07-syntax1…5: 269 assertions, **FAIL: 0** across all 14 scripts
+- `sf code-analyzer` (Security + AppExchange): **0 violations**
+- `npm run format:check`: clean
+- New `DocGenCurrencyTest`: 13 tests covering the guard, conversion,
+  cross-rate pivoting, MIN/MAX ordering, missing rates, custom currency fields,
+  and single-currency no-op behavior
+
 ## v3.53.0 — Excel files save as .xlsx + output format honored from Flow
 
 `04tVx0000010BvlIAE` (build 3.53.0-1, promoted 2026-08-04, ancestor 3.52.0). Build

@@ -1254,9 +1254,28 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             return html;
         }
 
+        // Currency-formatted tags are resolved separately, grouped by CurrencyIsoCode, so a
+        // mixed-currency dataset either converts or fails loudly instead of silently adding
+        // across currencies. Computed OUTSIDE the per-tag try/catch below — a mixed-currency
+        // error must reach the job record, not degrade into the unconverted raw number.
+        Map<String, String> currencyReplacements = resolveCurrencyGroupedAggregates(
+            fullMatches,
+            fns,
+            fields,
+            fmts,
+            childObj,
+            lookupFld,
+            whereCls,
+            childFieldMap
+        );
+
         // Replace each tag occurrence
         Map<String, String> isoCache = new Map<String, String>();
         for (Integer i = 0; i < fullMatches.size(); i++) {
+            if (currencyReplacements.containsKey(fullMatches[i])) {
+                html = html.replace(fullMatches[i], currencyReplacements.get(fullMatches[i]));
+                continue;
+            }
             String pair = fns[i] + '|' + fields[i];
             String alias = pairToAlias.get(pair);
             if (alias == null) {
@@ -1285,6 +1304,193 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             html = html.replace(fullMatches[i], replacement);
         }
         return html;
+    }
+
+    /**
+     * Resolves currency-formatted grand-total tags with a single `GROUP BY CurrencyIsoCode`
+     * aggregate, so datasets spanning multiple currencies are handled explicitly rather than
+     * being added together as if they were one.
+     *
+     * Selecting SUM / MIN / MAX / COUNT per currency group makes every aggregate function
+     * exactly derivable after conversion — notably AVG, which is Σ(converted sums) ÷ Σ(counts)
+     * rather than an average of per-group averages.
+     *
+     * Returns an empty map (leaving the caller's ungrouped path in charge) in single-currency
+     * orgs, when the child object has no CurrencyIsoCode, or when no tag is currency-formatted.
+     * Throws when the data spans currencies and the tag didn't opt into `:convert`.
+     */
+    private Map<String, String> resolveCurrencyGroupedAggregates(
+        List<String> fullMatches,
+        List<String> fns,
+        List<String> fields,
+        List<String> fmts,
+        String childObj,
+        String lookupFld,
+        String whereCls,
+        Map<String, Schema.SObjectField> childFieldMap
+    ) {
+        Map<String, String> out = new Map<String, String>();
+        if (!DocGenCurrency.isMultiCurrency() || !childFieldMap.containsKey('currencyisocode')) {
+            return out;
+        }
+
+        // One alias set per distinct field referenced by a currency-formatted tag.
+        Map<String, Integer> fieldSlot = new Map<String, Integer>();
+        for (Integer i = 0; i < fullMatches.size(); i++) {
+            if (!DocGenCurrency.isCurrencyFormat(fmts[i]) || String.isBlank(fields[i])) {
+                continue;
+            }
+            String key = fields[i].toLowerCase();
+            if (childFieldMap.containsKey(key) && !fieldSlot.containsKey(key)) {
+                fieldSlot.put(key, fieldSlot.size());
+            }
+        }
+        if (fieldSlot.isEmpty()) {
+            return out;
+        }
+
+        List<String> selectClauses = new List<String>{ 'CurrencyIsoCode iso' };
+        for (String fieldKey : fieldSlot.keySet()) {
+            Integer slot = fieldSlot.get(fieldKey);
+            String fieldName = childFieldMap.get(fieldKey).getDescribe().getName();
+            selectClauses.add('SUM(' + fieldName + ') s' + slot);
+            selectClauses.add('MIN(' + fieldName + ') mn' + slot);
+            selectClauses.add('MAX(' + fieldName + ') mx' + slot);
+            selectClauses.add('COUNT(' + fieldName + ') c' + slot);
+        }
+
+        String soql =
+            'SELECT ' +
+            String.join(selectClauses, ', ') +
+            ' FROM ' +
+            String.escapeSingleQuotes(childObj) +
+            ' WHERE ' +
+            String.escapeSingleQuotes(lookupFld) +
+            ' = :recordId';
+        if (String.isNotBlank(whereCls)) {
+            soql += ' AND ' + whereCls;
+        }
+        soql += ' GROUP BY CurrencyIsoCode';
+
+        List<AggregateResult> groups;
+        try {
+            groups = Database.query(soql, AccessLevel.USER_MODE); // NOPMD ApexSOQLInjection — field names resolved through the child Schema describe; lookup and where reuse the same sanitized clauses as row queries
+        } catch (Exception qErr) {
+            // Grouped read failed — leave these tags to the caller's ungrouped path rather
+            // than blocking the render. Same non-fatal posture as the surrounding method.
+            String noop = qErr.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock
+            return out;
+        }
+        if (groups.isEmpty()) {
+            return out;
+        }
+
+        Set<String> distinctIsos = new Set<String>();
+        for (AggregateResult g : groups) {
+            Object iso = g.get('iso');
+            if (iso != null && String.isNotBlank(String.valueOf(iso))) {
+                distinctIsos.add(String.valueOf(iso).toUpperCase());
+            }
+        }
+
+        Map<String, String> isoCache = new Map<String, String>();
+        for (Integer i = 0; i < fullMatches.size(); i++) {
+            if (!DocGenCurrency.isCurrencyFormat(fmts[i]) || String.isBlank(fields[i])) {
+                continue;
+            }
+            Integer slot = fieldSlot.get(fields[i].toLowerCase());
+            if (slot == null) {
+                continue;
+            }
+
+            if (distinctIsos.size() > 1 && !DocGenCurrency.wantsConversion(fmts[i])) {
+                // Strips the trailing format from the quoted tag so the suggested fix reads
+                // back as a valid tag the author can paste.
+                DocGenCurrency.assertSingleCurrency(
+                    distinctIsos,
+                    fns[i] + ':' + giantRelationshipName + '.' + fields[i] + ':' + fmts[i]
+                );
+            }
+
+            String targetIso = DocGenCurrency.explicitTargetIso(fmts[i]);
+            if (String.isBlank(targetIso)) {
+                targetIso = resolveAutoIsoForFormat(fmts[i], isoCache);
+            }
+            // Single-currency dataset needs no conversion — the one code IS the total's code.
+            if (String.isBlank(targetIso) && distinctIsos.size() == 1) {
+                targetIso = new List<String>(distinctIsos)[0];
+            }
+
+            Decimal combined = combineCurrencyGroups(groups, fns[i], slot, targetIso);
+            if (combined == null) {
+                continue;
+            }
+            out.put(
+                fullMatches[i],
+                DocGenService.formatAggregateValue(combined, DocGenCurrency.stripConvertSegment(fmts[i]), targetIso)
+            );
+        }
+        return out;
+    }
+
+    /**
+     * Folds per-currency aggregate groups into one number in `targetIso`.
+     *
+     * SUM/AVG combine converted totals; MIN/MAX compare converted extremes (a smaller raw
+     * number in a stronger currency can still be the larger amount); COUNT is currency-blind.
+     */
+    private Decimal combineCurrencyGroups(List<AggregateResult> groups, String fn, Integer slot, String targetIso) {
+        Decimal totalSum = 0;
+        Decimal totalCount = 0;
+        Decimal lowest;
+        Decimal highest;
+
+        for (AggregateResult g : groups) {
+            Object isoRaw = g.get('iso');
+            String groupIso = isoRaw == null ? null : String.valueOf(isoRaw);
+            Object sumRaw = g.get('s' + slot);
+            Object minRaw = g.get('mn' + slot);
+            Object maxRaw = g.get('mx' + slot);
+            Object cntRaw = g.get('c' + slot);
+
+            if (cntRaw != null) {
+                totalCount += Decimal.valueOf(String.valueOf(cntRaw));
+            }
+            if (sumRaw != null) {
+                totalSum += DocGenCurrency.convert(Decimal.valueOf(String.valueOf(sumRaw)), groupIso, targetIso);
+            }
+            if (minRaw != null) {
+                Decimal v = DocGenCurrency.convert(Decimal.valueOf(String.valueOf(minRaw)), groupIso, targetIso);
+                if (lowest == null || v < lowest) {
+                    lowest = v;
+                }
+            }
+            if (maxRaw != null) {
+                Decimal v = DocGenCurrency.convert(Decimal.valueOf(String.valueOf(maxRaw)), groupIso, targetIso);
+                if (highest == null || v > highest) {
+                    highest = v;
+                }
+            }
+        }
+
+        if (fn == 'SUM') {
+            return totalSum;
+        }
+        if (fn == 'COUNT') {
+            return totalCount;
+        }
+        if (fn == 'MIN') {
+            return lowest;
+        }
+        if (fn == 'MAX') {
+            return highest;
+        }
+        if (fn == 'AVG') {
+            // Weighted across groups — an average of per-group averages would be wrong
+            // whenever the groups differ in size.
+            return totalCount == 0 ? 0 : totalSum.divide(totalCount, 2, RoundingMode.HALF_UP);
+        }
+        return null;
     }
 
     /**

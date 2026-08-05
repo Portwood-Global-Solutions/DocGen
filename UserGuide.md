@@ -1477,7 +1477,27 @@ How it works and what to know:
 - **List the source field in your template's Query Config.** Portwood builds its query from the Query Config (it does not scan the template body), so a field referenced only inside `:currency:auto=...` must be added to the Query Config like any other merge field. The standard `CurrencyIsoCode` is added automatically in multi-currency orgs, so bare `:currency:auto` works without listing it.
 - **Safe fallback:** if the source field is missing, blank, or not a recognized ISO code, the tag falls back to the default `$` format — it never errors or prints a raw code.
 - **Bare `:currency` is unchanged** — it always emits `$`. Auto-detection is strictly opt-in via `:auto`.
-- **Aggregates** support it too: `{SUM:Lines.Amount:currency:auto=CustomerCurrency__c}` uses the **parent** record's currency for the symbol (values are summed as stored — no exchange-rate conversion).
+- **Aggregates** support it too: `{SUM:Lines.Amount:currency:auto=CustomerCurrency__c}` uses the **parent** record's currency for the symbol.
+
+##### Totalling across currencies
+
+In a multi-currency org, the rows behind an aggregate can each carry their own currency. Adding them together and stamping one symbol on the result produces a number that looks authoritative and is meaningless — so Portwood won't do it silently.
+
+```
+{SUM:Lines.Amount:currency:EUR}            Mixed-currency rows → generation fails with a clear error
+{SUM:Lines.Amount:currency:EUR:convert}    Every row converted to EUR first, then summed
+{SUM:Lines.Amount:currency:auto:convert}   Converts into the parent record's own currency
+{SUM:Lines.Amount:currency:EUR:de_DE:convert}   convert always goes last, after any locale
+```
+
+What to know:
+
+- **The guard only fires when there's a real conflict** — two or more different currency codes among the rows being aggregated. One currency, or rows with no currency code at all, behave exactly as they always have.
+- **Append `:convert` to any aggregate** (`SUM`, `AVG`, `MIN`, `MAX`) to convert first. `MIN`/`MAX` compare converted amounts, so the smallest _number_ isn't mistaken for the smallest _amount_.
+- **Rates come from Setup → Manage Currencies** (`CurrencyType`), pivoting through your corporate currency. If a rate is missing, the tag fails with an actionable message rather than quietly returning an unconverted number.
+- **Advanced Currency Management dated rates are not used** — conversion applies your current static rate. See issue #273.
+- **Single-currency orgs are entirely unaffected.** None of this engages.
+- **Without `:convert`, nothing converts.** `{SUM:Lines.Amount:currency:EUR}` over EUR-only rows formats them as euros; it does not translate other currencies into euros.
 
 #### Number formatting
 

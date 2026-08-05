@@ -277,6 +277,14 @@ public with sharing class DocGenDataRetriever {
                     continue;
                 }
 
+                // Multi-currency: carry each child row's own ISO code so aggregate tags can
+                // detect a mixed-currency row set instead of silently adding across
+                // currencies. No-op when the child object has no CurrencyIsoCode field.
+                addCurrencyIsoCodeField(
+                    fieldNames,
+                    childObjType != null ? childObjType.getDescribe().fields.getMap() : null
+                );
+
                 String subquery =
                     '(SELECT ' +
                     String.join(fieldNames, ', ') +
@@ -1627,7 +1635,13 @@ public with sharing class DocGenDataRetriever {
                     validated.add(v);
                 }
             }
-            validatedFields = validated.isEmpty() ? 'Id' : String.join(validated, ', ');
+            if (validated.isEmpty()) {
+                validated.add('Id');
+            }
+            // Multi-currency: carry each child row's own ISO code so aggregate tags can
+            // detect a mixed-currency row set instead of silently adding across currencies.
+            addCurrencyIsoCodeField(validated, childFieldMap);
+            validatedFields = String.join(validated, ', ');
         } else {
             // No describe available — keep prior behavior with single-quote escape as
             // a last-ditch defense. resolveChildSchema would have thrown if the parent

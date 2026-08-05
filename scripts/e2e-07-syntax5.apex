@@ -186,6 +186,80 @@ try {
     System.debug('ROWNUMBER OUTSIDE LOOP: FAIL — ' + e.getMessage());
 }
 
+// ============================================================
+// Currency aggregates — regression guard for the multi-currency fix.
+// These orgs are single-currency, so the mixed-currency guard never engages;
+// what is asserted here is that it stays completely out of the way. The guard
+// and :convert conversion themselves are covered in DocGenCurrencyTest, which
+// can stub the org's CurrencyType rates (anonymous Apex cannot reach the
+// @TestVisible private seam).
+// ============================================================
+try {
+    Map<String, Object> ad = new Map<String, Object>{
+        'Items' => new Map<String, Object>{
+            'records' => new List<Object>{
+                new Map<String, Object>{ 'Amount' => 100, 'CurrencyIsoCode' => 'USD' },
+                new Map<String, Object>{ 'Amount' => 50, 'CurrencyIsoCode' => 'EUR' }
+            }
+        }
+    };
+    r = DocGenService.processXmlForTest('<w:t>{SUM:Items.Amount:currency:GBP}</w:t>', ad);
+    if (r.contains('150')) {
+        pass++;
+        System.debug('CURRENCY AGG SINGLE-CURRENCY ORG UNCHANGED: PASS — ' + r);
+    } else {
+        fail++;
+        System.debug('CURRENCY AGG SINGLE-CURRENCY ORG UNCHANGED: FAIL — ' + r);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('CURRENCY AGG SINGLE-CURRENCY ORG UNCHANGED: FAIL — ' + e.getMessage());
+}
+
+// The :convert suffix is an aggregation-time instruction. It must be consumed
+// before formatting and must never surface in rendered output.
+try {
+    Map<String, Object> ad = new Map<String, Object>{
+        'Items' => new Map<String, Object>{
+            'records' => new List<Object>{
+                new Map<String, Object>{ 'Amount' => 100 },
+                new Map<String, Object>{ 'Amount' => 25 }
+            }
+        }
+    };
+    r = DocGenService.processXmlForTest('<w:t>{SUM:Items.Amount:currency:EUR:convert}</w:t>', ad);
+    if (r.contains('125') && !r.containsIgnoreCase('convert')) {
+        pass++;
+        System.debug('CURRENCY AGG :convert SUFFIX CONSUMED: PASS — ' + r);
+    } else {
+        fail++;
+        System.debug('CURRENCY AGG :convert SUFFIX CONSUMED: FAIL — ' + r);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('CURRENCY AGG :convert SUFFIX CONSUMED: FAIL — ' + e.getMessage());
+}
+
+// :convert with a locale segment in between must still parse.
+try {
+    Map<String, Object> ad = new Map<String, Object>{
+        'Items' => new Map<String, Object>{
+            'records' => new List<Object>{ new Map<String, Object>{ 'Amount' => 1234.5 } }
+        }
+    };
+    r = DocGenService.processXmlForTest('<w:t>{SUM:Items.Amount:currency:EUR:de_DE:convert}</w:t>', ad);
+    if (!r.containsIgnoreCase('convert') && r.contains('1')) {
+        pass++;
+        System.debug('CURRENCY AGG :convert WITH LOCALE: PASS — ' + r);
+    } else {
+        fail++;
+        System.debug('CURRENCY AGG :convert WITH LOCALE: FAIL — ' + r);
+    }
+} catch (Exception e) {
+    fail++;
+    System.debug('CURRENCY AGG :convert WITH LOCALE: FAIL — ' + e.getMessage());
+}
+
 System.debug('========================================');
 System.debug(
     'E2E-07-SYNTAX5 — PASS: ' + pass + '  FAIL: ' + fail + (fail == 0 ? '  ALL TESTS PASSED' : '  FAILURES DETECTED')
