@@ -556,13 +556,21 @@ HARD RULES — never use these (Flying Saucer drops them):
 - linear-gradient(...), radial-gradient(...), conic-gradient(...)
 - calc(...), CSS variables (--name, var(--name))
 - transform, transition, animation, @keyframes
-- position: absolute or position: fixed (use @page running elements only)
 - box-shadow, text-shadow, outline
 - border-radius — in EVERY form, including on a <td>, on a <table> with
   border-collapse: separate, and the -fs-border-radius variant. There are no
   rounded corners. Every box is square. Do not attempt a workaround.
 - rgba(...) and hsla(...) — these do not fall back to a solid colour, the
   background disappears completely. Write a pre-computed flat hex instead.
+
+POSITIONING — measured 2026-08-05, not assumed. `position: absolute`, `relative`,
+`fixed` and `float` all WORK and are pixel-exact against declared inches. Two
+limits that matter more than the support itself:
+- An absolutely positioned box with **no explicit height GROWS** to fit merged
+  content, background and border following it. Pin a height and the content
+  overflows the box instead — visible, not clipped, but the chrome stays put.
+- Nothing beyond **page 1** renders. A box at `top: 10.5in` on Letter is dropped
+  entirely. Absolute layout is single-page; use one artboard per page.
 - opacity — pick a lighter hex colour instead.
 - :has(), :is(), :where(), container queries
 
