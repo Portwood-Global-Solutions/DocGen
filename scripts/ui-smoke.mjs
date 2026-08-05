@@ -47,6 +47,30 @@ function frontDoorUrl(org) {
 }
 
 /**
+ * The Template Manager tab carries the package namespace prefix in a packaged or
+ * namespaced org, and no prefix in a source-deployed one. Hardcoding the prefix
+ * made this script navigate to "Page doesn't exist" in every org
+ * scripts/qa/setup-org.sh produces — that script creates the org --no-namespace so
+ * the e2e Apex compiles — and then time out for 30s waiting on a tab that could
+ * never appear. The designer's only regression guard was therefore unrunnable
+ * against the standard QA org, which is how a class of dead interactions ships
+ * unnoticed. Resolve the prefix from the org instead of assuming it.
+ */
+function tabPath(org) {
+    let ns = null;
+    try {
+        const raw = execFileSync('sf', ['org', 'display', '--target-org', org, '--json'], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore']
+        });
+        ns = JSON.parse(raw).result.namespace || null;
+    } catch {
+        ns = null;
+    }
+    return `/lightning/n/${ns ? ns + '__' : ''}DocGen_Template_Manager`;
+}
+
+/**
  * Piercing query: the Designer lives inside LWC shadow roots, so a plain
  * document.querySelector never finds it.
  */
@@ -113,7 +137,7 @@ async function main() {
         });
 
         const base = new URL(url).origin.replace('.my.salesforce.com', '.lightning.force.com');
-        await page.goto(`${base}/lightning/n/portwoodglobal__DocGen_Template_Manager?smoke=${Date.now()}`, {
+        await page.goto(`${base}${tabPath(ORG)}?smoke=${Date.now()}`, {
             waitUntil: 'domcontentloaded'
         });
         await page.waitForTimeout(6000);
@@ -2100,7 +2124,7 @@ async function main() {
         // template every other assertion depends on.
         // Reload the app so the Designer tab starts with nothing open — the state a
         // person actually arrives in.
-        await page.goto(`${base}/lightning/n/portwoodglobal__DocGen_Template_Manager?empty=${Date.now()}`, {
+        await page.goto(`${base}${tabPath(ORG)}?empty=${Date.now()}`, {
             waitUntil: 'domcontentloaded'
         });
         await page.waitForTimeout(7000);
