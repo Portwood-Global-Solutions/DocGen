@@ -3384,8 +3384,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (tpls.isEmpty()) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
-        if (tpls[0].Type__c != 'HTML') {
-            throw new DocGenException('saveHtmlTemplateBody is for HTML-type templates only.');
+        // Canvas bodies ARE HTML documents — the canvas editor serializes artboards
+        // and boxes to the CANVAS_CSS contract. Same storage, same read path.
+        if (!DocGenService.isHtmlBacked(tpls[0].Type__c)) {
+            throw new DocGenException('saveHtmlTemplateBody is for HTML-backed templates only.');
         }
 
         // Refuse to overwrite a real body with an empty one.
@@ -3478,8 +3480,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (tpls.isEmpty()) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
-        if (tpls[0].Type__c != 'HTML') {
-            throw new DocGenException('getHtmlTemplateBody is for HTML-type templates only.');
+        if (!DocGenService.isHtmlBacked(tpls[0].Type__c)) {
+            throw new DocGenException('getHtmlTemplateBody is for HTML-backed templates only.');
         }
 
         // Scope the read by the template's linked documents, NOT by a bare Title LIKE.

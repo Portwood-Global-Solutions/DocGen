@@ -6639,6 +6639,23 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
+    /**
+     * Canvas templates get the canvas editor; everything else keeps the flow designer.
+     * Two mutually exclusive getters rather than one negated in the markup, so the
+     * template reads as "which editor" instead of "the designer, unless…".
+     */
+    get isCanvasTemplate() {
+        return this.editTemplateType === 'Canvas';
+    }
+
+    get showCanvasDesigner() {
+        return this.showHtmlBodyVisual && this.isCanvasTemplate;
+    }
+
+    get showFlowDesigner() {
+        return this.showHtmlBodyVisual && !this.isCanvasTemplate;
+    }
+
     get codeSplitClass() {
         return this.showHtmlBodyVisual ? 'dg-code-split slds-hide' : 'dg-code-split';
     }
@@ -12990,7 +13007,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     /** Every template the designer can open, most recently modified first. */
     _designerCandidates() {
-        const rows = (this.templates || []).filter((t) => t[F.Type] === 'HTML');
+        // Canvas templates open too — into the canvas editor rather than the flow
+        // designer (see showCanvasDesigner). Filtering to HTML alone made a Canvas
+        // template creatable and renderable but impossible to reopen, which is a dead
+        // end the author can only escape by rebuilding it.
+        const rows = (this.templates || []).filter((t) => t[F.Type] === 'HTML' || t[F.Type] === 'Canvas');
         return rows.sort((a, b) => String(b.LastModifiedDate || '').localeCompare(String(a.LastModifiedDate || '')));
     }
 

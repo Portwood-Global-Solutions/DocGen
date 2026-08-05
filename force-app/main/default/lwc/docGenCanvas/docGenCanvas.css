@@ -1,0 +1,215 @@
+/* Canva-shaped shell: icon rail, then a panel, then the stage. */
+.dg-canvas-shell {
+    display: table;
+    width: 100%;
+    height: 78vh;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    background: var(--slds-g-color-surface-2, #f3f4f6);
+    table-layout: fixed;
+}
+
+.dg-rail,
+.dg-panel,
+.dg-stage {
+    display: table-cell;
+    vertical-align: top;
+}
+
+.dg-rail {
+    width: 72px;
+    background: var(--slds-g-color-surface-container-2, #1f2937);
+    padding: 8px 0;
+}
+
+.dg-tool {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: #e5e7eb;
+    padding: 10px 4px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 0.7rem;
+}
+
+.dg-tool:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.dg-tool_active {
+    background: rgba(124, 58, 237, 0.35);
+    color: #fff;
+}
+
+.dg-rail-label {
+    display: block;
+    margin-top: 3px;
+}
+
+.dg-panel {
+    width: 260px;
+    background: var(--slds-g-color-surface-1, #fff);
+    border-right: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    padding: 14px;
+}
+
+.dg-panel-title {
+    font-size: 0.95rem;
+    font-weight: var(--slds-g-font-weight-7, 700);
+    margin: 0 0 6px 0;
+}
+
+.dg-panel-hint,
+.dg-panel-note {
+    font-size: 0.78rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    line-height: 1.35;
+    margin: 0 0 10px 0;
+}
+
+.dg-panel-btn {
+    display: block;
+    width: 100%;
+    padding: 7px 10px;
+    margin-bottom: 8px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    background: var(--slds-g-color-surface-1, #fff);
+    border-radius: var(--slds-g-radius-border-2, 6px);
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.dg-panel-btn:hover {
+    background: var(--slds-g-color-surface-2, #f9fafb);
+}
+
+.dg-panel-btn_danger {
+    color: var(--slds-g-color-error-base-30, #991b1b);
+}
+
+.dg-stage {
+    background: var(--slds-g-color-surface-2, #eef0f3);
+}
+
+.dg-quickbar {
+    padding: 6px 10px;
+    background: var(--slds-g-color-surface-1, #fff);
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+.dg-qb-btn {
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    background: var(--slds-g-color-surface-1, #fff);
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+}
+
+.dg-qb-zoom {
+    display: inline-block;
+    width: 48px;
+    text-align: center;
+    font-size: 0.78rem;
+}
+
+.dg-qb-sep {
+    display: inline-block;
+    width: 14px;
+}
+
+.dg-qb-save {
+    border: none;
+    background: var(--slds-g-color-accent-2, #1d4ed8);
+    color: #fff;
+    padding: 5px 14px;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.dg-qb-status {
+    margin-left: 10px;
+    font-size: 0.75rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-scroll {
+    padding: 20px;
+    overflow: auto;
+    height: 68vh;
+}
+
+.dg-board-wrap {
+    margin: 0 auto 24px auto;
+    display: table;
+}
+
+.dg-board-label {
+    font-size: 0.72rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    margin-bottom: 4px;
+}
+
+/* The artboard. A white sheet at true page proportions — 1in = 96 CSS px x zoom,
+   so what is measured here is what the PDF gets. */
+.dg-board {
+    cursor: crosshair;
+}
+
+.dg-cbox {
+    border: var(--slds-g-sizing-border-1, 1px) dashed rgba(124, 58, 237, 0.45);
+    cursor: move;
+    box-sizing: border-box;
+}
+
+.dg-cbox_selected {
+    border: 2px solid rgba(124, 58, 237, 0.9);
+}
+
+.dg-cbox-body {
+    padding: 2px 3px;
+    outline: none;
+    cursor: text;
+    min-height: 1em;
+    font-size: 11pt;
+}
+
+/* Readout rides above the box so the author can see real inches while dragging —
+   pixel-exactness is only useful if the number is visible. */
+.dg-cbox-readout {
+    position: absolute;
+    top: -18px;
+    left: 0;
+    background: rgba(124, 58, 237, 0.9);
+    color: #fff;
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    white-space: nowrap;
+}
+
+.dg-h {
+    position: absolute;
+    background: #7c3aed;
+    width: 8px;
+    height: 8px;
+}
+
+.dg-h_e {
+    right: -5px;
+    top: 50%;
+    cursor: ew-resize;
+}
+
+.dg-h_s {
+    bottom: -5px;
+    left: 50%;
+    cursor: ns-resize;
+}
+
+.dg-h_se {
+    right: -5px;
+    bottom: -5px;
+    cursor: nwse-resize;
+}

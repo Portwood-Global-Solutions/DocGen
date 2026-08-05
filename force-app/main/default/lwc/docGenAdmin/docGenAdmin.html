@@ -2215,7 +2215,14 @@
                                         placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
                                     ></textarea>
                                 </div>
-                                <template if:true={showHtmlBodyVisual}>
+                                <template lwc:if={showCanvasDesigner}>
+                                    <c-doc-gen-canvas
+                                        template-id={editTemplateId}
+                                        page-size={editTemplatePageSize}
+                                        orientation={editTemplatePageOrientation}
+                                    ></c-doc-gen-canvas>
+                                </template>
+                                <template if:true={showFlowDesigner}>
                                     <div class="dg-format-bar" role="toolbar" aria-label="Text formatting">
                                         <button
                                             class={boldBtnClass}

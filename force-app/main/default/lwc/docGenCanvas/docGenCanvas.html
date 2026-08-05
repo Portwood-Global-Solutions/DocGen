@@ -1,0 +1,97 @@
+<template>
+    <div class="dg-canvas-shell">
+        <!-- Left rail: the tool picker. Canva's shape — icons here, depth to the right. -->
+        <div class="dg-rail">
+            <button class={toolSelectClass} data-tool="select" onclick={handleToolSelect} title="Select">
+                <lightning-icon icon-name="utility:pointer" size="small"></lightning-icon>
+                <span class="dg-rail-label">Select</span>
+            </button>
+            <button class={toolTextClass} data-tool="text" onclick={handleToolSelect} title="Add a text box">
+                <lightning-icon icon-name="utility:text" size="small"></lightning-icon>
+                <span class="dg-rail-label">Text</span>
+            </button>
+            <button class="dg-tool" onclick={handleAddArtboard} title="Add a page">
+                <lightning-icon icon-name="utility:page" size="small"></lightning-icon>
+                <span class="dg-rail-label">Page</span>
+            </button>
+        </div>
+
+        <!-- Panel: in-depth controls for whatever is selected. -->
+        <div class="dg-panel">
+            <template lwc:if={hasSelection}>
+                <h3 class="dg-panel-title">Box</h3>
+                <p class="dg-panel-hint">Drag to move. Use the handles on the right and bottom edges to resize.</p>
+                <button class="dg-panel-btn" onclick={handleModeToggle}>
+                    <template lwc:if={selectedIsFlow}>Make it pinned</template>
+                    <template lwc:else>Let it flow across pages</template>
+                </button>
+                <p class="dg-panel-note">
+                    <template lwc:if={selectedIsFlow}>
+                        <b>Flows.</b> Content can grow and spill onto the next page — this is where a line-item loop
+                        goes.
+                    </template>
+                    <template lwc:else>
+                        <b>Pinned.</b> Lands exactly where you put it. Does not repeat on continuation pages — use a
+                        running header/footer for that.
+                    </template>
+                </p>
+                <button class="dg-panel-btn dg-panel-btn_danger" onclick={handleDelete}>Delete box</button>
+            </template>
+            <template lwc:else>
+                <h3 class="dg-panel-title">Canvas</h3>
+                <p class="dg-panel-hint">
+                    Pick the Text tool, then click the page to place a box. Boxes land in the PDF exactly where you put
+                    them.
+                </p>
+            </template>
+        </div>
+
+        <!-- Stage -->
+        <div class="dg-stage">
+            <div class="dg-quickbar">
+                <button class="dg-qb-btn" data-dir="out" onclick={handleZoom}>&minus;</button>
+                <span class="dg-qb-zoom">{zoomPercent}</span>
+                <button class="dg-qb-btn" data-dir="in" onclick={handleZoom}>+</button>
+                <span class="dg-qb-sep"></span>
+                <button class="dg-qb-save" onclick={handleSave} disabled={isSaving}>
+                    <template lwc:if={isSaving}>Saving…</template>
+                    <template lwc:else>Save</template>
+                </button>
+                <span class="dg-qb-status">{statusText}</span>
+            </div>
+
+            <div class="dg-scroll">
+                <template for:each={renderedBoards} for:item="board">
+                    <div key={board.id} class="dg-board-wrap">
+                        <div class="dg-board-label">Page {board.index}</div>
+                        <div class="dg-board" data-board-id={board.id} style={boardStyle} onclick={handleBoardClick}>
+                            <template for:each={board.boxes} for:item="box">
+                                <div
+                                    key={box.id}
+                                    class={box.cls}
+                                    data-id={box.id}
+                                    style={box.style}
+                                    onmousedown={handleBoxMouseDown}
+                                >
+                                    <div
+                                        class="dg-cbox-body"
+                                        contenteditable="true"
+                                        data-id={box.id}
+                                        oninput={handleBoxInput}
+                                        lwc:dom="manual"
+                                    ></div>
+                                    <template lwc:if={box.isSelected}>
+                                        <span class="dg-cbox-readout">{box.readout} · {box.modeLabel}</span>
+                                        <span class="dg-h dg-h_e" data-handle="e"></span>
+                                        <span class="dg-h dg-h_s" data-handle="s"></span>
+                                        <span class="dg-h dg-h_se" data-handle="se"></span>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+</template>
