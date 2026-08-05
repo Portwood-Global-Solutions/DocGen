@@ -2217,6 +2217,25 @@ async function main() {
         record('template search filters the list', scale.search === 'ok', scale.search);
         record('clearing the search restores the list', !!scale.restored, '');
         if (emptyState.count > 0) {
+            // SEARCH for it first. The picker renders at most 8 templates, ordered by
+            // most-recently-modified, so in an org with a handful of newer templates the
+            // one this suite is built around silently drops off the list — and every
+            // assertion after it then tests whatever happened to be first instead. That
+            // is how a whole run reports "no chip available" as if it were a regression.
+            await page.evaluate(
+                inPage(
+                    `
+      const input = __dgFind('.dg-designer-open-search__input');
+      if (input) {
+        input.value = ` +
+                        JSON.stringify(TEMPLATE_HINT) +
+                        `;
+        input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      }
+      return true;`
+                )
+            );
+            await page.waitForTimeout(1500);
             await page.evaluate(
                 inPage(
                     `

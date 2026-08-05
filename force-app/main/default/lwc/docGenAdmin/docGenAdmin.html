@@ -1680,7 +1680,14 @@
                             </template>
                         </div>
                     </template>
-                    <template if:true={designerHasTemplate}>
+                    <template if:true={showCanvasDesignerTab}>
+                        <c-doc-gen-canvas
+                            template-id={editTemplateId}
+                            page-size={editTemplatePageSize}
+                            orientation={editTemplatePageOrientation}
+                        ></c-doc-gen-canvas>
+                    </template>
+                    <template if:true={showFlowDesignerTab}>
                         <div class={designerShellClass}>
                             <div class="dg-designer-toolbar">
                                 <div class="dg-designer-toolbar__title">

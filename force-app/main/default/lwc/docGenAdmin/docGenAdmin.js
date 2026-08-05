@@ -12350,7 +12350,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     // --- Designer tab (full-screen editing surface) ---
     get designerHasTemplate() {
-        return !!this.editTemplateId && this.editTemplateType === 'HTML';
+        // Canvas counts too — it opens the canvas surface rather than the flow shell.
+        // Gating on HTML alone meant clicking a Canvas template in the picker did
+        // nothing at all: the tab switched, this getter reported no template, and the
+        // picker just re-rendered. A dead click with no error is the worst version.
+        return !!this.editTemplateId && (this.editTemplateType === 'HTML' || this.editTemplateType === 'Canvas');
+    }
+
+    get isCanvasTemplate() {
+        return this.editTemplateType === 'Canvas';
+    }
+
+    /** The Designer tab's two surfaces — which editor, not "designer unless…". */
+    get showCanvasDesignerTab() {
+        return this.designerHasTemplate && this.isCanvasTemplate;
+    }
+
+    get showFlowDesignerTab() {
+        return this.designerHasTemplate && !this.isCanvasTemplate;
     }
 
     get designerTitle() {
@@ -13131,6 +13148,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Not awaited — the toolbar button appears when the answer arrives, and
         // an org without Einstein just never shows it.
         this._refreshAgentforceAvailability();
+        if (this.isCanvasTemplate) {
+            // The canvas owns its own load/serialize cycle. Running the flow designer's
+            // visual-mode setup here would stage a pending write against
+            // .dg-visual-host, which this surface never renders.
+            return;
+        }
         let body = this._lastUploadedHtmlText;
         if (!body || !body.trim()) {
             // Blank template: seed a clean sheet so click-and-type just works.
