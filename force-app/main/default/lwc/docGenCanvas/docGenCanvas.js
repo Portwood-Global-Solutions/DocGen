@@ -10,7 +10,9 @@ import {
     deserialize,
     clampBox,
     inToPx,
-    pxToIn
+    pxToIn,
+    FONT_CHOICES,
+    DEFAULT_STYLE
 } from './canvasModel';
 
 /**
@@ -70,6 +72,10 @@ export default class DocGenCanvas extends LightningElement {
             index: idx + 1,
             boxes: board.boxes.map((b) => ({
                 ...b,
+                // The on-screen box carries the SAME styling the serializer will emit.
+                // If the canvas showed 11pt sans and the PDF rendered 12pt serif, the
+                // whole premise of this editor would be false — so both read the one
+                // style object rather than each having their own idea of it.
                 style:
                     'position:absolute;left:' +
                     inToPx(b.x, this.zoom) +
@@ -79,13 +85,123 @@ export default class DocGenCanvas extends LightningElement {
                     inToPx(b.w, this.zoom) +
                     'px;min-height:' +
                     inToPx(b.h, this.zoom) +
-                    'px;',
+                    'px;' +
+                    this.screenStyle(b),
                 cls: b.id === this.selectedId ? 'dg-cbox dg-cbox_selected' : 'dg-cbox',
                 isSelected: b.id === this.selectedId,
                 readout: b.x.toFixed(2) + 'in, ' + b.y.toFixed(2) + 'in · ' + b.w.toFixed(2) + 'in',
                 modeLabel: b.mode === 'flow' ? 'Flows' : 'Pinned'
             }))
         }));
+    }
+
+    /**
+     * Box styling in SCREEN units. Point sizes scale by zoom so 11pt at 200% looks
+     * twice as big, matching every design tool — the model still stores points.
+     */
+    screenStyle(b) {
+        const st = { ...DEFAULT_STYLE, ...(b.style || {}) };
+        const z = this.zoom || 1;
+        let css =
+            'font-family:' +
+            st.font +
+            ';font-size:' +
+            (st.size * z).toFixed(2) +
+            'pt;color:' +
+            st.color +
+            ';text-align:' +
+            st.align +
+            ';padding:' +
+            (st.padding * z).toFixed(2) +
+            'pt;';
+        if (st.bold) css += 'font-weight:bold;';
+        if (st.italic) css += 'font-style:italic;';
+        if (st.underline) css += 'text-decoration:underline;';
+        if (st.fill) css += 'background:' + st.fill + ';';
+        if (st.borderWidth > 0) css += 'border:' + (st.borderWidth * z).toFixed(2) + 'pt solid ' + st.borderColor + ';';
+        return css;
+    }
+
+    get fontOptions() {
+        return FONT_CHOICES;
+    }
+
+    get selectedStyle() {
+        return { ...DEFAULT_STYLE, ...((this.selectedBox || {}).style || {}) };
+    }
+
+    get selFont() {
+        return this.selectedStyle.font;
+    }
+    get selSize() {
+        return this.selectedStyle.size;
+    }
+    get selColor() {
+        return this.selectedStyle.color;
+    }
+    get selFill() {
+        return this.selectedStyle.fill || '#ffffff';
+    }
+    get selPadding() {
+        return this.selectedStyle.padding;
+    }
+    get selBorderWidth() {
+        return this.selectedStyle.borderWidth;
+    }
+    get selBorderColor() {
+        return this.selectedStyle.borderColor;
+    }
+    get boldClass() {
+        return this.selectedStyle.bold ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+    get italicClass() {
+        return this.selectedStyle.italic ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+    get underlineClass() {
+        return this.selectedStyle.underline ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+    get alignLeftClass() {
+        return this.selectedStyle.align === 'left' ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+    get alignCenterClass() {
+        return this.selectedStyle.align === 'center' ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+    get alignRightClass() {
+        return this.selectedStyle.align === 'right' ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+
+    /** One entry point for every style change — keeps the patch shape in one place. */
+    _patchStyle(patch) {
+        const box = this.selectedBox;
+        if (!box) return;
+        this.applyToBox(box.id, { style: { ...DEFAULT_STYLE, ...(box.style || {}), ...patch } });
+    }
+
+    handleStyleToggle(event) {
+        const key = event.currentTarget.dataset.key;
+        this._patchStyle({ [key]: !this.selectedStyle[key] });
+    }
+
+    handleAlign(event) {
+        this._patchStyle({ align: event.currentTarget.dataset.align });
+    }
+
+    handleFontChange(event) {
+        this._patchStyle({ font: event.detail.value });
+    }
+
+    handleNumChange(event) {
+        const key = event.currentTarget.dataset.key;
+        const n = parseFloat(event.target.value);
+        if (!isNaN(n)) this._patchStyle({ [key]: n });
+    }
+
+    handleColorChange(event) {
+        this._patchStyle({ [event.currentTarget.dataset.key]: event.target.value });
+    }
+
+    handleClearFill() {
+        this._patchStyle({ fill: '' });
     }
 
     get selectedBox() {

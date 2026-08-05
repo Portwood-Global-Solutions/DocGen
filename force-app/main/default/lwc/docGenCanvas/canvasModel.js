@@ -49,10 +49,41 @@ function nextId(prefix) {
     return prefix + '_' + seq;
 }
 
+/**
+ * The ONLY font stacks Flying Saucer actually resolves, measured 2026-08-05 against a
+ * real render (scripts/css-probe-fonts.apex, docs/css-probe-fonts.png).
+ *
+ * Every NAMED family — Helvetica, Arial, Georgia, Verdana, Tahoma, Impact, Times New
+ * Roman, Courier New — silently falls back to the serif default. Only the generic
+ * keywords resolve, plus bare `Courier`. Offering "Arial" in a picker would render
+ * Times and quietly make the canvas stop being WYSIWYG, which is the one thing this
+ * editor exists to guarantee.
+ */
+export const FONT_CHOICES = [
+    { label: 'Sans-serif', value: 'sans-serif' },
+    { label: 'Serif', value: 'serif' },
+    { label: 'Monospace', value: 'monospace' }
+];
+
+export const DEFAULT_STYLE = {
+    font: 'sans-serif',
+    size: 11,
+    bold: false,
+    italic: false,
+    underline: false,
+    color: '#1a1a1a',
+    fill: '',
+    align: 'left',
+    borderWidth: 0,
+    borderColor: '#333333',
+    padding: 2
+};
+
 export function newTextBox(xIn, yIn, wIn, hIn) {
     return {
         id: nextId('box'),
         kind: 'text',
+        style: { ...DEFAULT_STYLE },
         // `pinned` boxes are position:absolute and land exactly where dropped.
         // `flow` boxes sit in normal flow so their content can paginate — that is
         // how a {#Loop} of 60 rows spills onto the next page instead of being
@@ -138,6 +169,31 @@ export function buildCanvasCss(geo) {
     );
 }
 
+/** Box styling as inline CSS. Only properties the engine honours are emitted. */
+function styleCss(box) {
+    const st = { ...DEFAULT_STYLE, ...(box.style || {}) };
+    let css =
+        'font-family: ' +
+        st.font +
+        '; font-size: ' +
+        st.size +
+        'pt; color: ' +
+        st.color +
+        '; text-align: ' +
+        st.align +
+        '; padding: ' +
+        st.padding +
+        'pt;';
+    if (st.bold) css += ' font-weight: bold;';
+    if (st.italic) css += ' font-style: italic;';
+    if (st.underline) css += ' text-decoration: underline;';
+    // A flat hex, never rgba(): rgba resolves to nothing in this engine and the fill
+    // disappears completely rather than degrading to a solid colour.
+    if (st.fill) css += ' background: ' + st.fill + ';';
+    if (st.borderWidth > 0) css += ' border: ' + st.borderWidth + 'pt solid ' + st.borderColor + ';';
+    return css;
+}
+
 function boxToHtml(box) {
     if (box.mode === 'flow') {
         // No top/left: a flow box is placed by the normal flow, and its margin-left
@@ -149,7 +205,9 @@ function boxToHtml(box) {
             box.x +
             'in; width: ' +
             box.w +
-            'in;">' +
+            'in; ' +
+            styleCss(box) +
+            '">' +
             box.html +
             '</div>'
         );
@@ -165,7 +223,9 @@ function boxToHtml(box) {
         box.y +
         'in; width: ' +
         box.w +
-        'in;">' +
+        'in; ' +
+        styleCss(box) +
+        '">' +
         box.html +
         '</div>'
     );
@@ -208,6 +268,39 @@ function readInches(style, prop) {
  * template" from "someone pointed this at an HTML template" instead of silently
  * showing a blank artboard over content that is really still there.
  */
+function readCss(style, prop) {
+    const m = new RegExp('(?:^|;)\\s*' + prop + '\\s*:\\s*([^;]+)').exec(style || '');
+    return m ? m[1].trim() : null;
+}
+
+/** Recovers box styling from the serialized inline CSS, falling back per-property. */
+function readStyle(style) {
+    const st = { ...DEFAULT_STYLE };
+    const font = readCss(style, 'font-family');
+    if (font) st.font = font;
+    const size = readCss(style, 'font-size');
+    if (size) st.size = parseFloat(size) || st.size;
+    const color = readCss(style, 'color');
+    if (color) st.color = color;
+    const align = readCss(style, 'text-align');
+    if (align) st.align = align;
+    const pad = readCss(style, 'padding');
+    if (pad) st.padding = parseFloat(pad) || 0;
+    st.bold = /font-weight:\s*bold/.test(style || '');
+    st.italic = /font-style:\s*italic/.test(style || '');
+    st.underline = /text-decoration:\s*underline/.test(style || '');
+    st.fill = readCss(style, 'background') || '';
+    const border = readCss(style, 'border');
+    if (border) {
+        const bm = /([0-9.]+)pt\s+solid\s+(\S+)/.exec(border);
+        if (bm) {
+            st.borderWidth = parseFloat(bm[1]);
+            st.borderColor = bm[2];
+        }
+    }
+    return st;
+}
+
 export function deserialize(html) {
     if (!html || html.indexOf('dg-artboard') === -1) {
         return null;
@@ -239,6 +332,7 @@ export function deserialize(html) {
                 // Height is never serialized (see boxToHtml) — recover a sensible
                 // editing rectangle instead of collapsing the box to nothing.
                 box.h = readInches(style, 'height') || 0.5;
+                box.style = readStyle(style);
                 box.html = el.innerHTML;
                 return box;
             });

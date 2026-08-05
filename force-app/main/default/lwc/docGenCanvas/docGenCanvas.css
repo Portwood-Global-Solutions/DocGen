@@ -213,3 +213,57 @@
     bottom: -5px;
     cursor: nwse-resize;
 }
+
+/* Property rows in the panel */
+.dg-prop-row {
+    margin: 8px 0;
+}
+
+.dg-prop-label {
+    font-size: 0.72rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    margin-right: 4px;
+}
+
+.dg-prop-num {
+    width: 62px;
+    padding: 3px 5px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    font-size: 0.78rem;
+}
+
+.dg-prop-num_sm {
+    width: 46px;
+}
+
+.dg-prop-color {
+    width: 30px;
+    height: 24px;
+    padding: 0;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    vertical-align: middle;
+    cursor: pointer;
+    margin-right: 6px;
+}
+
+.dg-sbtn {
+    min-width: 26px;
+    height: 24px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    background: var(--slds-g-color-surface-1, #fff);
+    cursor: pointer;
+    font-size: 0.78rem;
+    margin-right: 3px;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+}
+
+.dg-sbtn_on {
+    background: rgba(124, 58, 237, 0.15);
+    border-color: rgba(124, 58, 237, 0.7);
+}
+
+.dg-prop-gap {
+    display: inline-block;
+    width: 10px;
+}
