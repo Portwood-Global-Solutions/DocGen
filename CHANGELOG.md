@@ -69,6 +69,21 @@ automatically" size warning fired only for Save to Record, but Save & Download
 attaches to the record too and hits the same Aura ceiling. Now shown for both,
 which matters more with Save & Download as the shipped default.
 
+### Added — Designer: a landing box shows where a dragged tag will go
+
+Dragging a merge tag onto the page showed a thin purple caret. A caret answers
+"between which two characters" — but the question an author actually has is "into
+which cell, which paragraph", and the caret never answered it. Alongside the caret
+there is now a translucent dashed box outlining the block that will receive the
+drop: the table cell, the list item, the paragraph. Between blocks or over empty
+canvas the box hides rather than guessing, and the caret stands alone.
+
+The box deliberately carries the `dg-drop-marker` class in addition to its own.
+Four separate places strip editor chrome out of the serialized body by that class
+name — the save path, the Source view, the preview scrub and the region walker — so
+a brand-new class would have meant finding all four, and missing one would leak a
+`<div>` into a customer's saved template.
+
 ### Fixed — SLDS linter errors
 
 `npx @salesforce-ux/slds-linter lint force-app` reported 934 violations

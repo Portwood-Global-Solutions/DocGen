@@ -14200,9 +14200,33 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         );
     }
 
-    /** Purple insertion caret that tracks the pointer while dragging. */
+    /**
+     * Block-level elements the landing box can outline. A caret alone answers
+     * "between which characters"; authors dragging a tag want "into which cell /
+     * which paragraph", which is a different question and the one that actually
+     * decides whether the drop was right.
+     */
+    static get DROP_ZONE_BLOCKS() {
+        return 'td,th,li,p,h1,h2,h3,h4,h5,h6,blockquote,pre';
+    }
+
+    /**
+     * Purple insertion caret plus a translucent landing box, both tracking the
+     * pointer while dragging.
+     *
+     * The box carries `dg-drop-marker` in ADDITION to its own class on purpose. Four
+     * separate places strip editor chrome out of the serialized body by that class
+     * name (the save path, the Source view, the preview scrub and the region walker).
+     * Giving the box a brand-new class would have meant finding all four and adding it
+     * to each — and missing one leaks `<div class="dg-drop-zone">` into a customer's
+     * saved template. Sharing the class means every existing stripper already handles
+     * it, and the smoke suite's "no editor chrome leaks into the serialized body" check
+     * covers it for free.
+     */
     _showDropMarker(event, pv) {
-        let marker = pv.querySelector('.dg-drop-marker');
+        // :not(.dg-drop-zone) — both elements answer to .dg-drop-marker now, so the
+        // caret lookup has to exclude the box or it styles the wrong node.
+        let marker = pv.querySelector('.dg-drop-marker:not(.dg-drop-zone)');
         if (!marker) {
             marker = document.createElement('span');
             marker.className = 'dg-drop-marker';
@@ -14212,20 +14236,41 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             pv.style.position = 'relative';
             pv.appendChild(marker);
         }
+        let zone = pv.querySelector('.dg-drop-zone');
+        if (!zone) {
+            zone = document.createElement('div');
+            zone.className = 'dg-drop-marker dg-drop-zone';
+            zone.setAttribute('contenteditable', 'false');
+            // z-index below the caret so the precise insertion point stays readable
+            // on top of the box.
+            zone.style.cssText =
+                'position: absolute; pointer-events: none; z-index: 98; border: 2px dashed rgba(124, 58, 237, 0.75); border-radius: 4px; background: rgba(124, 58, 237, 0.10); box-sizing: border-box;';
+            pv.style.position = 'relative';
+            pv.appendChild(zone);
+        }
         let rect = null;
+        let blockRect = null;
         try {
             const range = document.caretRangeFromPoint(event.clientX, event.clientY);
             if (range && pv.contains(range.startContainer)) {
                 const rects = range.getClientRects();
                 rect = rects && rects.length ? rects[0] : null;
+                const el =
+                    range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
                 if (!rect) {
-                    const el =
-                        range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
                     rect = el ? el.getBoundingClientRect() : null;
+                }
+                // The landing box outlines the block that will RECEIVE the drop.
+                // Bounded to inside the canvas: closest() would happily walk out to the
+                // editor chrome and outline the whole page.
+                const block = el && el.closest ? el.closest(DocGenAdmin.DROP_ZONE_BLOCKS) : null;
+                if (block && pv.contains(block) && block !== pv) {
+                    blockRect = block.getBoundingClientRect();
                 }
             }
         } catch (e) {
             rect = null;
+            blockRect = null;
         }
         if (rect) {
             const pvRect = pv.getBoundingClientRect();
@@ -14241,12 +14286,30 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } else {
             marker.style.display = 'none';
         }
+        if (blockRect) {
+            const pvRect2 = pv.getBoundingClientRect();
+            const z2 = this.designerZoom || 1;
+            // Same unscaling as the caret (#244): the box is a child of the scaled
+            // canvas but getBoundingClientRect reports scaled screen pixels, so without
+            // dividing z back out the outline drifts off the block as you zoom.
+            zone.style.left = (blockRect.left - pvRect2.left) / z2 + 'px';
+            zone.style.top = (blockRect.top - pvRect2.top) / z2 + 'px';
+            zone.style.width = blockRect.width / z2 + 'px';
+            zone.style.height = blockRect.height / z2 + 'px';
+            zone.style.display = 'block';
+        } else {
+            // Between blocks, or over empty canvas — the caret alone is the honest
+            // answer. An outline with nothing to outline would be a guess.
+            zone.style.display = 'none';
+        }
         pv.style.boxShadow = '0 0 0 3px rgba(124, 58, 237, 0.35)';
     }
 
     _hideDropMarker(pv) {
-        const marker = pv.querySelector('.dg-drop-marker');
-        if (marker) {
+        // querySelectorAll, not querySelector: the caret and the landing box BOTH carry
+        // dg-drop-marker, and removing only the first left the other one painted on the
+        // canvas after the drop finished.
+        for (const marker of pv.querySelectorAll('.dg-drop-marker')) {
             marker.remove();
         }
         pv.style.boxShadow = '';

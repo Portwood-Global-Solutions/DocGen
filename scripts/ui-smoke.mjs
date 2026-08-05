@@ -2264,7 +2264,8 @@ async function main() {
       return {
         landed: html.indexOf(needle) !== -1,
         ghostLeft: !!__dgFind('.dg-drag-ghost'),
-        markerLeft: !!__dgFind('.dg-drop-marker')
+        markerLeft: !!__dgFind('.dg-drop-marker'),
+        zoneLeft: !!__dgFind('.dg-drop-zone')
       };`
                 );
 
@@ -2289,8 +2290,33 @@ async function main() {
                     await page.mouse.move(geo.chipX + 20, geo.chipY + 10, { steps: 5 });
                     await page.mouse.move(geo.pvX, geo.pvY, { steps: 12 });
                     await page.waitForTimeout(250);
-                    const midFlight = await page.evaluate(inPage(`return { ghost: !!__dgFind('.dg-drag-ghost') };`));
+                    const midFlight = await page.evaluate(
+                        inPage(`
+      const zone = __dgFind('.dg-drop-zone');
+      const shown = zone && zone.style.display !== 'none';
+      const r = shown ? zone.getBoundingClientRect() : null;
+      return {
+        ghost: !!__dgFind('.dg-drag-ghost'),
+        caret: !!__dgFind('.dg-drop-marker:not(.dg-drop-zone)'),
+        zoneShown: !!shown,
+        zoneHasArea: !!(r && r.width > 4 && r.height > 4),
+        // The box must answer to .dg-drop-marker too — that is the single class the
+        // four serialization strippers key on.
+        zoneStripsAsChrome: !!(zone && zone.classList.contains('dg-drop-marker'))
+      };`)
+                    );
                     record('chip drag: a ghost follows the cursor mid-drag', !!midFlight.ghost);
+                    record('chip drag: an insertion caret tracks the pointer', !!midFlight.caret);
+                    record(
+                        'chip drag: a landing box outlines the receiving block',
+                        !!midFlight.zoneShown && !!midFlight.zoneHasArea,
+                        JSON.stringify(midFlight)
+                    );
+                    record(
+                        'chip drag: the landing box is strippable as editor chrome',
+                        !!midFlight.zoneStripsAsChrome,
+                        'must carry dg-drop-marker or it leaks into the saved template'
+                    );
                     await page.mouse.up();
                     await page.waitForTimeout(800);
 
@@ -2298,6 +2324,7 @@ async function main() {
                     record('chip drag: the snippet lands in the page', !!after.landed, JSON.stringify(after));
                     record('chip drag: the ghost is cleaned up', !after.ghostLeft);
                     record('chip drag: no drop marker is left behind', !after.markerLeft);
+                    record('chip drag: no landing box is left behind', !after.zoneLeft);
                 }
             } catch (e) {
                 record('chip drag onto the page', false, e.message);
