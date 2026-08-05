@@ -412,7 +412,8 @@ public with sharing class DocGenButtonController {
             'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'doc' => 'application/msword',
             'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'xlsm' => 'application/vnd.ms-excel.sheet.macroEnabled.12'
         };
         return m.containsKey(e) ? m.get(e) : 'application/octet-stream';
     }

@@ -4415,7 +4415,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get outputFormatOptions() {
         const type = this.isCreating ? this.newTemplateType : this.editTemplateType;
         if (type === 'Excel') {
-            return [{ label: 'Native (.xlsx)', value: 'Native' }];
+            return [{ label: 'Native (.xlsx / .xlsm)', value: 'Native' }];
         }
         if (type === 'HTML' || type === 'PDF') {
             return [{ label: 'PDF', value: 'PDF' }];
@@ -4429,7 +4429,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get acceptedFormats() {
         const type = this.isCreating ? this.newTemplateType : this.editTemplateType;
         if (type === 'PowerPoint') return ['.pptx'];
-        if (type === 'Excel') return ['.xlsx'];
+        if (type === 'Excel') return ['.xlsx', '.xlsm'];
         if (type === 'HTML') return ['.html', '.htm', '.zip'];
         if (type === 'PDF') return ['.pdf'];
         return ['.docx'];
@@ -5386,7 +5386,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     throw new Error('Document generation returned empty result.');
                 }
                 const docTitle = 'Preview_' + this.previewVersion.VersionNumber + '_' + (result.title || 'Document');
-                const ext = this._officeExtensionForType(previewTemplateType);
+                const ext = this._officeExtensionForType(previewTemplateType, result.isMacroEnabled);
                 this.downloadBase64(result.base64, docTitle + ext, 'application/octet-stream');
                 this.showToast(
                     'Success',
@@ -5714,7 +5714,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 }
 
                 const docTitle = 'Sample_' + (result.title || 'Document');
-                const ext = this._officeExtensionForType(this.editTemplateType);
+                const ext = this._officeExtensionForType(this.editTemplateType, result.isMacroEnabled);
                 this.downloadBase64(result.base64, docTitle + ext, 'application/octet-stream');
                 this.showToast('Success', 'Sample Document Downloaded', 'success');
             } else {
@@ -5929,12 +5929,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         }
     }
 
-    _officeExtensionForType(templateType) {
+    _officeExtensionForType(templateType, isMacroEnabled) {
         if (['PowerPoint', 'PPT', 'PPTX'].includes(templateType)) {
             return '.pptx';
         }
         if (templateType === 'Excel') {
-            return '.xlsx';
+            // Macro-enabled workbooks must download as .xlsm or Excel strips the
+            // VBA project. The flag comes back with the generateDocumentParts payload.
+            return isMacroEnabled ? '.xlsm' : '.xlsx';
         }
         if (templateType === 'PDF') {
             return '.pdf';
@@ -6000,7 +6002,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const fileBytes = buildDocx(parts.allXmlParts, allImages);
         return {
             base64: this._uint8ArrayToBase64(fileBytes),
-            title: parts.title || 'Document'
+            title: parts.title || 'Document',
+            isMacroEnabled: parts.isMacroEnabled === true
         };
     }
 

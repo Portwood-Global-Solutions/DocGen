@@ -10802,4 +10802,241 @@ private class DocGenMiscTests {
         );
         System.assert(result.contains('$100.00'), 'Rejoined tag resolves with its format suffix: ' + result);
     }
+
+    // =========================================================================
+    // Macro-enabled Excel (.xlsm) — generateDocumentParts flag + binary routing
+    // =========================================================================
+
+    /**
+     * Minimal workbook for the xlsm tests. With macroEnabled=true the content types
+     * declare the macro-enabled workbook and vbaProjectBin ships as xl/vbaProject.bin —
+     * the two things that distinguish an .xlsm from an .xlsx. extraBinPath/extraBinBytes
+     * add an arbitrary .bin part (e.g. printerSettings) for routing tests.
+     */
+    private static Blob buildTestWorkbook(
+        Boolean macroEnabled,
+        Blob vbaProjectBin,
+        String extraBinPath,
+        Blob extraBinBytes
+    ) {
+        String workbookContentType = macroEnabled
+            ? 'application/vnd.ms-excel.sheet.macroEnabled.main+xml'
+            : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml';
+        Compression.ZipWriter zw = new Compression.ZipWriter();
+        zw.addEntry(
+            '[Content_Types].xml',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+                    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                    '<Default Extension="xml" ContentType="application/xml"/>' +
+                    (macroEnabled
+                        ? '<Default Extension="bin" ContentType="application/vnd.ms-office.vbaProject"/>'
+                        : '') +
+                    (extraBinPath != null && !macroEnabled
+                        ? '<Default Extension="bin" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings"/>'
+                        : '') +
+                    '<Override PartName="/xl/workbook.xml" ContentType="' +
+                    workbookContentType +
+                    '"/>' +
+                    '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+                    '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' +
+                    '</Types>'
+            )
+        );
+        zw.addEntry(
+            '_rels/.rels',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+                    '</Relationships>'
+            )
+        );
+        zw.addEntry(
+            'xl/_rels/workbook.xml.rels',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+                    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' +
+                    (macroEnabled
+                        ? '<Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="vbaProject.bin"/>'
+                        : '') +
+                    '</Relationships>'
+            )
+        );
+        zw.addEntry(
+            'xl/workbook.xml',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+                    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+                    '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>'
+            )
+        );
+        zw.addEntry(
+            'xl/sharedStrings.xml',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1">' +
+                    '<si><t>Hello {Name}</t></si></sst>'
+            )
+        );
+        zw.addEntry(
+            'xl/worksheets/sheet1.xml',
+            Blob.valueOf(
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+                    '<row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>'
+            )
+        );
+        if (macroEnabled && vbaProjectBin != null) {
+            zw.addEntry('xl/vbaProject.bin', vbaProjectBin);
+        }
+        if (extraBinPath != null && extraBinBytes != null) {
+            zw.addEntry(extraBinPath, extraBinBytes);
+        }
+        return zw.getArchive();
+    }
+
+    /** Attaches a workbook to the shared test template as its template file. */
+    private static void linkWorkbookToTemplate(Id tplId, String pathOnClient, Blob archive) {
+        ContentVersion cv = new ContentVersion(
+            Title = pathOnClient.substringBeforeLast('.'),
+            PathOnClient = pathOnClient,
+            VersionData = archive
+        );
+        insert cv;
+        Id conDocId = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id].ContentDocumentId;
+        insert new ContentDocumentLink(LinkedEntityId = tplId, ContentDocumentId = conDocId, ShareType = 'V');
+    }
+
+    @IsTest
+    static void testGenerateDocumentPartsXlsmSetsMacroFlagAndShipsVbaIntact() {
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        tpl.Type__c = 'Excel';
+        tpl.Query_Config__c = 'Name';
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+        // Deliberately NOT valid UTF-8 (0x80, 0xFF bytes) so a string round-trip
+        // corruption could not slip through the byte-identity assertion below.
+        Blob vbaBytes = EncodingUtil.base64Decode('AAECgP8AVkJB');
+        linkWorkbookToTemplate(tpl.Id, 'MacroBook.xlsm', buildTestWorkbook(true, vbaBytes, null, null));
+
+        Account acc = TestDataFactory.getTestAccount();
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.generateDocumentParts(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('isMacroEnabled'), 'macroEnabled workbook content type must set the flag');
+        Map<String, String> binaryParts = (Map<String, String>) result.get('imageBase64Map');
+        System.assert(
+            binaryParts.containsKey('xl/vbaProject.bin'),
+            'VBA project must ship in the binary map, got: ' + binaryParts.keySet()
+        );
+        System.assertEquals(
+            EncodingUtil.base64Encode(vbaBytes),
+            binaryParts.get('xl/vbaProject.bin'),
+            'VBA project bytes must round-trip byte-identical'
+        );
+        Map<String, String> xmlParts = (Map<String, String>) result.get('allXmlParts');
+        System.assert(!xmlParts.containsKey('xl/vbaProject.bin'), 'VBA project must never be treated as XML text');
+    }
+
+    @IsTest
+    static void testGenerateDocumentPartsXlsxNotMacroAndBinRoutesDeterministically() {
+        DocGen_Template__c tpl = TestDataFactory.getTestTemplate();
+        tpl.Type__c = 'Excel';
+        tpl.Query_Config__c = 'Name';
+        Database.update(tpl, AccessLevel.SYSTEM_MODE);
+
+        // A .bin whose bytes ARE valid UTF-8 — the old detect-by-trying split would
+        // have survived .toString() and shipped it re-encoded through the XML map.
+        Blob asciiBin = Blob.valueOf('plain ASCII bytes that decode fine as UTF-8');
+        linkWorkbookToTemplate(
+            tpl.Id,
+            'PlainBook.xlsx',
+            buildTestWorkbook(false, null, 'xl/printerSettings/printerSettings1.bin', asciiBin)
+        );
+
+        Account acc = TestDataFactory.getTestAccount();
+
+        Test.startTest();
+        Map<String, Object> result = DocGenService.generateDocumentParts(tpl.Id, acc.Id);
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('isMacroEnabled'), 'Plain .xlsx must not set the macro flag');
+        Map<String, String> binaryParts = (Map<String, String>) result.get('imageBase64Map');
+        System.assertEquals(
+            EncodingUtil.base64Encode(asciiBin),
+            binaryParts.get('xl/printerSettings/printerSettings1.bin'),
+            'A .bin part must route to the binary map even when its bytes are valid UTF-8'
+        );
+        Map<String, String> xmlParts = (Map<String, String>) result.get('allXmlParts');
+        System.assert(
+            !xmlParts.containsKey('xl/printerSettings/printerSettings1.bin'),
+            '.bin parts must never land in the XML map'
+        );
+    }
+
+    // Server-side render path (Flow action / save-to-record / bulk) must name a
+    // macro-enabled workbook .xlsm — Excel refuses to load VBA from an .xlsx name.
+    @IsTest
+    static void testFlowAction_xlsmTemplateSavesAsXlsm() {
+        Account acc = TestDataFactory.getTestAccount();
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Xlsm JSON Template',
+            Base_Object_API__c = 'FlowJsonData',
+            Type__c = 'Excel',
+            Output_Format__c = 'Native',
+            Query_Config__c = '{"v":4,"source":"flowJsonData"}'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+
+        Blob vbaBytes = EncodingUtil.base64Decode('AAECgP8AVkJB');
+        ContentVersion cv = new ContentVersion(
+            Title = 'Xlsm JSON Template',
+            PathOnClient = 'book.xlsm',
+            VersionData = buildTestWorkbook(true, vbaBytes, null, null),
+            FirstPublishLocationId = tpl.Id
+        );
+        Database.insert(cv, AccessLevel.SYSTEM_MODE);
+
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(
+            Template__c = tpl.Id,
+            Is_Active__c = true,
+            Type__c = 'Excel',
+            Base_Object_API__c = 'FlowJsonData',
+            Query_Config__c = '{"v":4,"source":"flowJsonData"}',
+            Content_Version_Id__c = [SELECT Id FROM ContentVersion WHERE Id = :cv.Id LIMIT 1]
+            .Id
+        );
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+
+        DocGenFlowAction.Request req = new DocGenFlowAction.Request();
+        req.templateId = tpl.Id;
+        req.recordId = acc.Id;
+        req.saveToRecord = true;
+        req.jsonData = '{"Name":"Acme"}';
+
+        Test.startTest();
+        List<DocGenFlowAction.Response> responses = DocGenFlowAction.generateDocument(
+            new List<DocGenFlowAction.Request>{ req }
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, responses[0].success, 'Xlsm render should succeed: ' + responses[0].errorMessage);
+        ContentVersion saved = [
+            SELECT PathOnClient
+            FROM ContentVersion
+            WHERE Id = :responses[0].contentVersionId
+            LIMIT 1
+        ];
+        System.assert(
+            saved.PathOnClient.endsWith('.xlsm'),
+            'Macro-enabled template must save as .xlsm, got: ' + saved.PathOnClient
+        );
+    }
 }

@@ -30,6 +30,25 @@ private class DocGenButtonControllerTest {
         }
     }
 
+    /** Mock that saves a macro-enabled workbook, exercising the xlsm MIME branch. */
+    private class MockXlsmGenerator implements DocGenButtonController.Generator {
+        public DocGenButtonController.GenResult generate(DocGenButtonController.GenRequest req) {
+            ContentVersion cv = new ContentVersion(
+                Title = 'Mock Workbook',
+                PathOnClient = 'Mock Workbook.xlsm',
+                VersionData = Blob.valueOf('PK mock xlsm content')
+            );
+            insert cv;
+            cv = [SELECT Id, ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id LIMIT 1];
+
+            DocGenButtonController.GenResult r = new DocGenButtonController.GenResult();
+            r.success = true;
+            r.contentVersionId = cv.Id;
+            r.contentDocumentId = cv.ContentDocumentId;
+            return r;
+        }
+    }
+
     /** Mock that reports a failure (e.g., template locked, merge error). */
     private class FailingGenerator implements DocGenButtonController.Generator {
         public DocGenButtonController.GenResult generate(DocGenButtonController.GenRequest req) {
@@ -92,6 +111,26 @@ private class DocGenButtonControllerTest {
         System.assertNotEquals(null, dto.downloadUrl, 'A servlet download URL is always provided');
         System.assertEquals('application/pdf', dto.mimeType, 'PDF mime expected');
         System.assert(dto.fileName.endsWithIgnoreCase('.pdf'), 'Filename should carry extension');
+    }
+
+    @IsTest
+    static void generate_xlsmFile_returnsMacroEnabledMime() {
+        DocGenButtonController.generator = new MockXlsmGenerator();
+        DocGenButtonController.configOverride = new List<DocGen_Button__mdt>{
+            cfg('WO_XLSM', OBJ, UserInfo.getUserId(), true)
+        };
+
+        Test.startTest();
+        DocGenButtonController.GenerateResultDTO dto = DocGenButtonController.generate(UserInfo.getUserId(), 'WO_XLSM');
+        Test.stopTest();
+
+        System.assertEquals(true, dto.success, 'Expected success');
+        System.assertEquals(
+            'application/vnd.ms-excel.sheet.macroEnabled.12',
+            dto.mimeType,
+            'xlsm must map to the macro-enabled Excel MIME, not octet-stream'
+        );
+        System.assert(dto.fileName.endsWithIgnoreCase('.xlsm'), 'Filename should carry the xlsm extension');
     }
 
     @IsTest

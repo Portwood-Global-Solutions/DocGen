@@ -54,6 +54,16 @@ import LBL_SELECT_RECORD from '@salesforce/label/c.DocGenRunner_SelectRecord';
 import LBL_SEARCH_RECORDS from '@salesforce/label/c.DocGenRunner_SearchRecords';
 import LBL_CHOOSE_RECORD_PROMPT from '@salesforce/label/c.DocGenRunner_ChooseRecordPrompt';
 
+// Proper MIME per Office extension for browser downloads. xlsm is resolved
+// after the parts call — the server detects macro-enabled workbooks and the
+// runner upgrades xlsx → xlsm from the parts payload's isMacroEnabled flag.
+const OFFICE_MIME_BY_EXT = {
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12'
+};
+
 export default class DocGenRunner extends NavigationMixin(LightningElement) {
     // Exposed to the template as {label.X}. Custom Labels resolve to the
     // running user's language at runtime (#95).
@@ -992,9 +1002,11 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                 // Word DOCX / Excel XLSX / PowerPoint PPTX — client-side assembly.
                 // PowerPoint uses the same browser ZIP writer so generated PPTX
                 // packages avoid Apex Compression.ZipWriter container quirks.
+                // Excel may still upgrade to .xlsm inside _generateOfficeClientSideInner —
+                // macro-enabled detection needs the parts payload from the server.
                 const ext = isPPT ? 'pptx' : isExcel ? 'xlsx' : 'docx';
                 this.showToast('Info', 'Generating document...', 'info');
-                await this._generateOfficeClientSide(ext, 'application/octet-stream');
+                await this._generateOfficeClientSide(ext, OFFICE_MIME_BY_EXT[ext]);
             }
         } catch (e) {
             this.error = 'Generation Error: ' + (e.body ? e.body.message : e.message || 'Unknown error');
@@ -1384,6 +1396,16 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         }
         const docTitle = parts.title || 'Document';
 
+        // Macro-enabled workbook: the server flags it from the template's content
+        // types / vbaProject.bin part. Upgrade the extension so Excel opens the
+        // file without stripping the VBA project.
+        let resolvedExtension = extension;
+        let resolvedMimeType = mimeType;
+        if (extension === 'xlsx' && parts.isMacroEnabled) {
+            resolvedExtension = 'xlsm';
+            resolvedMimeType = OFFICE_MIME_BY_EXT.xlsm;
+        }
+
         const allImages = { ...(parts.imageBase64Map || {}) };
         if (parts.imageCvIdMap) {
             const uniqueCvIds = new Map();
@@ -1443,10 +1465,10 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         await this._deliverGeneratedDocument({
             base64: fileBase64,
             fileName: docTitle,
-            extension: extension,
-            mimeType: mimeType,
+            extension: resolvedExtension,
+            mimeType: resolvedMimeType,
             byteLength: fileBytes.length,
-            label: extension.toUpperCase()
+            label: resolvedExtension.toUpperCase()
         });
     }
 
