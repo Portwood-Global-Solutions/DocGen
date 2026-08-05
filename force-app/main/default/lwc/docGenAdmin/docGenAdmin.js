@@ -21,7 +21,8 @@ import {
     buildBlockPalette,
     splitRegions,
     joinRegions,
-    stripRegionMarkers
+    stripRegionMarkers,
+    buildBlankCanvasBody
 } from './docGenAuthoringKit';
 
 // Each predesigned starter carries its natural object — the wizard's starter
@@ -2220,6 +2221,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get authoringCards() {
         const defs = [
             {
+                mode: 'canvas',
+                title: 'Design on a Canvas',
+                badge: 'Beta',
+                icon: 'utility:layout',
+                desc: 'A Canva-style artboard. Drop boxes exactly where you want them and they land there in the PDF, to the inch. Line-item lists still flow and spill onto as many pages as the data needs.'
+            },
+            {
                 mode: 'starter',
                 title: 'Start from a Design',
                 badge: 'Recommended',
@@ -2281,7 +2289,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         this.newAuthoringMode = mode;
-        if (mode === 'starter' || mode === 'ai' || mode === 'scratch') {
+        if (mode === 'canvas') {
+            // Canvas is its own template TYPE, not an HTML template authored
+            // differently — the editor, the stored body shape and the round-trip all
+            // differ. It still RENDERS through the HTML path (DocGenService.isHtmlBacked).
+            this.newTemplateType = 'Canvas';
+            this.newTemplateOutputFormat = 'PDF';
+        } else if (mode === 'starter' || mode === 'ai' || mode === 'scratch') {
             this.newTemplateType = 'HTML';
             this.newTemplateOutputFormat = 'PDF';
         } else {
@@ -4621,6 +4635,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 if (aiPastedHtml) {
                     await this._applyPastedBody(record.id, aiPastedHtml, newRow.Name);
                 }
+                this.isEditModalOpen = false;
+                await this._openDesignerSurface();
+            } else if (authoringMode === 'canvas') {
+                // Seed one empty artboard so the canvas opens on a real page rather
+                // than an empty void with nothing to drop onto.
+                await this._applyPastedBody(record.id, buildBlankCanvasBody(), newRow.Name);
                 this.isEditModalOpen = false;
                 await this._openDesignerSurface();
             } else if (authoringMode === 'scratch') {

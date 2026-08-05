@@ -1018,7 +1018,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ];
             String documentXml = null;
 
-            if (template.Type__c == 'HTML') {
+            if (DocGenService.isHtmlBacked(template.Type__c)) {
                 // HTML-type: read the active version's body CV directly. The body has
                 // already been rewritten at upload time (image src → /sfc/ URLs).
                 if (!activeVersions.isEmpty() && String.isNotBlank(activeVersions[0].Content_Version_Id__c)) {
@@ -1393,7 +1393,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ];
             String documentXml = null;
 
-            if (templateType == 'HTML') {
+            if (DocGenService.isHtmlBacked(templateType)) {
                 if (!activeVersions.isEmpty() && String.isNotBlank(activeVersions[0].Content_Version_Id__c)) {
                     Id bodyCvId = (Id) activeVersions[0].Content_Version_Id__c;
                     DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
@@ -7260,7 +7260,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         // For HTML templates, the body bytes are HTML text containing
                         // shepherd URLs that reference inline-image CVs — capture the
                         // text so we can scan it for asset IDs below.
-                        if (tmpl.Type__c == 'HTML') {
+                        if (DocGenService.isHtmlBacked(tmpl.Type__c)) {
                             htmlBodyText = cvs[0].VersionData.toString();
                         }
                     }
@@ -7283,7 +7283,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             // URLs missed images that were uploaded but not (yet) placed, or placed via
             // a URL form the regex doesn't match — so a clone silently lost them and the
             // author had to re-upload. Same title convention listHtmlTemplateImages uses.
-            if (tmpl.Type__c == 'HTML') {
+            if (DocGenService.isHtmlBacked(tmpl.Type__c)) {
                 String imgPrefix = 'docgen_html_img_' + templateId + '%';
                 DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'IsLatest' });
                 /* code-analyzer-suppress ApexFlsViolation */
@@ -7512,7 +7512,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 // tmpl.Name meant an imported/cloned HTML template rendered fine but opened
                 // with a BLANK Designer canvas — and the first Save wrote that blank back
                 // over the real body.
-                cv.Title = tmpl.Type__c == 'HTML'
+                cv.Title = DocGenService.isHtmlBacked(tmpl.Type__c)
                     ? 'docgen_html_body_' + tmpl.Id + '_' + Datetime.now().getTime()
                     : tmpl.Name;
                 cv.PathOnClient = tmpl.Name + '.' + (String) fileData.get('fileExtension');
@@ -7522,7 +7522,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 // post-insert). Word/Excel/PowerPoint templates carry their
                 // image references inside docx-internal relationships, not
                 // shepherd URLs, so they pass through untouched.
-                if (tmpl.Type__c == 'HTML' && !cvIdMap.isEmpty()) {
+                if (DocGenService.isHtmlBacked(tmpl.Type__c) && !cvIdMap.isEmpty()) {
                     String htmlBody = bodyBytes.toString();
                     String rewrittenBody = rewriteShepherdCvIds(htmlBody, cvIdMap);
                     if (rewrittenBody != htmlBody) {

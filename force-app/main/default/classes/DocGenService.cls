@@ -656,6 +656,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String outputFormat = (String) dataMap.get('outputFormat');
         String templateType = (String) dataMap.get('templateType');
 
+        // A Canvas template's body IS an HTML document — the canvas editor is an
+        // authoring surface that serializes to absolutely-positioned boxes inside
+        // position:relative artboards. Normalising here rather than adding `||
+        // 'Canvas'` to the twelve downstream `templateType == 'HTML'` branches is
+        // deliberate: one of those twelve WOULD get missed, and the failure mode is a
+        // Canvas template silently taking the DOCX path and rendering as garbage.
+        if (templateType == 'Canvas') {
+            templateType = 'HTML';
+        }
+
         // Allow callers to force PDF output format
         if (outputFormatOverride != null) {
             outputFormat = outputFormatOverride;
@@ -5806,6 +5816,19 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
 
         return (negative ? '-' : '') + result + decPart;
+    }
+
+    /**
+     * True for template types whose stored body is an HTML document.
+     *
+     * `Canvas` is an AUTHORING type, not a rendering one: the canvas editor serializes
+     * its artboards and boxes to ordinary HTML (absolutely positioned boxes inside
+     * position:relative artboards — see scripts/canvas-layout-model-probe.apex), so
+     * every downstream concern that cares "is the body HTML?" must answer yes for it.
+     * That covers body storage, clone image rewriting and the render fork.
+     */
+    public static Boolean isHtmlBacked(String templateType) {
+        return templateType == 'HTML' || templateType == 'Canvas';
     }
 
     private static Boolean isNumericFormat(String fmt) {

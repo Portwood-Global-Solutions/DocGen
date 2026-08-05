@@ -33,6 +33,11 @@
                 <default>false</default>
                 <label>PDF</label>
             </value>
+            <value>
+                <fullName>Canvas</fullName>
+                <default>false</default>
+                <label>Canvas</label>
+            </value>
         </valueSetDefinition>
     </valueSet>
 </CustomField>
