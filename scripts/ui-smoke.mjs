@@ -57,17 +57,32 @@ function frontDoorUrl(org) {
  * unnoticed. Resolve the prefix from the org instead of assuming it.
  */
 function tabPath(org) {
-    let ns = null;
-    try {
-        const raw = execFileSync('sf', ['org', 'display', '--target-org', org, '--json'], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'ignore']
-        });
-        ns = JSON.parse(raw).result.namespace || null;
-    } catch {
-        ns = null;
-    }
-    return `/lightning/n/${ns ? ns + '__' : ''}DocGen_Template_Manager`;
+    // Three shapes, and org namespace alone does not distinguish them:
+    //   source-deployed, no namespace   -> DocGen_Template_Manager
+    //   namespaced scratch org          -> portwoodglobal__DocGen_Template_Manager
+    //   SUBSCRIBER org, package INSTALLED -> portwoodglobal__DocGen_Template_Manager
+    //     ...but `sf org display` reports namespace: null there, because a subscriber
+    //     org does not OWN the namespace, it receives it from the package. Reading only
+    //     the org namespace therefore gets the install case exactly backwards, so also
+    //     ask which packages are installed.
+    const run = (argv) => {
+        try {
+            return JSON.parse(execFileSync('sf', argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }))
+                .result;
+        } catch {
+            return null;
+        }
+    };
+    const own = (run(['org', 'display', '--target-org', org, '--json']) || {}).namespace || null;
+    if (own) return `/lightning/n/${own}__DocGen_Template_Manager`;
+
+    const installed = run(['package', 'installed', 'list', '--target-org', org, '--json']) || [];
+    const pkg = (Array.isArray(installed) ? installed : []).find(
+        (p) => String(p.SubscriberPackageNamespace || '').length > 0
+    );
+    if (pkg) return `/lightning/n/${pkg.SubscriberPackageNamespace}__DocGen_Template_Manager`;
+
+    return '/lightning/n/DocGen_Template_Manager';
 }
 
 /**
@@ -2192,6 +2207,124 @@ async function main() {
                 opened.pv && opened.bar,
                 JSON.stringify(opened)
             );
+        }
+
+        // --- 4b. Dragging a tag chip onto the page ------------------------------
+        // The one interaction with no coverage until now, and the one most likely to
+        // rot silently: HTML5 drag-and-drop does not survive LWS, so chip drag is
+        // hand-rolled from raw mouse events (mousedown arms, >7px starts, a ghost
+        // follows the cursor, mouseup over the page inserts at the drop caret). None of
+        // that is exercised by clicking, so every other check here can pass while
+        // dragging is completely dead — which is exactly what a user reported.
+        {
+            const seedCanvas = inPage(`
+      const pv = __dgFind('.dg-pv');
+      if (!pv) return false;
+      const keep = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (keep) pv.appendChild(keep);
+      const p = document.createElement('p');
+      p.textContent = 'DROP TARGET LINE';
+      pv.appendChild(p);
+      return true;`);
+
+            // The chips live in the Tags rail panel, which is closed by default —
+            // open it first or every drag assertion below reports a missing chip
+            // rather than a broken drag.
+            const openTagPanel = inPage(`
+      // Idempotent on purpose: handlePanelToggle TOGGLES, so a second blind click
+      // closes the rail and the next assertion reports "no chip" instead of testing
+      // anything. Only click when the chips are not already on screen.
+      if (__dgFind('.dg-tag-chip[data-snippet]')) return 'already-open';
+      const btn = __dgFind('[data-panel="tags"]');
+      if (!btn) return false;
+      btn.click();
+      return true;`);
+
+            const geometry = inPage(`
+      const chip = __dgFind('.dg-tag-chip[data-snippet]');
+      const pv = __dgFind('.dg-pv');
+      if (!chip || !pv) return null;
+      const c = chip.getBoundingClientRect();
+      const p = pv.getBoundingClientRect();
+      return {
+        snippet: chip.getAttribute('data-snippet'),
+        chipX: c.left + c.width / 2, chipY: c.top + c.height / 2,
+        pvX: p.left + Math.min(120, p.width / 2), pvY: p.top + 30
+      };`);
+
+            const readCanvas = (snippet) =>
+                inPage(
+                    `
+      const pv = __dgFind('.dg-pv');
+      const html = pv ? pv.innerHTML : '';
+      const needle = ` +
+                        JSON.stringify(snippet) +
+                        `;
+      return {
+        landed: html.indexOf(needle) !== -1,
+        ghostLeft: !!__dgFind('.dg-drag-ghost'),
+        markerLeft: !!__dgFind('.dg-drop-marker')
+      };`
+                );
+
+            let drag = {};
+            try {
+                drag.seeded = await page.evaluate(seedCanvas);
+                drag.panel = await page.evaluate(openTagPanel);
+                await page.waitForTimeout(900);
+                const geo = await page.evaluate(geometry);
+                if (!geo) {
+                    record(
+                        'chip drag: a draggable tag chip is present',
+                        false,
+                        'no .dg-tag-chip[data-snippet] in the rail'
+                    );
+                } else {
+                    record('chip drag: a draggable tag chip is present', true, geo.snippet);
+                    // A real mouse gesture, not a synthetic event: the 7px threshold and
+                    // the document-level capture listeners only respond to genuine moves.
+                    await page.mouse.move(geo.chipX, geo.chipY);
+                    await page.mouse.down();
+                    await page.mouse.move(geo.chipX + 20, geo.chipY + 10, { steps: 5 });
+                    await page.mouse.move(geo.pvX, geo.pvY, { steps: 12 });
+                    await page.waitForTimeout(250);
+                    const midFlight = await page.evaluate(inPage(`return { ghost: !!__dgFind('.dg-drag-ghost') };`));
+                    record('chip drag: a ghost follows the cursor mid-drag', !!midFlight.ghost);
+                    await page.mouse.up();
+                    await page.waitForTimeout(800);
+
+                    const after = await page.evaluate(readCanvas(geo.snippet));
+                    record('chip drag: the snippet lands in the page', !!after.landed, JSON.stringify(after));
+                    record('chip drag: the ghost is cleaned up', !after.ghostLeft);
+                    record('chip drag: no drop marker is left behind', !after.markerLeft);
+                }
+            } catch (e) {
+                record('chip drag onto the page', false, e.message);
+            }
+
+            // A mousedown with no movement must still behave as a plain click-insert —
+            // arming the drag must not swallow the click.
+            try {
+                await page.evaluate(seedCanvas);
+                await page.evaluate(openTagPanel);
+                await page.waitForTimeout(900);
+                const geo2 = await page.evaluate(geometry);
+                if (!geo2) {
+                    // Never let this fall through silently — a check that quietly does
+                    // not run looks identical to a check that passed.
+                    record('chip click (no drag) still inserts', false, 'tag rail had no chip to click');
+                } else {
+                    await page.mouse.move(geo2.chipX, geo2.chipY);
+                    await page.mouse.down();
+                    await page.mouse.up();
+                    await page.waitForTimeout(700);
+                    const after2 = await page.evaluate(readCanvas(geo2.snippet));
+                    record('chip click (no drag) still inserts', !!after2.landed, JSON.stringify(after2));
+                }
+            } catch (e) {
+                record('chip click (no drag) still inserts', false, e.message);
+            }
         }
 
         // --- 5. No console errors while driving the UI ---------------------------
