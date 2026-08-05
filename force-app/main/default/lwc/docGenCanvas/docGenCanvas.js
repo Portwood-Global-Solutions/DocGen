@@ -14,7 +14,9 @@ import {
     FONT_CHOICES,
     DEFAULT_STYLE,
     newTableBox,
-    tablePreviewHtml
+    tablePreviewHtml,
+    snapBox,
+    suggestTotals
 } from './canvasModel';
 
 /**
@@ -44,6 +46,8 @@ export default class DocGenCanvas extends LightningElement {
     @track activeTool = 'select';
     @track isSaving = false;
     @track statusText = '';
+    // Alignment guides for the box being dragged. Cleared on mouseup.
+    @track guides = [];
 
     _loaded = false;
     // Live drag state. Kept off @track on purpose: it changes on every mousemove and
@@ -173,6 +177,98 @@ export default class DocGenCanvas extends LightningElement {
         this._patchTable({ columns });
     }
 
+    get selTableHeaderFill() {
+        return ((this.selectedBox || {}).table || {}).headerFill || '#eeeeee';
+    }
+    get selTableHeaderBold() {
+        return !!((this.selectedBox || {}).table || {}).headerBold;
+    }
+    get selTableGridColor() {
+        return ((this.selectedBox || {}).table || {}).gridColor || '#999999';
+    }
+    get selTableGridWidth() {
+        const t = (this.selectedBox || {}).table || {};
+        return t.gridWidth == null ? 0.5 : t.gridWidth;
+    }
+    get selTableCellPadding() {
+        const t = (this.selectedBox || {}).table || {};
+        return t.cellPadding == null ? 3 : t.cellPadding;
+    }
+    get selTableTotals() {
+        return !!(((this.selectedBox || {}).table || {}).totals || {}).enabled;
+    }
+    get selTableRows() {
+        const t = (this.selectedBox || {}).table || {};
+        return (t.rows || []).map((cells, i) => ({
+            idx: i,
+            num: i + 1,
+            text: cells.join(' | ')
+        }));
+    }
+
+    handleTableStyleChange(event) {
+        const key = event.currentTarget.dataset.key;
+        const raw = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+        const val = event.target.type === 'number' ? parseFloat(raw) : raw;
+        this._patchTable({ [key]: val });
+    }
+
+    handleAddRow() {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        this._patchTable({ rows: [...(box.table.rows || []), box.table.columns.map(() => '')] });
+    }
+
+    handleRowChange(event) {
+        const idx = parseInt(event.currentTarget.dataset.idx, 10);
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        // Pipe-separated so a whole row is editable in one field — a cell-per-input grid
+        // in a 260px panel is unusable, and rows here are short by nature.
+        const cells = String(event.target.value || '')
+            .split('|')
+            .map((v) => v.trim());
+        const rows = (box.table.rows || []).map((r, i) => (i === idx ? cells : r));
+        this._patchTable({ rows });
+    }
+
+    handleRemoveRow(event) {
+        const idx = parseInt(event.currentTarget.dataset.idx, 10);
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        this._patchTable({ rows: (box.table.rows || []).filter((r, i) => i !== idx) });
+    }
+
+    handleTotalsToggle(event) {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        const on = event.target.checked;
+        const existing = (box.table.totals || {}).cells || [];
+        this._patchTable({
+            totals: {
+                enabled: on,
+                // Suggest {SUM:Rel.Field} per column on first enable, then leave the
+                // author's edits alone.
+                cells: existing.length ? existing : suggestTotals(box.table)
+            }
+        });
+    }
+
+    handleTotalsCellChange(event) {
+        const idx = parseInt(event.currentTarget.dataset.idx, 10);
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        const cells = [...((box.table.totals || {}).cells || [])];
+        cells[idx] = event.target.value;
+        this._patchTable({ totals: { ...box.table.totals, cells } });
+    }
+
+    get selTableTotalsCells() {
+        const t = (this.selectedBox || {}).table || {};
+        const cells = (t.totals || {}).cells || [];
+        return (t.columns || []).map((c, i) => ({ idx: i, label: c.label, value: cells[i] || '' }));
+    }
+
     handleAddColumn() {
         const box = this.selectedBox;
         if (!box || box.kind !== 'table') return;
@@ -186,6 +282,17 @@ export default class DocGenCanvas extends LightningElement {
         const box = this.selectedBox;
         if (!box || box.kind !== 'table' || box.table.columns.length <= 1) return;
         this._patchTable({ columns: box.table.columns.filter((c, i) => i !== idx) });
+    }
+
+    // Placeholders that LOOK like merge tags have to come from getters: LWC parses a
+    // leading "{" in an attribute as a template expression, so placeholder="{Field}"
+    // compiles as a binding to a property called Field and renders empty.
+    get tagPlaceholder() {
+        return '{Field}';
+    }
+
+    get totalsPlaceholder() {
+        return '{SUM:Rel.Field}';
     }
 
     get fontOptions() {
@@ -268,6 +375,16 @@ export default class DocGenCanvas extends LightningElement {
 
     handleClearFill() {
         this._patchStyle({ fill: '' });
+    }
+
+    get renderedGuides() {
+        return this.guides.map((g, i) => ({
+            key: g.axis + i,
+            style:
+                g.axis === 'v'
+                    ? 'position:absolute;top:0;bottom:0;left:' + inToPx(g.at, this.zoom) + 'px;width:1px;'
+                    : 'position:absolute;left:0;right:0;top:' + inToPx(g.at, this.zoom) + 'px;height:1px;'
+        }));
     }
 
     get selectedBox() {
@@ -440,6 +557,18 @@ export default class DocGenCanvas extends LightningElement {
         } else {
             next.x = d.origin.x + dx;
             next.y = d.origin.y + dy;
+            // Snap only when MOVING. Snapping a resize would fight the author trying to
+            // set an exact width, which is the one thing this editor promises.
+            const others = [];
+            for (const board of this.doc.artboards) {
+                for (const b of board.boxes) {
+                    if (b.id !== d.id) others.push(b);
+                }
+            }
+            const snapped = snapBox({ ...next, w: d.origin.w, h: d.origin.h }, others, this.geo);
+            next.x = snapped.x;
+            next.y = snapped.y;
+            this.guides = snapped.guides;
         }
         this.applyToBox(d.id, next);
     }
@@ -448,6 +577,7 @@ export default class DocGenCanvas extends LightningElement {
         window.removeEventListener('mousemove', this._onMove, true);
         window.removeEventListener('mouseup', this._onUp, true);
         this._drag = null;
+        this.guides = [];
     }
 
     applyToBox(id, patch) {

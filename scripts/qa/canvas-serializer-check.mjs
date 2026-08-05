@@ -35,6 +35,11 @@ tbl.table.columns = [
 ];
 doc.artboards[0].boxes.push(tbl);
 
+// Static rows + a totals row, plus what the totals suggester proposes.
+tbl.table.rows = [['Note', '']];
+const suggested = m.suggestTotals(tbl.table);
+tbl.table.totals = { enabled: true, cells: suggested };
+
 doc.artboards.push(m.newArtboard());
 const p2 = m.newTextBox(1.0, 0.5, 3.0, 0.4);
 p2.text = 'Page two';
@@ -55,10 +60,17 @@ const checks = [
     // conditional written with > still evaluates.
     ['conditional angle bracket is escaped, not dropped', html.includes('{#IF Amount &gt; 100000}')],
     ['table loop wraps the row inside tbody', /<tbody>\{#Opportunities\}<tr>/.test(html)],
-    ['table loop closes after the row', /<\/tr>\{\/Opportunities\}<\/tbody>/.test(html)],
+    ['table loop closes right after the row', /<\/tr>\{\/Opportunities\}/.test(html)],
     ['table head repeats on continuation pages', html.includes('display: table-header-group')],
     ['table paginates', html.includes('-fs-table-paginate: paginate')],
-    ['table is a FLOW box so it can grow', /class="dg-flow"[^>]*>\s*<table/.test(html)]
+    ['table is a FLOW box so it can grow', /class="dg-flow"[^>]*>\s*<table/.test(html)],
+    ['literal rows land after the repeating row', html.indexOf('Note') > html.indexOf('{/Opportunities}')],
+    // <tfoot> is a table-footer-group: it would repeat on EVERY page, and a grand
+    // total on every page of a long invoice is wrong.
+    ['totals row is NOT in tfoot', !html.includes('<tfoot')],
+    // Both learned from reading the suggester's own output rather than trusting it.
+    ['totals carry the column format through', suggested[1] === '{SUM:Opportunities.Amount:currency:USD}'],
+    ['no aggregate suggested for a non-numeric field', suggested[0] === '']
 ];
 
 let bad = 0;

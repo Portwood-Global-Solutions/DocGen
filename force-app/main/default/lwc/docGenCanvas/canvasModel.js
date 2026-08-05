@@ -137,6 +137,13 @@ export function newTableBox(xIn, yIn, wIn) {
             // Blank relationship = a static table. Set it and every row repeats per
             // child record.
             relationship: '',
+            // Extra literal rows, each an array of cell strings. Used on their own for
+            // a fixed table, or appended after the loop when one is bound.
+            rows: [],
+            // A totals row. Emitted as the LAST <tr> of <tbody>, deliberately not in
+            // <tfoot>: a table-footer-group repeats on EVERY page, and a grand total
+            // that appears on every page of a long invoice is wrong.
+            totals: { enabled: false, cells: [] },
             columns: [
                 { label: 'Item', tag: '{Name}', width: '' },
                 { label: 'Amount', tag: '{Amount}', width: '' }
@@ -148,6 +155,43 @@ export function newTableBox(xIn, yIn, wIn) {
         h: 1,
         html: ''
     };
+}
+
+/** Field names that plausibly hold a number worth totalling. */
+const NUMERIC_HINT =
+    /(amount|total|price|cost|qty|quantity|count|sum|rate|discount|tax|subtotal|fee|balance|revenue|margin|hours|units)/i;
+
+/**
+ * Suggests a totals cell per column.
+ *
+ * Two things it deliberately gets right, both learned by looking at its own output:
+ *
+ *  - It carries the column's FORMAT through. A column showing
+ *    {Amount:currency:USD} becomes {SUM:Rel.Amount:currency:USD}, because the engine
+ *    supports format suffixes on aggregates and a raw unformatted total sitting under
+ *    a column of formatted currency looks broken.
+ *  - It does NOT suggest for fields that are not plausibly numeric. The first version
+ *    happily proposed {SUM:Opportunities.Name}, which renders as an error or a zero.
+ *    A blank cell the author fills in beats a confident wrong one.
+ *
+ * The numeric test is a name heuristic, not a describe — the canvas has no field
+ * metadata. It is a suggestion the author edits, so a miss costs a keystroke; the
+ * thing worth avoiding is a plausible-looking total that is nonsense.
+ */
+export function suggestTotals(table) {
+    const rel = (table && table.relationship) || '';
+    return (table.columns || []).map((c) => {
+        const m = /^\{([A-Za-z0-9_.]+)((?::[^}]*)?)\}$/.exec((c.tag || '').trim());
+        if (!rel || !m) {
+            return '';
+        }
+        const field = m[1];
+        const format = m[2] || '';
+        if (!NUMERIC_HINT.test(field)) {
+            return '';
+        }
+        return '{SUM:' + rel + '.' + field + format + '}';
+    });
 }
 
 export function newArtboard() {
@@ -185,6 +229,76 @@ export function clampBox(box, geo) {
         x: round3(Math.max(0, Math.min(box.x, geo.w - w))),
         y: round3(Math.max(0, Math.min(box.y, geo.h - h)))
     };
+}
+
+/** Snap distance in inches. ~5px at 100%: close enough to feel magnetic, far enough
+ *  that a deliberate 0.1in offset is still reachable. */
+export const SNAP_IN = 0.05;
+
+/**
+ * Snaps a moving box to its neighbours and to the page, and reports which lines to
+ * draw.
+ *
+ * Guides are computed from the MODEL in inches, not from measured pixels, so they
+ * stay true at any zoom — a guide that drifts from the thing it claims to align to is
+ * worse than no guide.
+ *
+ * Returns { x, y, guides: [{ axis: 'v'|'h', at: inches }] }.
+ */
+export function snapBox(box, others, geo) {
+    const guides = [];
+    const targetsX = [0, geo.w / 2, geo.w];
+    const targetsY = [0, geo.h / 2, geo.h];
+    for (const o of others) {
+        targetsX.push(o.x, o.x + o.w / 2, o.x + o.w);
+        targetsY.push(o.y, o.y + o.h / 2, o.y + o.h);
+    }
+
+    // Each edge of the moving box is a candidate; the offset converts an edge match
+    // back into a box origin.
+    const edgesX = [
+        { at: box.x, offset: 0 },
+        { at: box.x + box.w / 2, offset: box.w / 2 },
+        { at: box.x + box.w, offset: box.w }
+    ];
+    const edgesY = [
+        { at: box.y, offset: 0 },
+        { at: box.y + box.h / 2, offset: box.h / 2 },
+        { at: box.y + box.h, offset: box.h }
+    ];
+
+    let x = box.x;
+    let y = box.y;
+    let bestX = SNAP_IN;
+    let bestY = SNAP_IN;
+    for (const e of edgesX) {
+        for (const t of targetsX) {
+            const d = Math.abs(e.at - t);
+            if (d < bestX) {
+                bestX = d;
+                x = round3(t - e.offset);
+                guides.push({ axis: 'v', at: t });
+            }
+        }
+    }
+    for (const e of edgesY) {
+        for (const t of targetsY) {
+            const d = Math.abs(e.at - t);
+            if (d < bestY) {
+                bestY = d;
+                y = round3(t - e.offset);
+                guides.push({ axis: 'h', at: t });
+            }
+        }
+    }
+    // Only the winning line per axis is worth drawing — every near-miss considered
+    // along the way would paint the canvas with lines that mean nothing.
+    const finalGuides = [];
+    const vHit = guides.filter((g) => g.axis === 'v').pop();
+    const hHit = guides.filter((g) => g.axis === 'h').pop();
+    if (vHit && bestX < SNAP_IN) finalGuides.push(vHit);
+    if (hHit && bestY < SNAP_IN) finalGuides.push(hHit);
+    return { x, y, guides: finalGuides };
 }
 
 // ---------------------------------------------------------------------------
@@ -284,9 +398,36 @@ function tableToHtml(box) {
         }
         out += '</tr></thead>';
     }
-    const row = '<tr>' + cols.map((c) => '<td style="' + cellCss + '">' + (c.tag || '') + '</td>').join('') + '</tr>';
+    const cell = (v) => '<td style="' + cellCss + '">' + (v || '') + '</td>';
+    const loopRow = '<tr>' + cols.map((c) => cell(c.tag)).join('') + '</tr>';
     out += '<tbody>';
-    out += t.relationship ? '{#' + t.relationship + '}' + row + '{/' + t.relationship + '}' : row;
+    if (t.relationship) {
+        out += '{#' + t.relationship + '}' + loopRow + '{/' + t.relationship + '}';
+    } else if (!(t.rows || []).length) {
+        // No loop and no literal rows — keep one row so the table is not just a header.
+        out += loopRow;
+    }
+    for (const r of t.rows || []) {
+        out += '<tr>' + cols.map((c, i) => cell(esc(r[i] || ''))).join('') + '</tr>';
+    }
+    if (t.totals && t.totals.enabled) {
+        const tc = t.totals.cells || [];
+        out +=
+            '<tr>' +
+            cols
+                .map(
+                    (c, i) =>
+                        '<td style="' +
+                        cellCss +
+                        ' font-weight: bold; background: ' +
+                        t.headerFill +
+                        ';">' +
+                        (tc[i] || '') +
+                        '</td>'
+                )
+                .join('') +
+            '</tr>';
+    }
     out += '</tbody></table>';
     return out;
 }
@@ -495,6 +636,26 @@ function readTable(wrapper, tableEl) {
             width: th ? readCss(th.getAttribute('style'), 'width') || '' : ''
         });
     }
+    // Literal rows and the totals row are every <tr> after the loop row. The loop row
+    // is the one carrying merge tags emitted from the column definitions, so anything
+    // following it is author-entered content that has to survive a round-trip.
+    const bodyRows = [...tableEl.querySelectorAll('tbody tr')];
+    const loopIdx = t.relationship ? 0 : -1;
+    const extra = bodyRows.slice(loopIdx + 1);
+    t.rows = [];
+    t.totals = { enabled: false, cells: [] };
+    for (let r = 0; r < extra.length; r++) {
+        const cells = [...extra[r].querySelectorAll('td')].map((td) => (td.textContent || '').trim());
+        const isTotals =
+            r === extra.length - 1 &&
+            /font-weight:\s*bold/.test(extra[r].querySelector('td')?.getAttribute('style') || '');
+        if (isTotals) {
+            t.totals = { enabled: true, cells };
+        } else {
+            t.rows.push(cells);
+        }
+    }
+
     const firstCell = ths[0] || tds[0];
     if (firstCell) {
         const cs = firstCell.getAttribute('style') || '';

@@ -143,6 +143,57 @@
                             Header row (repeats on every page)
                         </label>
                     </div>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Header fill</label>
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selTableHeaderFill}
+                            data-key="headerFill"
+                            onchange={handleTableStyleChange}
+                        />
+                        <label class="dg-prop-label">
+                            <input
+                                type="checkbox"
+                                checked={selTableHeaderBold}
+                                data-key="headerBold"
+                                onchange={handleTableStyleChange}
+                            />
+                            Bold
+                        </label>
+                    </div>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Grid</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="0"
+                            max="6"
+                            step="0.25"
+                            value={selTableGridWidth}
+                            data-key="gridWidth"
+                            onchange={handleTableStyleChange}
+                        />
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selTableGridColor}
+                            data-key="gridColor"
+                            onchange={handleTableStyleChange}
+                        />
+                        <label class="dg-prop-label">Cell pad</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="0"
+                            max="24"
+                            step="1"
+                            value={selTableCellPadding}
+                            data-key="cellPadding"
+                            onchange={handleTableStyleChange}
+                        />
+                    </div>
+
                     <template for:each={selTableColumns} for:item="col">
                         <div key={col.idx} class="dg-col-row">
                             <div class="dg-col-num">{col.num}</div>
@@ -162,7 +213,7 @@
                                 data-idx={col.idx}
                                 data-key="tag"
                                 onchange={handleColumnChange}
-                                placeholder="{Field}"
+                                placeholder={tagPlaceholder}
                             />
                             <input
                                 type="text"
@@ -184,6 +235,53 @@
                         </div>
                     </template>
                     <button class="dg-panel-btn" onclick={handleAddColumn}>Add column</button>
+
+                    <h4 class="dg-panel-sub">Extra rows</h4>
+                    <p class="dg-panel-note">Literal rows, appended after the repeating ones. Separate cells with |</p>
+                    <template for:each={selTableRows} for:item="row">
+                        <div key={row.idx} class="dg-col-row">
+                            <div class="dg-col-num">{row.num}</div>
+                            <input
+                                type="text"
+                                class="dg-prop-text"
+                                value={row.text}
+                                data-idx={row.idx}
+                                onchange={handleRowChange}
+                                placeholder="Cell | Cell"
+                            />
+                            <button class="dg-sbtn" data-idx={row.idx} onclick={handleRemoveRow} title="Remove row">
+                                &times;
+                            </button>
+                        </div>
+                    </template>
+                    <button class="dg-panel-btn" onclick={handleAddRow}>Add row</button>
+
+                    <h4 class="dg-panel-sub">Totals row</h4>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">
+                            <input type="checkbox" checked={selTableTotals} onchange={handleTotalsToggle} />
+                            Show a totals row
+                        </label>
+                    </div>
+                    <template lwc:if={selTableTotals}>
+                        <p class="dg-panel-note">
+                            Suggested from each column's field and the relationship above. Lands once at the end, not on
+                            every page.
+                        </p>
+                        <template for:each={selTableTotalsCells} for:item="tc">
+                            <div key={tc.idx} class="dg-col-row">
+                                <div class="dg-col-num">{tc.idx}</div>
+                                <input
+                                    type="text"
+                                    class="dg-prop-text"
+                                    value={tc.value}
+                                    data-idx={tc.idx}
+                                    onchange={handleTotalsCellChange}
+                                    placeholder={totalsPlaceholder}
+                                />
+                            </div>
+                        </template>
+                    </template>
                 </template>
 
                 <button class="dg-panel-btn" onclick={handleModeToggle}>
@@ -230,6 +328,9 @@
                     <div key={board.id} class="dg-board-wrap">
                         <div class="dg-board-label">Page {board.index}</div>
                         <div class="dg-board" data-board-id={board.id} style={boardStyle} onclick={handleBoardClick}>
+                            <template for:each={renderedGuides} for:item="g">
+                                <div key={g.key} class="dg-guide" style={g.style}></div>
+                            </template>
                             <template for:each={board.boxes} for:item="box">
                                 <div
                                     key={box.id}
