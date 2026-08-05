@@ -2218,10 +2218,21 @@ async function main() {
         record('clearing the search restores the list', !!scale.restored, '');
         if (emptyState.count > 0) {
             await page.evaluate(
-                inPage(`
-      const item = __dgFind('.dg-designer-open-item');
-      item.click();
-      return true;`)
+                inPage(
+                    `
+      // Pick by NAME, not items[0]. The Designer list now also offers Canvas
+      // templates, which open the canvas editor instead of the flow designer — so
+      // whichever template happened to be most-recently-modified silently decided
+      // what this whole suite was testing.
+      const items = __dgFind('.dg-designer-open-item', true) || [];
+      const hint = ` +
+                        JSON.stringify(TEMPLATE_HINT) +
+                        `;
+      const match = items.find((i) => (i.textContent || '').indexOf(hint) !== -1) || items[0];
+      if (!match) return false;
+      match.click();
+      return true;`
+                )
             );
             await page.waitForTimeout(8000);
             const opened = await page.evaluate(

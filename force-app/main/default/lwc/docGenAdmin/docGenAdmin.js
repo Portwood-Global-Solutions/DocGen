@@ -2217,6 +2217,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get isAuthoringScratch() {
         return this.newAuthoringMode === 'scratch';
     }
+    get isAuthoringCanvas() {
+        return this.newAuthoringMode === 'canvas';
+    }
 
     get authoringCards() {
         const defs = [
@@ -2409,9 +2412,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (this.dataSourceMode === 'record' && !(this.newTemplateQuery || '').trim()) {
                 // Scratch builds get the RICH query — the author picks fields
                 // from the palette, so all usable fields must be available.
+                // Canvas gets the RICH query for the same reason Scratch does: the
+                // author picks fields from a palette rather than writing a query, so a
+                // six-field default leaves them with almost nothing to drop onto the
+                // artboard.
                 this.newTemplateQuery = await this._buildDefaultQueryConfig(
                     this.newTemplateObject,
-                    this.isAuthoringScratch
+                    this.isAuthoringScratch || this.isAuthoringCanvas
                 );
             }
             await this.createTemplate();
