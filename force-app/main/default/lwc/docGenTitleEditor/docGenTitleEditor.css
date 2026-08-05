@@ -2,7 +2,7 @@
    <button>, so it needs the browser's default button chrome removed. */
 .dg-title-example {
     cursor: pointer;
-    border: 1px solid #d8dde6;
+    border: var(--slds-g-sizing-border-1, 1px) solid #d8dde6;
     background: #f3f3f3;
     font-family: 'Courier New', Courier, monospace;
     font-size: 0.7rem;

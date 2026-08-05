@@ -1,7 +1,7 @@
 .full-html-source textarea {
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    font-size: 12px;
-    min-height: 320px;
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: var(--slds-g-font-scale-neg-1, 12px);
+    min-height: var(--slds-g-sizing-15, 320px);
     white-space: pre;
 }
 
@@ -10,10 +10,10 @@
     min-height: 640px;
     max-height: 760px;
     overflow: auto;
-    border: 1px solid #e5e5e5;
+    border: var(--slds-g-sizing-border-1, 1px) solid #e5e5e5;
     border-radius: 6px;
     background: #f4f4f4;
-    padding: 16px;
+    padding: var(--slds-g-spacing-4, 16px);
     box-sizing: border-box;
 }
 

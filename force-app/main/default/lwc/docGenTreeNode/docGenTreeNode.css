@@ -21,7 +21,7 @@
 .bare-button:focus-visible {
     outline: 2px solid #0176d3;
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: var(--slds-g-radius-border-1, 4px);
 }
 
 /* Same focus-visible treatment for native inputs that lost their
