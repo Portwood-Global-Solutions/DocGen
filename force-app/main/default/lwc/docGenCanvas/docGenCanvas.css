@@ -339,3 +339,39 @@ textarea.dg-cbox-text {
     pointer-events: none;
     z-index: 50;
 }
+
+/* A literal row edits as one labelled field per column — not a pipe-separated string. */
+.dg-row-block {
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    padding: 6px;
+    margin-bottom: 6px;
+}
+
+.dg-row-head {
+    margin-bottom: 4px;
+}
+
+.dg-row-del {
+    float: right;
+    min-width: 48px;
+    color: var(--slds-g-color-error-base-30, #991b1b);
+}
+
+.dg-cell-row {
+    margin: 3px 0;
+    white-space: nowrap;
+}
+
+.dg-cell-label {
+    display: inline-block;
+    width: 66px;
+    font-size: 0.68rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+.dg-cell-input {
+    width: 150px;
+}

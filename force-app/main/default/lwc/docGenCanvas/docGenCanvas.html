@@ -237,21 +237,33 @@
                     <button class="dg-panel-btn" onclick={handleAddColumn}>Add column</button>
 
                     <h4 class="dg-panel-sub">Extra rows</h4>
-                    <p class="dg-panel-note">Literal rows, appended after the repeating ones. Separate cells with |</p>
+                    <p class="dg-panel-note">Literal rows, appended after the repeating ones.</p>
                     <template for:each={selTableRows} for:item="row">
-                        <div key={row.idx} class="dg-col-row">
-                            <div class="dg-col-num">{row.num}</div>
-                            <input
-                                type="text"
-                                class="dg-prop-text"
-                                value={row.text}
-                                data-idx={row.idx}
-                                onchange={handleRowChange}
-                                placeholder="Cell | Cell"
-                            />
-                            <button class="dg-sbtn" data-idx={row.idx} onclick={handleRemoveRow} title="Remove row">
-                                &times;
-                            </button>
+                        <div key={row.idx} class="dg-row-block">
+                            <div class="dg-row-head">
+                                <span class="dg-col-num">Row {row.num}</span>
+                                <button
+                                    class="dg-sbtn dg-row-del"
+                                    data-idx={row.idx}
+                                    onclick={handleRemoveRow}
+                                    title="Delete this row"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                            <template for:each={row.cells} for:item="c">
+                                <div key={c.key} class="dg-cell-row">
+                                    <span class="dg-cell-label">{c.label}</span>
+                                    <input
+                                        type="text"
+                                        class="dg-prop-text dg-cell-input"
+                                        value={c.value}
+                                        data-idx={c.idx}
+                                        data-col={c.col}
+                                        onchange={handleRowChange}
+                                    />
+                                </div>
+                            </template>
                         </div>
                     </template>
                     <button class="dg-panel-btn" onclick={handleAddRow}>Add row</button>

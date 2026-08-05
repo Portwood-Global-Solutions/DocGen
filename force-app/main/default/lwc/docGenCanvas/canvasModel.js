@@ -378,7 +378,13 @@ function esc(v) {
 function tableToHtml(box) {
     const t = box.table || {};
     const cols = t.columns || [];
-    const cellCss = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
+    const st = { ...DEFAULT_STYLE, ...(box.style || {}) };
+    // Typography goes onto the CELLS, not left to inherit. Flying Saucer gives
+    // tables their own defaults, so a cell inheriting nothing renders at the
+    // engine's font no matter what the box says — and the canvas would stop
+    // matching the PDF, which is the one promise this editor makes.
+    const typo = ' font-family: ' + st.font + '; font-size: ' + st.size + 'pt; color: ' + st.color + ';';
+    const cellCss = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;' + typo;
     let out = '<table style="border-collapse: collapse; width: 100%; -fs-table-paginate: paginate;">';
     if (t.showHeader) {
         out += '<thead style="display: table-header-group;"><tr>';
@@ -399,7 +405,12 @@ function tableToHtml(box) {
         out += '</tr></thead>';
     }
     const cell = (v) => '<td style="' + cellCss + '">' + (v || '') + '</td>';
-    const loopRow = '<tr>' + cols.map((c) => cell(c.tag)).join('') + '</tr>';
+    // data-dg-row is why rows survive a round-trip. The first version INFERRED roles
+    // ("the last row is totals if its first cell is bold"); any cell the browser
+    // re-serialized differently broke the guess, so a totals row came back as a
+    // literal row AND a fresh totals row was appended on the next save. Rows
+    // multiplied every time the template was opened.
+    const loopRow = '<tr data-dg-row="loop">' + cols.map((c) => cell(c.tag)).join('') + '</tr>';
     out += '<tbody>';
     if (t.relationship) {
         out += '{#' + t.relationship + '}' + loopRow + '{/' + t.relationship + '}';
@@ -408,12 +419,12 @@ function tableToHtml(box) {
         out += loopRow;
     }
     for (const r of t.rows || []) {
-        out += '<tr>' + cols.map((c, i) => cell(esc(r[i] || ''))).join('') + '</tr>';
+        out += '<tr data-dg-row="extra">' + cols.map((c, i) => cell(esc(r[i] || ''))).join('') + '</tr>';
     }
     if (t.totals && t.totals.enabled) {
         const tc = t.totals.cells || [];
         out +=
-            '<tr>' +
+            '<tr data-dg-row="totals">' +
             cols
                 .map(
                     (c, i) =>
@@ -636,20 +647,18 @@ function readTable(wrapper, tableEl) {
             width: th ? readCss(th.getAttribute('style'), 'width') || '' : ''
         });
     }
-    // Literal rows and the totals row are every <tr> after the loop row. The loop row
-    // is the one carrying merge tags emitted from the column definitions, so anything
-    // following it is author-entered content that has to survive a round-trip.
-    const bodyRows = [...tableEl.querySelectorAll('tbody tr')];
-    const loopIdx = t.relationship ? 0 : -1;
-    const extra = bodyRows.slice(loopIdx + 1);
+    // Roles are READ from data-dg-row, never inferred. Rows without the marker come
+    // from a pre-marker document: treat them as literal rows, which is lossless —
+    // worst case the author re-ticks the totals box once.
     t.rows = [];
     t.totals = { enabled: false, cells: [] };
-    for (let r = 0; r < extra.length; r++) {
-        const cells = [...extra[r].querySelectorAll('td')].map((td) => (td.textContent || '').trim());
-        const isTotals =
-            r === extra.length - 1 &&
-            /font-weight:\s*bold/.test(extra[r].querySelector('td')?.getAttribute('style') || '');
-        if (isTotals) {
+    for (const tr of tableEl.querySelectorAll('tbody tr')) {
+        const role = tr.getAttribute('data-dg-row');
+        if (role === 'loop') {
+            continue;
+        }
+        const cells = [...tr.querySelectorAll('td')].map((td) => (td.textContent || '').trim());
+        if (role === 'totals') {
             t.totals = { enabled: true, cells };
         } else {
             t.rows.push(cells);

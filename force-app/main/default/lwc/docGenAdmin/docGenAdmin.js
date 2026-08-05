@@ -23,7 +23,7 @@ import {
     joinRegions,
     stripRegionMarkers,
     buildBlankCanvasBody
-} from './docGenAuthoringKit';
+} from 'c/docGenAuthoringKit';
 
 // Each predesigned starter carries its natural object — the wizard's starter
 // path never asks for one (Advanced options exposes the picker for overrides).

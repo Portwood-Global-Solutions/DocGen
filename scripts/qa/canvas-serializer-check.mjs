@@ -59,7 +59,10 @@ const checks = [
     // The engine un-escapes these itself (Word escapes the same characters), so a
     // conditional written with > still evaluates.
     ['conditional angle bracket is escaped, not dropped', html.includes('{#IF Amount &gt; 100000}')],
-    ['table loop wraps the row inside tbody', /<tbody>\{#Opportunities\}<tr>/.test(html)],
+    ['table loop wraps the row inside tbody', /<tbody>\{#Opportunities\}<tr data-dg-row="loop">/.test(html)],
+    // Roles are explicit so a round-trip cannot mistake one row for another and
+    // duplicate it — the bug that made rows multiply on every open.
+    ['every body row declares its role', !/<tbody>[\s\S]*?<tr(?![^>]*data-dg-row)/.test(html)],
     ['table loop closes right after the row', /<\/tr>\{\/Opportunities\}/.test(html)],
     ['table head repeats on continuation pages', html.includes('display: table-header-group')],
     ['table paginates', html.includes('-fs-table-paginate: paginate')],

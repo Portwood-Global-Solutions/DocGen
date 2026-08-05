@@ -1,6 +1,8 @@
 import { LightningElement, api, track } from 'lwc';
 import getHtmlTemplateBody from '@salesforce/apex/DocGenController.getHtmlTemplateBody';
 import saveHtmlTemplateBody from '@salesforce/apex/DocGenController.saveHtmlTemplateBody';
+import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
+import { extractQueryShape } from 'c/docGenAuthoringKit';
 import {
     blankDocument,
     newTextBox,
