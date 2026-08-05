@@ -47,6 +47,28 @@ what it would take.
 New `DocGenCurrency` class holds all of it so the in-memory and giant-query
 paths can't drift apart.
 
+### Added — Runner: configurable default output destination
+
+New App Builder property **Default Output Destination** (Save & Download /
+Download / Save to Record) on every Runner placement. The chosen destination is
+pre-selected _and_ renders as the leftmost pill, so the default is always the one
+under the user's cursor.
+
+Ships defaulting to **Save & Download** on internal placements — it is the only
+destination that leaves the user with both a copy in hand and an attachment on the
+record, so it can't lose work the way picking one of the halves can. Community
+placements default to Download, matching the existing community posture.
+
+Promotion only, never inclusion: a destination an admin turned off can't be
+defaulted back in. Falls back cleanly wherever the configured default isn't
+available — mobile stays save-only, Combine PDFs and Document Packet stay
+download-only.
+
+Also fixes a hint that was scoped too narrowly — the "files under 5 MB save
+automatically" size warning fired only for Save to Record, but Save & Download
+attaches to the record too and hits the same Aura ceiling. Now shown for both,
+which matters more with Save & Download as the shipped default.
+
 ### Fixed — SLDS linter errors
 
 `npx @salesforce-ux/slds-linter lint force-app` reported 934 violations

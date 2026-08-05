@@ -118,6 +118,7 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     @api showDownloadOption;
     @api showSaveToRecordOption;
     @api showSaveAndDownloadOption;
+    @api defaultOutputDestination;
     @api showDocumentPacketOption;
     @api showCombinePdfsOption;
     @api showCombineWithExistingPdfsOption;
@@ -136,7 +137,10 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     // direction (PDF→DOCX gave Word "file is corrupt" errors; DOCX→PDF blew
     // sync heap on real templates) and is no longer worth the maintenance
     // burden against a clean one-template-one-format model.
-    @track outputMode = 'download';
+    // null = the user hasn't picked yet, so the admin's configured default applies.
+    // Set to a concrete mode by handleOutputModeChange and by the giant-query router.
+    // Always read through resolvedOutputMode, never directly.
+    @track outputMode = null;
     @track isLoading = false;
     @track error = '';
     @track loadingMessage = '';
@@ -183,6 +187,23 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
     }
     get canSaveAndDownload() {
         return this._isEnabled(this.showSaveAndDownloadOption);
+    }
+
+    /**
+     * The admin's "Default Output Destination" pick, normalized to an internal mode.
+     * Drives BOTH which pill is pre-selected and which renders first, so the default
+     * is always the leftmost one. Unrecognized/blank falls back to 'both'; if that
+     * destination isn't available the normal allowed-mode order takes over.
+     */
+    get configuredDefaultMode() {
+        const raw = (this.defaultOutputDestination || '').trim().toLowerCase();
+        if (raw === 'download') {
+            return 'download';
+        }
+        if (raw === 'save to record' || raw === 'save') {
+            return 'save';
+        }
+        return 'both';
     }
     get canUseDocumentPacket() {
         return this._isEnabled(this.showDocumentPacketOption);
@@ -310,38 +331,37 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         if (this.canDownload && this.canSaveToRecord && this.canSaveAndDownload) {
             modes.push('both');
         }
+        // The admin's configured default leads — this list is both the rendered
+        // order and the fallback order, so promoting it here puts the default pill
+        // on the left AND makes it the pre-selection. Promotion only, never
+        // inclusion: a destination the admin turned off can't be defaulted into.
+        const preferred = this.configuredDefaultMode;
+        const preferredIdx = modes.indexOf(preferred);
+        if (preferredIdx > 0) {
+            modes.splice(preferredIdx, 1);
+            modes.unshift(preferred);
+        }
         return modes;
     }
 
     get modernOutputOptions() {
         const allowedModes = this.allowedOutputModes;
         const resolvedMode = allowedModes.includes(this.outputMode) ? this.outputMode : allowedModes[0];
-        const options = [];
-        if (allowedModes.includes('download')) {
-            options.push({
-                label: LBL_DOWNLOAD,
-                value: 'download',
-                icon: '⬇️',
-                class: resolvedMode === 'download' ? 'pill-btn active' : 'pill-btn'
-            });
-        }
-        if (allowedModes.includes('save')) {
-            options.push({
-                label: LBL_SAVE_TO_RECORD,
-                value: 'save',
-                icon: '☁️',
-                class: resolvedMode === 'save' ? 'pill-btn active' : 'pill-btn'
-            });
-        }
-        if (allowedModes.includes('both')) {
-            options.push({
-                label: LBL_SAVE_AND_DOWNLOAD,
-                value: 'both',
-                icon: '⬇️☁️',
-                class: resolvedMode === 'both' ? 'pill-btn active' : 'pill-btn'
-            });
-        }
-        return options;
+        // Rendered left-to-right in allowedOutputModes order, which already puts the
+        // admin's configured default first.
+        const byMode = {
+            download: { label: LBL_DOWNLOAD, icon: '⬇️' },
+            save: { label: LBL_SAVE_TO_RECORD, icon: '☁️' },
+            both: { label: LBL_SAVE_AND_DOWNLOAD, icon: '⬇️☁️' }
+        };
+        return allowedModes
+            .filter((mode) => byMode[mode])
+            .map((mode) => ({
+                label: byMode[mode].label,
+                value: mode,
+                icon: byMode[mode].icon,
+                class: resolvedMode === mode ? 'pill-btn active' : 'pill-btn'
+            }));
     }
 
     get showOutputDestinationSelector() {
@@ -362,13 +382,10 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         if (allowedModes.includes(this.outputMode)) {
             return this.outputMode;
         }
-        if (allowedModes.includes('download')) {
-            return 'download';
-        }
-        if (allowedModes.includes('save')) {
-            return 'save';
-        }
-        return 'download';
+        // allowedOutputModes is already ordered with the admin's configured default
+        // first, so taking [0] keeps the resolved mode and the active pill in sync
+        // by construction rather than by two lists agreeing.
+        return allowedModes[0] || 'download';
     }
 
     /**
@@ -1464,7 +1481,9 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
      * inline on the server, so there's no Aura ceiling to warn about.
      */
     get showSaveToRecordSizeHint() {
-        if (this.resolvedOutputMode !== 'save') return false;
+        // wantsSaveToRecord, not `=== 'save'` — Save & Download attaches to the record
+        // too, so it hits the same Aura ceiling. Matters more now that it's the default.
+        if (!this.wantsSaveToRecord) return false;
         return this.effectiveOutputFormat !== 'PDF';
     }
 
