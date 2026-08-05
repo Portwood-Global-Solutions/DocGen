@@ -112,6 +112,31 @@ const PIERCE = `
  */
 const inPage = (body) => `(() => {${PIERCE}\n return (() => {${body}})(); })()`;
 
+/**
+ * Opens the Tags rail and waits until chips are actually on screen.
+ *
+ * A single click-then-wait was flaky: handlePanelToggle toggles, the rail can already
+ * be open or closed depending on what the previous block did, and one fixed 700ms wait
+ * sometimes lost the race. That produced runs reporting "no chip available to insert" —
+ * a precondition failure wearing the costume of a real regression, which is the fastest
+ * way to teach someone to ignore this suite. Poll instead: only click when the chips
+ * are absent, then give the render a chance, up to `tries` times.
+ */
+async function ensureTagRail(page, inPageFn, tries = 6) {
+    for (let i = 0; i < tries; i++) {
+        const seen = await page.evaluate(
+            inPageFn(
+                `return { chips: !!__dgFind('.dg-tag-chip[data-snippet]'), btn: !!__dgFind('[data-panel="tags"]') };`
+            )
+        );
+        if (seen.chips) return true;
+        if (!seen.btn) return false;
+        await page.evaluate(inPageFn(`const b = __dgFind('[data-panel="tags"]'); if (b) b.click(); return true;`));
+        await page.waitForTimeout(600);
+    }
+    return await page.evaluate(inPageFn(`return !!__dgFind('.dg-tag-chip[data-snippet]');`));
+}
+
 async function main() {
     console.log(`\nDesigner UI smoke — org: ${ORG}\n`);
     const url = frontDoorUrl(ORG);
@@ -2272,8 +2297,7 @@ async function main() {
             let drag = {};
             try {
                 drag.seeded = await page.evaluate(seedCanvas);
-                drag.panel = await page.evaluate(openTagPanel);
-                await page.waitForTimeout(900);
+                drag.panel = await ensureTagRail(page, inPage);
                 const geo = await page.evaluate(geometry);
                 if (!geo) {
                     record(
@@ -2334,8 +2358,7 @@ async function main() {
             // arming the drag must not swallow the click.
             try {
                 await page.evaluate(seedCanvas);
-                await page.evaluate(openTagPanel);
-                await page.waitForTimeout(900);
+                await ensureTagRail(page, inPage);
                 const geo2 = await page.evaluate(geometry);
                 if (!geo2) {
                     // Never let this fall through silently — a check that quietly does
@@ -2351,6 +2374,107 @@ async function main() {
                 }
             } catch (e) {
                 record('chip click (no drag) still inserts', false, e.message);
+            }
+        }
+
+        // --- 4c. Where the caret lands after an insert ---------------------------
+        // Range.insertNode leaves the range BEFORE the content it inserted, so without
+        // an explicit park the caret sits to the LEFT of a freshly inserted merge tag
+        // and the next keystroke types in front of it. Typing is the only honest test:
+        // reading the range says where the caret claims to be, not where text goes.
+        {
+            const seedOne = inPage(`
+      const pv = __dgFind('.dg-pv');
+      if (!pv) return false;
+      const keep = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (keep) pv.appendChild(keep);
+      const p = document.createElement('p');
+      p.textContent = 'HEAD ';
+      pv.appendChild(p);
+      const r = document.createRange();
+      r.selectNodeContents(p); r.collapse(false);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      pv.focus();
+      document.dispatchEvent(new Event('selectionchange'));
+      return true;`);
+
+            const openTags = inPage(`
+      if (__dgFind('.dg-tag-chip[data-snippet]')) return 'already-open';
+      const btn = __dgFind('[data-panel="tags"]');
+      if (!btn) return false;
+      btn.click();
+      return true;`);
+
+            const clickFirstChip = inPage(`
+      const chip = __dgFind('.dg-tag-chip[data-snippet]');
+      if (!chip) return null;
+      const snip = chip.getAttribute('data-snippet');
+      chip.click();
+      return snip;`);
+
+            try {
+                await page.evaluate(seedOne);
+                await ensureTagRail(page, inPage);
+                const snip = await page.evaluate(clickFirstChip);
+                if (!snip) {
+                    record('insert: caret lands after the tag', false, 'no chip available to insert');
+                } else {
+                    await page.waitForTimeout(900);
+                    await page.keyboard.type('XYZ');
+                    await page.waitForTimeout(500);
+                    const text = await page.evaluate(
+                        inPage(`const pv = __dgFind('.dg-pv'); return pv ? pv.textContent : '';`)
+                    );
+                    // The typed marker must appear AFTER the tag text, not before it.
+                    const tagAt = text.indexOf(snip.replace(/[{}]/g, ''));
+                    const typedAt = text.indexOf('XYZ');
+                    record(
+                        'insert: caret lands after the tag, not before it',
+                        tagAt !== -1 && typedAt !== -1 && typedAt > tagAt,
+                        JSON.stringify({ tagAt, typedAt, text: text.slice(0, 80) })
+                    );
+                }
+            } catch (e) {
+                record('insert: caret lands after the tag, not before it', false, e.message);
+            }
+
+            // Two inserts in a row must read left-to-right. A stale remembered caret
+            // sends the second insert back to where the first started, which silently
+            // reverses their order.
+            try {
+                await page.evaluate(seedOne);
+                await ensureTagRail(page, inPage);
+                const order = await page.evaluate(
+                    inPage(`
+      const chips = __dgFind('.dg-tag-chip[data-snippet]', true);
+      if (!chips || chips.length < 2) return null;
+      return [chips[0].getAttribute('data-snippet'), chips[1].getAttribute('data-snippet')];`)
+                );
+                if (!order) {
+                    record('insert: two inserts keep their order', false, 'need two distinct chips');
+                } else {
+                    await page.evaluate(
+                        inPage(`const c = __dgFind('.dg-tag-chip[data-snippet]', true); c[0].click(); return true;`)
+                    );
+                    await page.waitForTimeout(900);
+                    await page.evaluate(
+                        inPage(`const c = __dgFind('.dg-tag-chip[data-snippet]', true); c[1].click(); return true;`)
+                    );
+                    await page.waitForTimeout(900);
+                    const text2 = await page.evaluate(
+                        inPage(`const pv = __dgFind('.dg-pv'); return pv ? pv.textContent : '';`)
+                    );
+                    const a = text2.indexOf(order[0].replace(/[{}]/g, ''));
+                    const b = text2.indexOf(order[1].replace(/[{}]/g, ''));
+                    record(
+                        'insert: two inserts keep their order',
+                        a !== -1 && b !== -1 && b > a,
+                        JSON.stringify({ first: order[0], second: order[1], a, b })
+                    );
+                }
+            } catch (e) {
+                record('insert: two inserts keep their order', false, e.message);
             }
         }
 

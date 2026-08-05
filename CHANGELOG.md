@@ -69,6 +69,21 @@ automatically" size warning fired only for Save to Record, but Save & Download
 attaches to the record too and hits the same Aura ceiling. Now shown for both,
 which matters more with Save & Download as the shipped default.
 
+### Fixed — Designer: the caret landed to the LEFT of an inserted merge tag
+
+Insert a merge tag and the caret sat before it, so the next thing typed went in
+front of the tag instead of after it. `Range.insertNode` leaves the range positioned
+before the content it inserted — that is what the DOM spec says it does — and
+nothing moved the caret past it afterwards.
+
+The same bug also silently reversed consecutive inserts: because inserts prefer the
+REMEMBERED caret over the live selection, a second tag went back to where the first
+one started, so clicking Name then Industry produced Industry then Name.
+
+Both routes through the insert path (caret insert and end-of-document append) now
+park the caret after the inserted content and refresh the remembered caret with it,
+the same way the type-to-pill and pill-edit paths already did.
+
 ### Added — Designer: a landing box shows where a dragged tag will go
 
 Dragging a merge tag onto the page showed a thin purple caret. A caret answers

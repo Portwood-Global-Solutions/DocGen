@@ -13846,6 +13846,43 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * is one (chips keep it alive via mousedown-preventDefault), otherwise
      * appended at the end of whichever surface owns it.
      */
+    /**
+     * Parks the caret immediately AFTER a just-inserted node.
+     *
+     * Range.insertNode leaves the range positioned before the content it inserted, so
+     * without this the caret sits to the left of a freshly inserted merge tag and the
+     * next keystroke types in front of it. Same job the type-to-pill and pill-edit
+     * paths already do for themselves — a merge-tag pill is contenteditable=false, so
+     * "next to it" is the only sane resting place.
+     *
+     * Also refreshes the REMEMBERED caret (#240 made inserts prefer `_caret` over the
+     * live selection). Leaving it on the pre-insert position would send the next insert
+     * back to where this one started, stacking tags in reverse order.
+     */
+    _parkCaretAfter(node, pv) {
+        if (!node || !node.parentNode) {
+            return;
+        }
+        try {
+            const doc = (pv && pv.ownerDocument) || document;
+            const r = doc.createRange();
+            r.setStartAfter(node);
+            r.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(r);
+            if (pv && pv.focus) {
+                pv.focus();
+            }
+            this._lastCanvasRange = r.cloneRange();
+            // Recompute from the selection just set so _caret's block/cell context and
+            // the active-block highlight follow the caret instead of going stale.
+            this._recordCaret(r.startContainer, pv);
+        } catch (e) {
+            /* caret parking is best-effort — the insert itself already succeeded */
+        }
+    }
+
     _insertIntoVisualPage(markup) {
         const pv = this._insertTargetSurface();
         if (!pv) {
@@ -13861,6 +13898,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._pillifyTags(tpl.content);
         // Capture BEFORE insertion — insertNode empties the fragment.
         const firstEl = tpl.content.firstElementChild;
+        // Same reason, but for the caret: after Range.insertNode the range still starts
+        // BEFORE the inserted content (that is what the DOM spec says it does), so the
+        // caret ends up to the LEFT of the tag that was just inserted and the next
+        // keystroke types in front of it. Remember the last node so the caret can be
+        // parked after it once the fragment has been spliced in.
+        const lastNode = tpl.content.lastChild;
         let inserted = false;
         // #240 — prefer the REMEMBERED caret over the live selection. Clicking a chip in
         // the rail moves focus out of the canvas, so by the time this runs the live
@@ -13901,6 +13944,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!inserted) {
             pv.appendChild(tpl.content);
         }
+        // Both routes land here: type-after-the-tag is what an author expects whether
+        // the insert went to the caret or was appended.
+        this._parkCaretAfter(lastNode, pv);
         // Report what ACTUALLY happened — the old toast said "added at the end"
         // unconditionally, which misreported every successful caret insert.
         this._lastInsertWasAppended = !inserted;
