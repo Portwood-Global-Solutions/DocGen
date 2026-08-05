@@ -2508,6 +2508,62 @@ async function main() {
             }
         }
 
+        // --- 4d. "/" must reach the canvas, not Lightning's global search ---------
+        // Lightning binds "/" as a global search hotkey on window capture. This broke
+        // once and nobody noticed, because the recovery that was supposed to catch it
+        // keyed off event.relatedTarget — which is null on focusout across trees, so
+        // the condition was false every single time and the whole mechanism was dead
+        // code. A silently-disabled workaround is exactly what a regression guard is
+        // for, so this asserts the OBSERVABLE outcome: the slash lands in the document
+        // and focus stays put.
+        {
+            try {
+                const seeded = await page.evaluate(
+                    inPage(`
+      const pv = __dgFind('.dg-pv');
+      if (!pv) return false;
+      const keep = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (keep) pv.appendChild(keep);
+      const p = document.createElement('p');
+      p.textContent = 'SLASHTEST ';
+      pv.appendChild(p);
+      pv.focus();
+      const r = document.createRange();
+      r.selectNodeContents(p); r.collapse(false);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return true;`)
+                );
+                if (!seeded) {
+                    record('"/" reaches the canvas instead of global search', false, 'could not seed the canvas');
+                } else {
+                    await page.waitForTimeout(500);
+                    await page.keyboard.press('/');
+                    // Generous: the recovery path is asynchronous by design.
+                    await page.waitForTimeout(1800);
+                    const after = await page.evaluate(
+                        inPage(`
+      const pv = __dgFind('.dg-pv');
+      const ae = document.activeElement;
+      const cls = String((ae && ae.className) || '');
+      return {
+        text: pv ? (pv.textContent || '') : '',
+        focusInSearch: cls.indexOf('saInput') !== -1 || cls.indexOf('slds-lookup__search-input') !== -1
+      };`)
+                    );
+                    record(
+                        '"/" reaches the canvas instead of global search',
+                        after.text.indexOf('/') !== -1,
+                        JSON.stringify({ text: after.text.slice(0, 40), focusInSearch: after.focusInSearch })
+                    );
+                    record('"/" does not leave focus in global search', !after.focusInSearch);
+                }
+            } catch (e) {
+                record('"/" reaches the canvas instead of global search', false, e.message);
+            }
+        }
+
         // --- 5. No console errors while driving the UI ---------------------------
         record(
             'no console errors during interaction',

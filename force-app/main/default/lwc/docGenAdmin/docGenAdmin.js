@@ -1496,6 +1496,36 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * "/" hotkey fired while the user was typing in the visual canvas, then
      * insert the "/" they typed. See the key-trap comment in renderedCallback.
      */
+    /**
+     * True when Lightning's global search input currently holds focus.
+     *
+     * Matched several ways on purpose: the class name has changed across releases, and
+     * a detector that silently stops matching turns this whole recovery back off
+     * without anything failing loudly — which is how it came to be broken in the first
+     * place.
+     */
+    _isGlobalSearchFocused() {
+        try {
+            const ae = document.activeElement;
+            if (!ae) {
+                return false;
+            }
+            const cls = String(ae.className || '');
+            if (cls.indexOf('saInput') !== -1 || cls.indexOf('slds-lookup__search-input') !== -1) {
+                return true;
+            }
+            if (
+                ae.closest &&
+                ae.closest('.forceSearchAssistantInput, .slds-global-header__item_search, one-global-search')
+            ) {
+                return true;
+            }
+            return (ae.getAttribute && ae.getAttribute('placeholder') === 'Search...') || false;
+        } catch (e) {
+            return false;
+        }
+    }
+
     _recoverStolenSlash() {
         // The search dialog keeps re-grabbing focus asynchronously while it
         // opens, so a single focus() call loses the race — retry until the
@@ -1811,6 +1841,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             if (e.key && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter')) {
                                 this._lastCanvasKeyTs = Date.now();
                             }
+                            // Tracked so the focusout recovery can tell "Lightning stole
+                            // this" from "the user tabbed out on purpose".
+                            this._lastCanvasKey = e.key;
                             e.stopPropagation();
                         });
                         // Lightning's "/" global-search hotkey preempts us
@@ -1823,17 +1856,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // was mid-typing with no mouse involved. On that
                         // signature, steal focus back, restore the caret, and
                         // type the "/" the user actually pressed.
-                        pv.addEventListener('focusout', (e) => {
+                        pv.addEventListener('focusout', () => {
                             this._canvasFocused = false;
                             this._canvasBlurTs = Date.now();
-                            const rt = e.relatedTarget;
-                            const toSearchBox = rt && String(rt.className || '').indexOf('saInput') !== -1;
-                            const typedRecently = this._lastCanvasKeyTs && Date.now() - this._lastCanvasKeyTs < 1500;
+                            // Do NOT gate on "typed recently".
+                            //
+                            // The original condition required a keystroke within 1500ms,
+                            // but the stolen key never reaches this component — Lightning
+                            // consumes it at window capture — so it does not update
+                            // _lastCanvasKeyTs. Press "/" as the FIRST key after clicking
+                            // into the canvas and the timestamp is still unset, the guard
+                            // reads false, and the recovery never runs. That is the common
+                            // path, not an edge case.
+                            //
+                            // Losing focus straight from the canvas to global search with
+                            // no mouse involved is already the signature; the mouse check
+                            // is what separates theft from someone deliberately clicking
+                            // into search, and Tab is excluded because that is a legitimate
+                            // way to leave the canvas by keyboard.
                             const mousedRecently = this._lastDocMouseTs && Date.now() - this._lastDocMouseTs < 150;
-                            if (toSearchBox && typedRecently && !mousedRecently) {
-                                // eslint-disable-next-line @lwc/lwc/no-async-operation
-                                setTimeout(() => this._recoverStolenSlash(), 120);
+                            const leftByTab = this._lastCanvasKey === 'Tab';
+                            if (mousedRecently || leftByTab) {
+                                return;
                             }
+                            // Ask document.activeElement, NOT event.relatedTarget.
+                            //
+                            // relatedTarget is null on focusout whenever focus lands in a
+                            // different tree — which is precisely this case, since global
+                            // search lives outside our shadow root. So the old
+                            // `rt.className.indexOf('saInput')` test was false EVERY time
+                            // and the recovery below never once ran. The search input is in
+                            // the document's light DOM, so activeElement resolves to it
+                            // properly; it just has to be read after the focus settles.
+                            // eslint-disable-next-line @lwc/lwc/no-async-operation
+                            setTimeout(() => {
+                                if (this._isGlobalSearchFocused()) {
+                                    this._recoverStolenSlash();
+                                }
+                            }, 60);
                         });
                         // Distinguishes hotkey focus-theft from a deliberate
                         // click into global search (document listeners DO fire
@@ -1844,6 +1904,37 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             };
                             document.addEventListener('mousedown', this._onDocMouseDown, true);
                             this._docMouseListenerAdded = true;
+                        }
+                        // PREVENT the theft where we can, rather than only recovering.
+                        //
+                        // Document-capture listeners DO reach component code (the mousedown
+                        // above proves it); it is window-capture that LWS withholds. So this
+                        // wins outright whenever Lightning's hotkey is bound at document
+                        // level or registered after ours, and costs nothing when it is not —
+                        // the focusout recovery still catches that case. Scoped hard: only a
+                        // bare "/" with no modifiers, and only while the canvas actually has
+                        // focus, so it can never swallow a slash the user typed elsewhere.
+                        if (!this._docKeyListenerAdded) {
+                            this._onDocKeyDown = (e) => {
+                                if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) {
+                                    return;
+                                }
+                                if (!this._canvasFocused) {
+                                    return;
+                                }
+                                e.preventDefault();
+                                e.stopImmediatePropagation();
+                                try {
+                                    document.execCommand('insertText', false, '/');
+                                    this.htmlEditorDirty = true;
+                                    this._maybePillifyTyped();
+                                    this._maybeOpenSlashMenu();
+                                } catch (err) {
+                                    /* if the insert fails the recovery path still applies */
+                                }
+                            };
+                            document.addEventListener('keydown', this._onDocKeyDown, true);
+                            this._docKeyListenerAdded = true;
                         }
                         // Land ready-to-type: focus the page with the caret at
                         // the first text block so the cursor is never a hunt.
