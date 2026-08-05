@@ -10,6 +10,10 @@
                 <lightning-icon icon-name="utility:text" size="small"></lightning-icon>
                 <span class="dg-rail-label">Text</span>
             </button>
+            <button class={toolTableClass} data-tool="table" onclick={handleToolSelect} title="Add a table">
+                <lightning-icon icon-name="utility:table" size="small"></lightning-icon>
+                <span class="dg-rail-label">Table</span>
+            </button>
             <button class="dg-tool" onclick={handleAddArtboard} title="Add a page">
                 <lightning-icon icon-name="utility:page" size="small"></lightning-icon>
                 <span class="dg-rail-label">Page</span>
@@ -117,6 +121,71 @@
                     />
                 </div>
 
+                <template lwc:if={selectedIsTable}>
+                    <h4 class="dg-panel-sub">Table</h4>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Repeat per</label>
+                        <input
+                            type="text"
+                            class="dg-prop-text"
+                            value={selTableRel}
+                            placeholder="e.g. Opportunities"
+                            onchange={handleTableRelChange}
+                        />
+                    </div>
+                    <p class="dg-panel-note">
+                        The child relationship from your Query Config. Set it and one row is emitted per record, growing
+                        across pages. Leave it blank for a fixed table.
+                    </p>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">
+                            <input type="checkbox" checked={selTableHeader} onchange={handleTableHeaderToggle} />
+                            Header row (repeats on every page)
+                        </label>
+                    </div>
+                    <template for:each={selTableColumns} for:item="col">
+                        <div key={col.idx} class="dg-col-row">
+                            <div class="dg-col-num">{col.num}</div>
+                            <input
+                                type="text"
+                                class="dg-prop-text dg-col-label"
+                                value={col.label}
+                                data-idx={col.idx}
+                                data-key="label"
+                                onchange={handleColumnChange}
+                                placeholder="Heading"
+                            />
+                            <input
+                                type="text"
+                                class="dg-prop-text dg-col-tag"
+                                value={col.tag}
+                                data-idx={col.idx}
+                                data-key="tag"
+                                onchange={handleColumnChange}
+                                placeholder="{Field}"
+                            />
+                            <input
+                                type="text"
+                                class="dg-prop-text dg-col-w"
+                                value={col.width}
+                                data-idx={col.idx}
+                                data-key="width"
+                                onchange={handleColumnChange}
+                                placeholder="auto"
+                            />
+                            <button
+                                class="dg-sbtn"
+                                data-idx={col.idx}
+                                onclick={handleRemoveColumn}
+                                title="Remove column"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                    </template>
+                    <button class="dg-panel-btn" onclick={handleAddColumn}>Add column</button>
+                </template>
+
                 <button class="dg-panel-btn" onclick={handleModeToggle}>
                     <template lwc:if={selectedIsFlow}>Make it pinned</template>
                     <template lwc:else>Let it flow across pages</template>
@@ -171,7 +240,7 @@
                                 >
                                     <div
                                         class="dg-cbox-body"
-                                        contenteditable="true"
+                                        contenteditable={box.editable}
                                         data-id={box.id}
                                         oninput={handleBoxInput}
                                         lwc:dom="manual"

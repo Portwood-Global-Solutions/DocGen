@@ -267,3 +267,48 @@
     display: inline-block;
     width: 10px;
 }
+
+/* Table column editor */
+.dg-panel-sub {
+    font-size: 0.82rem;
+    font-weight: var(--slds-g-font-weight-7, 700);
+    margin: 12px 0 4px 0;
+}
+
+.dg-prop-text {
+    padding: 3px 5px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    font-size: 0.75rem;
+    width: 140px;
+}
+
+.dg-col-row {
+    margin-bottom: 4px;
+    white-space: nowrap;
+}
+
+.dg-col-num {
+    display: inline-block;
+    width: 14px;
+    font-size: 0.68rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-col-label {
+    width: 68px;
+}
+
+.dg-col-tag {
+    width: 78px;
+}
+
+.dg-col-w {
+    width: 40px;
+}
+
+/* Table cells inside a canvas box must not inherit the box's text padding twice. */
+.dg-cbox-body table {
+    width: 100%;
+    border-collapse: collapse;
+}

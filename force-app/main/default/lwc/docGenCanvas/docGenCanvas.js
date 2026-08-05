@@ -12,7 +12,9 @@ import {
     inToPx,
     pxToIn,
     FONT_CHOICES,
-    DEFAULT_STYLE
+    DEFAULT_STYLE,
+    newTableBox,
+    tablePreviewHtml
 } from './canvasModel';
 
 /**
@@ -89,6 +91,10 @@ export default class DocGenCanvas extends LightningElement {
                     this.screenStyle(b),
                 cls: b.id === this.selectedId ? 'dg-cbox dg-cbox_selected' : 'dg-cbox',
                 isSelected: b.id === this.selectedId,
+                // Tables are edited through the panel, not by typing into cells — the
+                // cells hold merge tags, and free-typing into them would desynchronise
+                // the column model from what actually serializes.
+                editable: b.kind !== 'table',
                 readout: b.x.toFixed(2) + 'in, ' + b.y.toFixed(2) + 'in · ' + b.w.toFixed(2) + 'in',
                 modeLabel: b.mode === 'flow' ? 'Flows' : 'Pinned'
             }))
@@ -120,6 +126,66 @@ export default class DocGenCanvas extends LightningElement {
         if (st.fill) css += 'background:' + st.fill + ';';
         if (st.borderWidth > 0) css += 'border:' + (st.borderWidth * z).toFixed(2) + 'pt solid ' + st.borderColor + ';';
         return css;
+    }
+
+    get toolTableClass() {
+        return this.activeTool === 'table' ? 'dg-tool dg-tool_active' : 'dg-tool';
+    }
+
+    get selectedIsTable() {
+        const b = this.selectedBox;
+        return !!b && b.kind === 'table';
+    }
+
+    get selTableRel() {
+        return ((this.selectedBox || {}).table || {}).relationship || '';
+    }
+
+    get selTableHeader() {
+        return !!((this.selectedBox || {}).table || {}).showHeader;
+    }
+
+    get selTableColumns() {
+        const t = (this.selectedBox || {}).table || {};
+        return (t.columns || []).map((c, i) => ({ ...c, idx: i, num: i + 1 }));
+    }
+
+    _patchTable(patch) {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        this.applyToBox(box.id, { table: { ...box.table, ...patch } });
+    }
+
+    handleTableRelChange(event) {
+        this._patchTable({ relationship: (event.target.value || '').trim() });
+    }
+
+    handleTableHeaderToggle(event) {
+        this._patchTable({ showHeader: event.target.checked });
+    }
+
+    handleColumnChange(event) {
+        const idx = parseInt(event.currentTarget.dataset.idx, 10);
+        const key = event.currentTarget.dataset.key;
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        const columns = box.table.columns.map((c, i) => (i === idx ? { ...c, [key]: event.target.value } : c));
+        this._patchTable({ columns });
+    }
+
+    handleAddColumn() {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        this._patchTable({
+            columns: [...box.table.columns, { label: 'Column ' + (box.table.columns.length + 1), tag: '', width: '' }]
+        });
+    }
+
+    handleRemoveColumn(event) {
+        const idx = parseInt(event.currentTarget.dataset.idx, 10);
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table' || box.table.columns.length <= 1) return;
+        this._patchTable({ columns: box.table.columns.filter((c, i) => i !== idx) });
     }
 
     get fontOptions() {
@@ -280,9 +346,12 @@ export default class DocGenCanvas extends LightningElement {
             const model = byId.get(el.dataset.id);
             if (!model) continue;
             const isFocused = this.template.activeElement === el;
-            if (!isFocused && el.innerHTML !== model.html) {
+            // A table box renders from the SAME code that serializes it, so the
+            // artboard cannot drift from the PDF. Only text boxes are editable in place.
+            const want = model.kind === 'table' ? tablePreviewHtml(model) : model.html;
+            if (!isFocused && el.innerHTML !== want) {
                 // eslint-disable-next-line @lwc/lwc/no-inner-html
-                el.innerHTML = model.html;
+                el.innerHTML = want;
             }
         }
     }
@@ -293,7 +362,7 @@ export default class DocGenCanvas extends LightningElement {
 
     /** Click the artboard with the Text tool armed to place a box where you clicked. */
     handleBoardClick(event) {
-        if (this.activeTool !== 'text') {
+        if (this.activeTool !== 'text' && this.activeTool !== 'table') {
             if (event.target.classList.contains('dg-board')) {
                 this.selectedId = null;
             }
@@ -306,12 +375,17 @@ export default class DocGenCanvas extends LightningElement {
         const boardId = board.dataset.boardId;
         const target = this.doc.artboards.find((b) => b.id === boardId);
         if (!target) return;
-        const box = clampBox(newTextBox(x, y, 2.5, 0.4), this.geo);
+        const box = clampBox(
+            this.activeTool === 'table'
+                ? newTableBox(x, y, Math.min(6.5, this.geo.w - x - 0.2))
+                : newTextBox(x, y, 2.5, 0.4),
+            this.geo
+        );
         target.boxes = [...target.boxes, box];
         this.doc = { ...this.doc };
         this.selectedId = box.id;
         this.activeTool = 'select';
-        this.statusText = 'Text box placed';
+        this.statusText = this.activeTool === 'table' ? 'Table placed' : 'Text box placed';
     }
 
     handleBoxMouseDown(event) {

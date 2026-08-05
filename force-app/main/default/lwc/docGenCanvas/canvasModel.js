@@ -97,6 +97,45 @@ export function newTextBox(xIn, yIn, wIn, hIn) {
     };
 }
 
+export const DEFAULT_TABLE_STYLE = {
+    headerFill: '#eeeeee',
+    headerBold: true,
+    gridColor: '#999999',
+    gridWidth: 0.5,
+    cellPadding: 3
+};
+
+/**
+ * A table box. Defaults to FLOW mode, and that default is the whole point: a table
+ * bound to a {#Loop} grows to whatever the merge produces, and only a flow box
+ * paginates. Pinned would clip it at the artboard edge the moment the data outgrew
+ * the page — measured in scripts/canvas-layout-model-probe.apex.
+ */
+export function newTableBox(xIn, yIn, wIn) {
+    return {
+        id: nextId('box'),
+        kind: 'table',
+        mode: 'flow',
+        style: { ...DEFAULT_STYLE, padding: 0 },
+        table: {
+            ...DEFAULT_TABLE_STYLE,
+            showHeader: true,
+            // Blank relationship = a static table. Set it and every row repeats per
+            // child record.
+            relationship: '',
+            columns: [
+                { label: 'Item', tag: '{Name}', width: '' },
+                { label: 'Amount', tag: '{Amount}', width: '' }
+            ]
+        },
+        x: round3(xIn),
+        y: round3(yIn),
+        w: round3(wIn),
+        h: 1,
+        html: ''
+    };
+}
+
 export function newArtboard() {
     return { id: nextId('board'), boxes: [] };
 }
@@ -194,7 +233,99 @@ function styleCss(box) {
     return css;
 }
 
+/** Escapes only what would break the markup — merge tags must survive verbatim. */
+function esc(v) {
+    return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/**
+ * A table box becomes a real <table>. When a relationship is set, the {#Rel} wrapper
+ * goes INSIDE <tbody> around the <tr> — that is the shape the merge engine's row
+ * expansion looks for, and the same pattern the reference templates use. The header
+ * lives in <thead> so it repeats on every continuation page.
+ */
+function tableToHtml(box) {
+    const t = box.table || {};
+    const cols = t.columns || [];
+    const cellCss = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
+    let out = '<table style="border-collapse: collapse; width: 100%; -fs-table-paginate: paginate;">';
+    if (t.showHeader) {
+        out += '<thead style="display: table-header-group;"><tr>';
+        for (const c of cols) {
+            const w = c.width ? ' width: ' + c.width + ';' : '';
+            out +=
+                '<th style="' +
+                cellCss +
+                w +
+                ' background: ' +
+                t.headerFill +
+                ';' +
+                (t.headerBold ? ' font-weight: bold;' : ' font-weight: normal;') +
+                ' text-align: left;">' +
+                esc(c.label) +
+                '</th>';
+        }
+        out += '</tr></thead>';
+    }
+    const row = '<tr>' + cols.map((c) => '<td style="' + cellCss + '">' + (c.tag || '') + '</td>').join('') + '</tr>';
+    out += '<tbody>';
+    out += t.relationship ? '{#' + t.relationship + '}' + row + '{/' + t.relationship + '}' : row;
+    out += '</tbody></table>';
+    return out;
+}
+
+/**
+ * The table as the CANVAS should show it: same cells, same widths, same borders, but
+ * the {#Rel} loop markers replaced by two sample rows. Showing the raw marker would
+ * put stray text in the artboard; showing one row would hide the fact that it repeats.
+ */
+export function tablePreviewHtml(box) {
+    const t = box.table || {};
+    const cols = t.columns || [];
+    const cellCss = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
+    let out = '<table style="border-collapse: collapse; width: 100%;">';
+    if (t.showHeader) {
+        out += '<thead><tr>';
+        for (const c of cols) {
+            const w = c.width ? ' width: ' + c.width + ';' : '';
+            out +=
+                '<th style="' +
+                cellCss +
+                w +
+                ' background: ' +
+                t.headerFill +
+                ';' +
+                (t.headerBold ? ' font-weight: bold;' : ' font-weight: normal;') +
+                ' text-align: left;">' +
+                esc(c.label) +
+                '</th>';
+        }
+        out += '</tr></thead>';
+    }
+    out += '<tbody>';
+    const rows = t.relationship ? 2 : 1;
+    for (let i = 0; i < rows; i++) {
+        out += '<tr>' + cols.map((c) => '<td style="' + cellCss + '">' + esc(c.tag || '') + '</td>').join('') + '</tr>';
+    }
+    if (t.relationship) {
+        out +=
+            '<tr><td colspan="' +
+            Math.max(1, cols.length) +
+            '" style="' +
+            cellCss +
+            ' font-style: italic; color: #6b7280;">… one row per ' +
+            esc(t.relationship) +
+            ' record</td></tr>';
+    }
+    out += '</tbody></table>';
+    return out;
+}
+
 function boxToHtml(box) {
+    const inner = box.kind === 'table' ? tableToHtml(box) : box.html;
     if (box.mode === 'flow') {
         // No top/left: a flow box is placed by the normal flow, and its margin-left
         // is what keeps it visually where the author put it horizontally.
@@ -208,7 +339,7 @@ function boxToHtml(box) {
             'in; ' +
             styleCss(box) +
             '">' +
-            box.html +
+            inner +
             '</div>'
         );
     }
@@ -226,7 +357,7 @@ function boxToHtml(box) {
         'in; ' +
         styleCss(box) +
         '">' +
-        box.html +
+        inner +
         '</div>'
     );
 }
@@ -301,6 +432,51 @@ function readStyle(style) {
     return st;
 }
 
+/** Recovers a table box's columns and loop binding from the serialized markup. */
+function readTable(wrapper, tableEl) {
+    const t = { ...DEFAULT_TABLE_STYLE, showHeader: false, relationship: '', columns: [] };
+    const ths = [...tableEl.querySelectorAll('thead th')];
+    t.showHeader = ths.length > 0;
+    const tds = [...tableEl.querySelectorAll('tbody tr td')];
+    // The loop marker lives as a text node inside <tbody>, around the <tr>.
+    // Read the loop marker from the WRAPPER, not from <tbody>.
+    //
+    // We serialize `<tbody>{#Rel}<tr>…</tr>{/Rel}</tbody>`, which is what the merge
+    // engine's row expansion expects. But the HTML parser does not allow text as a
+    // direct child of <tbody> — it FOSTER-PARENTS those text nodes out, to just before
+    // the <table>. So on the way back in, tbody.innerHTML no longer contains the
+    // marker and the binding read as blank: open a table template, save, and the
+    // {#Rel} was silently gone. The wrapper still holds it wherever the parser moved it.
+    const m = /\{#([A-Za-z0-9_]+)\}/.exec((wrapper && wrapper.innerHTML) || '');
+    t.relationship = m ? m[1] : '';
+    const count = Math.max(ths.length, tds.length);
+    for (let i = 0; i < count; i++) {
+        const th = ths[i];
+        const td = tds[i];
+        t.columns.push({
+            label: th ? (th.textContent || '').trim() : 'Column ' + (i + 1),
+            tag: td ? (td.innerHTML || '').trim() : '',
+            width: th ? readCss(th.getAttribute('style'), 'width') || '' : ''
+        });
+    }
+    const firstCell = ths[0] || tds[0];
+    if (firstCell) {
+        const cs = firstCell.getAttribute('style') || '';
+        const bm = /([0-9.]+)pt\s+solid\s+(\S+)/.exec(readCss(cs, 'border') || '');
+        if (bm) {
+            t.gridWidth = parseFloat(bm[1]);
+            t.gridColor = bm[2];
+        }
+        const pad = readCss(cs, 'padding');
+        if (pad) t.cellPadding = parseFloat(pad) || t.cellPadding;
+    }
+    if (ths[0]) {
+        t.headerFill = readCss(ths[0].getAttribute('style'), 'background') || t.headerFill;
+        t.headerBold = /font-weight:\s*bold/.test(ths[0].getAttribute('style') || '');
+    }
+    return t;
+}
+
 export function deserialize(html) {
     if (!html || html.indexOf('dg-artboard') === -1) {
         return null;
@@ -333,7 +509,14 @@ export function deserialize(html) {
                 // editing rectangle instead of collapsing the box to nothing.
                 box.h = readInches(style, 'height') || 0.5;
                 box.style = readStyle(style);
-                box.html = el.innerHTML;
+                const tableEl = el.querySelector('table');
+                if (tableEl) {
+                    box.kind = 'table';
+                    box.table = readTable(el, tableEl);
+                    box.html = '';
+                } else {
+                    box.html = el.innerHTML;
+                }
                 return box;
             });
             return board;
