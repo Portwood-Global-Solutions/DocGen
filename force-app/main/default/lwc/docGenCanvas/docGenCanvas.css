@@ -312,3 +312,23 @@
     width: 100%;
     border-collapse: collapse;
 }
+
+/* The text box IS a textarea — see canvasModel's note on why. It has to look like
+   nothing: no chrome, no resize grip, and it must inherit the box's own typography
+   so the canvas keeps matching the PDF. */
+textarea.dg-cbox-text {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    resize: none;
+    overflow: hidden;
+    outline: none;
+    font: inherit;
+    color: inherit;
+    text-align: inherit;
+    line-height: inherit;
+    padding: 0;
+    margin: 0;
+    min-height: 1.2em;
+}

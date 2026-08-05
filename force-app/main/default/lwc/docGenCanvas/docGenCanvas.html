@@ -238,13 +238,18 @@
                                     style={box.style}
                                     onmousedown={handleBoxMouseDown}
                                 >
-                                    <div
-                                        class="dg-cbox-body"
-                                        contenteditable={box.editable}
-                                        data-id={box.id}
-                                        oninput={handleBoxInput}
-                                        lwc:dom="manual"
-                                    ></div>
+                                    <template lwc:if={box.editable}>
+                                        <textarea
+                                            class="dg-cbox-body dg-cbox-text"
+                                            data-id={box.id}
+                                            oninput={handleBoxInput}
+                                            onkeydown={handleBoxKeydown}
+                                            spellcheck="false"
+                                        ></textarea>
+                                    </template>
+                                    <template lwc:else>
+                                        <div class="dg-cbox-body dg-cbox-table" data-id={box.id} lwc:dom="manual"></div>
+                                    </template>
                                     <template lwc:if={box.isSelected}>
                                         <span class="dg-cbox-readout">{box.readout} · {box.modeLabel}</span>
                                         <span class="dg-h dg-h_e" data-handle="e"></span>

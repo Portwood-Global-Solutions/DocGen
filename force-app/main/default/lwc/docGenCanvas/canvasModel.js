@@ -93,7 +93,21 @@ export function newTextBox(xIn, yIn, wIn, hIn) {
         y: round3(yIn),
         w: round3(wIn),
         h: round3(hIn),
-        html: 'Text'
+        // PLAIN TEXT, not HTML.
+        //
+        // A canvas text box is edited in a real <textarea>, for two reasons that both
+        // matter more than inline formatting would. First, Lightning's global "/"
+        // hotkey steals focus to the search box from a contenteditable — the flow
+        // designer had to detect the theft after the fact and steal focus BACK, because
+        // LWS never delivers the window-capture listener that would let it be
+        // prevented. Lightning ignores its shortcuts inside a textarea, so the problem
+        // stops existing rather than being recovered from. Second, a textarea's value
+        // is a plain string: there is no contenteditable DOM for LWS to distort, which
+        // is the entire bug class this editor was built to escape.
+        //
+        // The trade is no bold-one-word-inside-a-box. That is the Canva model anyway —
+        // styling belongs to the object, and every style here is already per-box.
+        text: 'Text'
     };
 }
 
@@ -324,8 +338,22 @@ export function tablePreviewHtml(box) {
     return out;
 }
 
+/**
+ * Plain text to safe markup: escaped, with newlines becoming real line breaks.
+ *
+ * Escaping does NOT break conditionals that use angle brackets. `{#IF Amount > 100}`
+ * serializes as `{#IF Amount &gt; 100}` and the engine decodes it —
+ * DocGenService.evaluateIfExpression already un-escapes &gt;/&lt;/&amp;/&apos;/&quot;
+ * because Word escapes exactly the same characters in its text runs. Do not "fix" this
+ * by leaving text unescaped: a stray `<` in someone's address block would then break
+ * the document's markup.
+ */
+function textToHtml(box) {
+    return esc(box.text == null ? '' : box.text).replace(/\n/g, '<br />');
+}
+
 function boxToHtml(box) {
-    const inner = box.kind === 'table' ? tableToHtml(box) : box.html;
+    const inner = box.kind === 'table' ? tableToHtml(box) : textToHtml(box);
     if (box.mode === 'flow') {
         // No top/left: a flow box is placed by the normal flow, and its margin-left
         // is what keeps it visually where the author put it horizontally.
@@ -399,6 +427,14 @@ function readInches(style, prop) {
  * template" from "someone pointed this at an HTML template" instead of silently
  * showing a blank artboard over content that is really still there.
  */
+/** Inverse of textToHtml — <br> back to newlines, entities back to characters. */
+function htmlToText(html) {
+    const tmp = document.createElement('div');
+    // eslint-disable-next-line @lwc/lwc/no-inner-html
+    tmp.innerHTML = String(html == null ? '' : html).replace(/<br\s*\/?>/gi, '\n');
+    return tmp.textContent || '';
+}
+
 function readCss(style, prop) {
     const m = new RegExp('(?:^|;)\\s*' + prop + '\\s*:\\s*([^;]+)').exec(style || '');
     return m ? m[1].trim() : null;
@@ -515,7 +551,7 @@ export function deserialize(html) {
                     box.table = readTable(el, tableEl);
                     box.html = '';
                 } else {
-                    box.html = el.innerHTML;
+                    box.text = htmlToText(el.innerHTML);
                 }
                 return box;
             });

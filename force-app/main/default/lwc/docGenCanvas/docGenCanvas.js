@@ -342,16 +342,24 @@ export default class DocGenCanvas extends LightningElement {
         for (const board of this.doc.artboards) {
             for (const b of board.boxes) byId.set(b.id, b);
         }
-        for (const el of this.template.querySelectorAll('.dg-cbox-body')) {
+        // Tables render from the SAME code that serializes them, so the artboard
+        // cannot drift from the PDF.
+        for (const el of this.template.querySelectorAll('.dg-cbox-table')) {
             const model = byId.get(el.dataset.id);
-            if (!model) continue;
-            const isFocused = this.template.activeElement === el;
-            // A table box renders from the SAME code that serializes it, so the
-            // artboard cannot drift from the PDF. Only text boxes are editable in place.
-            const want = model.kind === 'table' ? tablePreviewHtml(model) : model.html;
-            if (!isFocused && el.innerHTML !== want) {
+            if (!model || model.kind !== 'table') continue;
+            const want = tablePreviewHtml(model);
+            if (el.innerHTML !== want) {
                 // eslint-disable-next-line @lwc/lwc/no-inner-html
                 el.innerHTML = want;
+            }
+        }
+        // Text lives in a real <textarea>. Never write into the one being typed in —
+        // assigning value moves the caret to the end on every keystroke.
+        for (const el of this.template.querySelectorAll('.dg-cbox-text')) {
+            const model = byId.get(el.dataset.id);
+            if (!model) continue;
+            if (this.template.activeElement !== el && el.value !== (model.text || '')) {
+                el.value = model.text || '';
             }
         }
     }
@@ -391,6 +399,8 @@ export default class DocGenCanvas extends LightningElement {
     handleBoxMouseDown(event) {
         // Let the inner editor own its own clicks — dragging from inside the text
         // would fight text selection.
+        // Let the textarea own its own clicks — dragging from inside the text would
+        // fight text selection and caret placement.
         if (event.target.classList.contains('dg-cbox-body')) {
             this.selectedId = event.currentTarget.dataset.id;
             return;
@@ -460,7 +470,22 @@ export default class DocGenCanvas extends LightningElement {
      */
     handleBoxInput(event) {
         const id = event.currentTarget.dataset.id;
-        this.applyToBox(id, { html: event.currentTarget.innerHTML });
+        this.applyToBox(id, { text: event.currentTarget.value });
+    }
+
+    /**
+     * Keeps keystrokes inside the box.
+     *
+     * Lightning binds single-key global shortcuts ("/" for search, others) on window
+     * capture. A <textarea> is already exempt from those, which is the main reason text
+     * editing here is a textarea and not a contenteditable — the flow designer, which
+     * uses contenteditable, has to detect focus being STOLEN to the search box and
+     * steal it back afterwards, because LWS never delivers the window-capture listener
+     * that would let it be prevented. Stopping propagation as well costs nothing and
+     * covers any component above us that binds its own document-level keys.
+     */
+    handleBoxKeydown(event) {
+        event.stopPropagation();
     }
 
     handleModeToggle() {
