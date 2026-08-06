@@ -34,7 +34,9 @@ import {
     SHAPE_CHOICES,
     PAGE_SIZES,
     DEFAULT_MARGINS,
-    normalizeMargins
+    normalizeMargins,
+    DEFAULT_CUSTOM_PAGE,
+    normalizeCustomPage
 } from './canvasModel';
 
 /**
@@ -79,6 +81,7 @@ export default class DocGenCanvas extends LightningElement {
     // load — the canvas owns its own page. The engine defers to a source @page rule
     // (v1.90), so what is set here is what the PDF uses.
     @track margins = { ...DEFAULT_MARGINS };
+    @track customPage = { ...DEFAULT_CUSTOM_PAGE };
     @track imageLibrary = [];
     @track imageLoading = false;
     @track _showPageSetup = false;
@@ -89,7 +92,25 @@ export default class DocGenCanvas extends LightningElement {
     _drag = null;
 
     get geo() {
-        return pageGeometry(this.pageSize, this.orientation, this.margins);
+        return pageGeometry(this.pageSize, this.orientation, this.margins, this.customPage);
+    }
+
+    get isCustomPage() {
+        return this.pageSize === 'Custom';
+    }
+
+    get customPageW() {
+        return this.customPage.w;
+    }
+
+    get customPageH() {
+        return this.customPage.h;
+    }
+
+    handleCustomPageChange(event) {
+        const key = event.currentTarget.dataset.key;
+        this.customPage = normalizeCustomPage({ ...this.customPage, [key]: event.target.value });
+        this.reflowToPage();
     }
 
     // ---- Page setup ------------------------------------------------------
@@ -105,7 +126,15 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     get pageAreaLabel() {
-        return this.geo.w.toFixed(2) + 'in x ' + this.geo.h.toFixed(2) + 'in of usable page';
+        const m = this.margins;
+        const zero = !m.top && !m.right && !m.bottom && !m.left;
+        return (
+            this.geo.w.toFixed(2) +
+            'in x ' +
+            this.geo.h.toFixed(2) +
+            'in of usable page' +
+            (zero ? ' — the canvas is the whole page, so what you place is exactly where it prints' : '')
+        );
     }
 
     get marginTop() {
@@ -134,6 +163,11 @@ export default class DocGenCanvas extends LightningElement {
     handleMarginChange(event) {
         const key = event.currentTarget.dataset.key;
         this.margins = normalizeMargins({ ...this.margins, [key]: event.target.value });
+        this.reflowToPage();
+    }
+
+    handleMarginZero() {
+        this.margins = normalizeMargins({ top: 0, right: 0, bottom: 0, left: 0 });
         this.reflowToPage();
     }
 
@@ -1046,7 +1080,14 @@ export default class DocGenCanvas extends LightningElement {
         if (!rule) {
             return;
         }
-        const size = /size:\s*([A-Za-z0-9]+)\s*(portrait|landscape)?/i.exec(rule[1]);
+        // A custom size is two lengths rather than a named page.
+        const custom = /size:\s*([0-9.]+)in\s+([0-9.]+)in/i.exec(rule[1]);
+        if (custom) {
+            this.pageSize = 'Custom';
+            this.orientation = 'Portrait';
+            this.customPage = normalizeCustomPage({ w: custom[1], h: custom[2] });
+        }
+        const size = custom ? null : /size:\s*([A-Za-z0-9]+)\s*(portrait|landscape)?/i.exec(rule[1]);
         if (size) {
             const named = ['Letter', 'A4', 'Legal'].find((n) => n.toLowerCase() === size[1].toLowerCase());
             if (named) this.pageSize = named;

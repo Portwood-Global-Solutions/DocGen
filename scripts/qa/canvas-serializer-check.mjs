@@ -79,6 +79,11 @@ doc.artboards[0].boxes.push(rule);
 const a4Geo = m.pageGeometry('A4', 'Landscape', { top: 1, right: 0.75, bottom: 1, left: 0.75 });
 const a4Html = m.serialize(doc, a4Geo);
 
+// A custom size emits two lengths, and the default zero margin makes the artboard the
+// whole page so a box at 0,0 is at the paper corner.
+const customGeo = m.pageGeometry('Custom', 'Portrait', undefined, { w: 5.5, h: 8.5 });
+const customHtml = m.serialize(doc, customGeo);
+
 const html = m.serialize(doc, geo);
 
 const checks = [
@@ -87,7 +92,13 @@ const checks = [
     ['flow box uses margin, not left/top', html.includes('margin: 5in 0 0 0.3in;')],
     ['second artboard carries the break class', html.includes('dg-artboard dg-artboard_break')],
     ['first artboard does NOT carry it', /<div class="dg-artboard" data-dg-artboard="1"/.test(html)],
-    ['artboard uses min-height not height', html.includes('min-height: 10in')],
+    // min-height, never height: a pinned height is OVERRUN by growing merge content
+    // instead of growing with it. 11in because margins now default to zero, so the
+    // artboard IS the paper — that is what makes canvas coordinates page coordinates.
+    [
+        'artboard uses min-height not height',
+        html.includes('min-height: 11in') && !/\.dg-artboard \{[^}]*[^-]height: 11in/.test(html)
+    ],
     ['newlines become <br>', html.includes('{Name}<br />Industry: {Industry}')],
     ['merge tags survive escaping', html.includes('{Amount:currency:USD}') && html.includes('{Industry}')],
     // The engine un-escapes these itself (Word escapes the same characters), so a
@@ -164,7 +175,11 @@ const checks = [
     // The artboard is the CONTENT area, so a pinned coordinate is measured inside the
     // margins. A4 landscape is 11.69 x 8.27in of paper.
     ['the artboard is paper minus margins', a4Geo.w === 10.19 && a4Geo.h === 6.27],
-    ['page setup round-trips through the saved @page', /size: A4 landscape/.test(a4Html)]
+    ['page setup round-trips through the saved @page', /size: A4 landscape/.test(a4Html)],
+    ['a custom size emits two lengths', /@page \{ size: 5.5in 8.5in;/.test(customHtml)],
+    // Zero margins are what make the canvas and the page share an origin.
+    ['margins default to zero', /margin: 0in 0in 0in 0in/.test(customHtml)],
+    ['with no margin the artboard is the whole page', customGeo.w === 5.5 && customGeo.h === 8.5]
 ];
 
 let bad = 0;

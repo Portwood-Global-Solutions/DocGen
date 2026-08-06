@@ -632,12 +632,47 @@
                             options={pageSizeOptions}
                             onchange={handlePageSizeChange}
                         ></lightning-combobox>
-                        <lightning-combobox
-                            label="Orientation"
-                            value={orientation}
-                            options={orientationOptions}
-                            onchange={handleOrientationChange}
-                        ></lightning-combobox>
+                        <template lwc:if={isCustomPage}>
+                            <div class="dg-margin-grid">
+                                <label class="dg-panel-label">Page size (inches)</label>
+                                <div class="dg-row">
+                                    <input
+                                        type="number"
+                                        class="dg-panel-input dg-panel-input_sm"
+                                        min="1"
+                                        max="200"
+                                        step="0.05"
+                                        value={customPageW}
+                                        data-key="w"
+                                        onchange={handleCustomPageChange}
+                                        title="Width"
+                                    />
+                                    <span class="dg-panel-label">x</span>
+                                    <input
+                                        type="number"
+                                        class="dg-panel-input dg-panel-input_sm"
+                                        min="1"
+                                        max="200"
+                                        step="0.05"
+                                        value={customPageH}
+                                        data-key="h"
+                                        onchange={handleCustomPageChange}
+                                        title="Height"
+                                    />
+                                </div>
+                                <p class="dg-panel-note">
+                                    Width x height. Orientation does not apply to a custom size.
+                                </p>
+                            </div>
+                        </template>
+                        <template lwc:else>
+                            <lightning-combobox
+                                label="Orientation"
+                                value={orientation}
+                                options={orientationOptions}
+                                onchange={handleOrientationChange}
+                            ></lightning-combobox>
+                        </template>
                         <div class="dg-margin-grid">
                             <label class="dg-panel-label">Margins (inches)</label>
                             <div class="dg-row">
@@ -688,6 +723,7 @@
                             </div>
                             <p class="dg-panel-note">Top, right, bottom, left. {pageAreaLabel}.</p>
                             <div class="dg-row">
+                                <button class="dg-sbtn" onclick={handleMarginZero}>None</button>
                                 <button class="dg-sbtn" data-all="0.5" onclick={handleMarginPreset}>Narrow 0.5"</button>
                                 <button class="dg-sbtn" data-all="0.75" onclick={handleMarginPreset}>
                                     Normal 0.75"

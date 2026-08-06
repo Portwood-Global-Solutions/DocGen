@@ -41,10 +41,23 @@ const PAPER = {
 export const PAGE_SIZES = [
     { label: 'Letter (8.5 x 11 in)', value: 'Letter' },
     { label: 'A4 (210 x 297 mm)', value: 'A4' },
-    { label: 'Legal (8.5 x 14 in)', value: 'Legal' }
+    { label: 'Legal (8.5 x 14 in)', value: 'Legal' },
+    { label: 'Custom size', value: 'Custom' }
 ];
 
-export const DEFAULT_MARGINS = { top: 0.5, right: 0.5, bottom: 0.5, left: 0.5 };
+export const DEFAULT_CUSTOM_PAGE = { w: 8.5, h: 11 };
+
+/**
+ * ZERO by default, so the canvas and the page share an origin.
+ *
+ * With a margin, the artboard is the CONTENT area and a box at 0,0 sits at the margin
+ * rather than at the corner of the paper — correct, but it means the numbers in the
+ * editor are not the numbers on the page. At zero the two are the same thing and what
+ * you place is exactly what prints, which is the whole promise of this editor. Authors
+ * who want a margin can set one, and every document already saved keeps whatever its
+ * own @page rule says.
+ */
+export const DEFAULT_MARGINS = { top: 0, right: 0, bottom: 0, left: 0 };
 
 function clampMargin(v, fallback) {
     const n = parseFloat(v);
@@ -72,14 +85,38 @@ export function normalizeMargins(m) {
  * box, so a box at x=0 sits at the left margin, not at the paper edge, and the canvas
  * shows exactly that.
  */
-export function pageGeometry(pageSize, orientation, margins) {
-    const paper = PAPER[pageSize] || PAPER.Letter;
+/** Custom page dimensions, clamped to what a PDF page can actually be. */
+export function normalizeCustomPage(c) {
+    const src = c || {};
+    const w = parseFloat(src.w);
+    const h = parseFloat(src.h);
+    return {
+        w: round3(Math.min(200, Math.max(1, isNaN(w) ? DEFAULT_CUSTOM_PAGE.w : w))),
+        h: round3(Math.min(200, Math.max(1, isNaN(h) ? DEFAULT_CUSTOM_PAGE.h : h)))
+    };
+}
+
+/**
+ * The artboard is the CONTENT area — paper minus margins — because that is the box a
+ * pinned coordinate is measured inside. `@page { margin }` shifts the whole content
+ * box, so a box at x=0 sits at the left margin, not at the paper edge, and the canvas
+ * shows exactly that. At the default zero margin the two coincide.
+ *
+ * A custom size emits its dimensions as lengths rather than a named page. Inches, and
+ * rounded: metric page sizes turn into long decimals (210mm is 8.26388…in) and those
+ * have been implicated in the engine mis-paginating long documents.
+ */
+export function pageGeometry(pageSize, orientation, margins, customPage) {
+    const isCustom = pageSize === 'Custom';
+    const paper = isCustom ? normalizeCustomPage(customPage) : PAPER[pageSize] || PAPER.Letter;
     const landscape = String(orientation || 'Portrait').toLowerCase() === 'landscape';
     const pw = landscape ? paper.h : paper.w;
     const ph = landscape ? paper.w : paper.h;
     const m = normalizeMargins(margins);
     return {
-        css: (PAPER[pageSize] ? pageSize : 'Letter') + (landscape ? ' landscape' : ' portrait'),
+        css: isCustom
+            ? round3(pw) + 'in ' + round3(ph) + 'in'
+            : (PAPER[pageSize] ? pageSize : 'Letter') + (landscape ? ' landscape' : ' portrait'),
         w: round3(Math.max(1, pw - m.left - m.right)),
         h: round3(Math.max(1, ph - m.top - m.bottom)),
         margins: m
