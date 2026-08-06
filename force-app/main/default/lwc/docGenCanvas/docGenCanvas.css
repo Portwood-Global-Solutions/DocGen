@@ -50,6 +50,17 @@
     font-weight: var(--slds-g-font-weight-7, 700);
 }
 
+/* Inline SVG, stroked with currentColor so the glyph follows the button's text colour
+   — including the active state — without a second set of rules to keep in step. */
+.dg-rail-icon {
+    width: 22px;
+    height: 22px;
+    display: block;
+    margin: 0 auto 2px;
+    color: inherit;
+    flex: none;
+}
+
 .dg-rail-label {
     display: block;
     margin-top: 3px;

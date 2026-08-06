@@ -2,42 +2,38 @@
     <div class="dg-canvas-shell">
         <!-- Left rail: the tool picker. Canva's shape — icons here, depth to the right. -->
         <div class="dg-rail">
-            <button class={toolSelectClass} data-tool="select" onclick={handleToolSelect} title="Select">
-                <lightning-icon icon-name="utility:pointer" size="small"></lightning-icon>
-                <span class="dg-rail-label">Select</span>
-            </button>
-            <button class={toolTextClass} data-tool="text" onclick={handleToolSelect} title="Add a text box">
-                <lightning-icon icon-name="utility:text" size="small"></lightning-icon>
-                <span class="dg-rail-label">Text</span>
-            </button>
-            <button class={toolTableClass} data-tool="table" onclick={handleToolSelect} title="Add a table">
-                <lightning-icon icon-name="utility:table" size="small"></lightning-icon>
-                <span class="dg-rail-label">Table</span>
-            </button>
-            <button class={toolImageClass} data-tool="image" onclick={handleToolSelect} title="Add an image">
-                <lightning-icon icon-name="utility:image" size="small"></lightning-icon>
-                <span class="dg-rail-label">Image</span>
-            </button>
-            <button class={toolCodeClass} data-tool="code" onclick={handleToolSelect} title="Add a QR code or barcode">
-                <lightning-icon icon-name="utility:qrcode" size="small"></lightning-icon>
-                <span class="dg-rail-label">Code</span>
-            </button>
-            <button class={toolShapeClass} data-tool="shape" onclick={handleToolSelect} title="Add a shape or a line">
-                <lightning-icon icon-name="utility:shape_alt" size="small"></lightning-icon>
-                <span class="dg-rail-label">Shape</span>
-            </button>
-            <button class={dataToolClass} onclick={handleToggleData} title="Choose the fields this document uses">
-                <lightning-icon icon-name="utility:database" size="small"></lightning-icon>
-                <span class="dg-rail-label">Data</span>
-            </button>
-            <button class={pageToolClass} onclick={handleTogglePageSetup} title="Page size, orientation and margins">
-                <lightning-icon icon-name="utility:page" size="small"></lightning-icon>
-                <span class="dg-rail-label">Page</span>
-            </button>
-            <button class="dg-tool" onclick={handleAddArtboard} title="Add another page">
-                <lightning-icon icon-name="utility:add" size="small"></lightning-icon>
-                <span class="dg-rail-label">Add page</span>
-            </button>
+            <!--
+              Data-driven so a new tool cannot ship without an icon. Every entry
+              supplies its own glyph, and the SVG is inline rather than a
+              lightning-icon name: an icon name that does not exist in SLDS renders
+              NOTHING and fails silently, which is how Select, Shape and Code ended up
+              as unlabelled blank buttons.
+            -->
+            <template for:each={railTools} for:item="t">
+                <button
+                    key={t.id}
+                    class={t.cls}
+                    data-tool={t.id}
+                    data-action={t.action}
+                    onclick={handleRailClick}
+                    title={t.title}
+                >
+                    <svg
+                        class="dg-rail-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        focusable="false"
+                    >
+                        <path d={t.d}></path>
+                    </svg>
+                    <span class="dg-rail-label">{t.label}</span>
+                </button>
+            </template>
         </div>
 
         <!-- Panel: in-depth controls for whatever is selected. -->

@@ -183,10 +183,6 @@ export default class DocGenCanvas extends LightningElement {
         return this._showPageSetup === true;
     }
 
-    get pageToolClass() {
-        return this.showPageSetup ? 'dg-tool dg-tool_active' : 'dg-tool';
-    }
-
     handleTogglePageSetup() {
         this._showPageSetup = !this._showPageSetup;
     }
@@ -288,20 +284,117 @@ export default class DocGenCanvas extends LightningElement {
         return css;
     }
 
-    get toolImageClass() {
-        return this.activeTool === 'image' ? 'dg-tool dg-tool_active' : 'dg-tool';
+    /**
+     * The tool rail, as data.
+     *
+     * Every tool carries its own glyph, so adding one to this list is the whole job —
+     * it cannot ship without an icon, which is what happened when the rail was
+     * hand-written markup. The glyphs are inline SVG paths rather than
+     * `lightning-icon icon-name="utility:..."` because a name SLDS does not publish
+     * (utility:pointer, utility:shape_alt, utility:qrcode — all invented) renders
+     * nothing at all and reports no error, leaving a blank button.
+     *
+     * 24x24 viewBox, stroked with currentColor so the icon follows the rail's text
+     * colour and the active state without a second set of rules.
+     */
+    get railTools() {
+        const T = [
+            {
+                id: 'select',
+                label: 'Select',
+                title: 'Select, move and resize',
+                action: 'tool',
+                d: 'M5 3l13 8-5.6 1.6L15 19l-2.4 1-2.6-6.6L5 17z'
+            },
+            {
+                id: 'text',
+                label: 'Text',
+                title: 'Add a text box',
+                action: 'tool',
+                d: 'M5 7V5h14v2M12 5v14M9 19h6'
+            },
+            {
+                id: 'table',
+                label: 'Table',
+                title: 'Add a table',
+                action: 'tool',
+                d: 'M3 5h18v14H3zM3 10h18M9 10v9M15 10v9'
+            },
+            {
+                id: 'image',
+                label: 'Image',
+                title: 'Add an image from Portwood Assets',
+                action: 'tool',
+                d: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M8.5 9.5h.01'
+            },
+            {
+                id: 'code',
+                label: 'Code',
+                title: 'Add a QR code or barcode',
+                action: 'tool',
+                d: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z'
+            },
+            {
+                id: 'shape',
+                label: 'Shape',
+                title: 'Add a rectangle or a line',
+                action: 'tool',
+                d: 'M3 4h11v11H3zM10 16a5 5 0 1 0 10 0 5 5 0 1 0-10 0'
+            },
+            {
+                id: 'data',
+                label: 'Data',
+                title: 'Choose the fields this document uses',
+                action: 'data',
+                d: 'M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'
+            },
+            {
+                id: 'pagesetup',
+                label: 'Page',
+                title: 'Page size, orientation and margins',
+                action: 'pagesetup',
+                d: 'M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h5'
+            },
+            {
+                id: 'addpage',
+                label: 'Add page',
+                title: 'Add another page',
+                action: 'addpage',
+                d: 'M12 5v14M5 12h14'
+            }
+        ];
+        return T.map((t) => ({
+            ...t,
+            cls: this.isRailToolActive(t) ? 'dg-tool dg-tool_active' : 'dg-tool'
+        }));
     }
 
-    get toolCodeClass() {
-        return this.activeTool === 'code' ? 'dg-tool dg-tool_active' : 'dg-tool';
+    isRailToolActive(t) {
+        if (t.action === 'tool') return this.activeTool === t.id;
+        if (t.action === 'data') return this.showData === true;
+        if (t.action === 'pagesetup') return this.showPageSetup === true;
+        return false;
     }
 
-    get toolShapeClass() {
-        return this.activeTool === 'shape' ? 'dg-tool dg-tool_active' : 'dg-tool';
-    }
-
-    get toolTableClass() {
-        return this.activeTool === 'table' ? 'dg-tool dg-tool_active' : 'dg-tool';
+    handleRailClick(event) {
+        const action = event.currentTarget.dataset.action;
+        if (action === 'data') {
+            this.handleToggleData();
+            return;
+        }
+        if (action === 'pagesetup') {
+            this.handleTogglePageSetup();
+            return;
+        }
+        if (action === 'addpage') {
+            this.handleAddArtboard();
+            return;
+        }
+        this.activeTool = event.currentTarget.dataset.tool;
+        if (this.activeTool === 'image') {
+            // Load the asset list while the author is still choosing where to click.
+            this.loadImageLibrary();
+        }
     }
 
     get selectedIsTable() {
@@ -739,10 +832,6 @@ export default class DocGenCanvas extends LightningElement {
         }
     }
 
-    get dataToolClass() {
-        return this.showData ? 'dg-tool dg-tool_active' : 'dg-tool';
-    }
-
     /**
      * The tree builder needs a base object to build anything — without one it renders
      * an empty shell, which reads as "the Data button is broken".
@@ -918,14 +1007,6 @@ export default class DocGenCanvas extends LightningElement {
 
     get zoomPercent() {
         return Math.round(this.zoom * 100) + '%';
-    }
-
-    get toolSelectClass() {
-        return this.activeTool === 'select' ? 'dg-tool dg-tool_active' : 'dg-tool';
-    }
-
-    get toolTextClass() {
-        return this.activeTool === 'text' ? 'dg-tool dg-tool_active' : 'dg-tool';
     }
 
     async connectedCallback() {
@@ -1233,6 +1314,62 @@ export default class DocGenCanvas extends LightningElement {
     /** Apex errors arrive as e.body.message; JS errors as e.message. */
     errText(e) {
         return (e && e.body ? e.body.message : e && e.message) || 'Unknown error';
+    }
+
+    // ---- QR / barcode ----------------------------------------------------
+    get selectedIsCode() {
+        const b = this.selectedBox;
+        return !!b && b.kind === 'code';
+    }
+
+    get selCode() {
+        return (this.selectedBox || {}).code || {};
+    }
+
+    get codeTypeOptions() {
+        return CODE_TYPES;
+    }
+
+    get selCodeIsQr() {
+        return (this.selCode.type || 'qr') === 'qr';
+    }
+
+    get codeSizeLabel() {
+        const b = this.selectedBox;
+        if (!b) return '';
+        return b.w.toFixed(2) + 'in x ' + b.h.toFixed(2) + 'in';
+    }
+
+    /**
+     * Changing a code's type or size RESIZES THE BOX to match.
+     *
+     * That is the point of having a code tool rather than typing the tag into a text
+     * box: the box on the canvas is the footprint the symbol will occupy, so the rest
+     * of the layout can be built around it instead of guessed at and corrected after
+     * the first render.
+     */
+    handleCodeChange(event) {
+        const key = event.currentTarget.dataset.key;
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'code') return;
+        let value = event.detail && event.detail.value != null ? event.detail.value : event.target.value;
+        if (key === 'size' || key === 'height') {
+            value = parseFloat(value);
+            if (isNaN(value)) return;
+        }
+        const code = { ...box.code, [key]: value };
+        const size = codeBoxSize(code);
+        this.applyToBox(box.id, { code, w: size.w, h: size.h });
+    }
+
+    /** Clicking a field chip with a code box selected binds the code to that field. */
+    bindFieldToCode(box, tag) {
+        const field = String(tag || '')
+            .trim()
+            .replace(/^\{|\}$/g, '')
+            .split(':')[0];
+        this.applyToBox(box.id, { code: { ...box.code, field } });
+        this.statusText = 'Code reads ' + field;
     }
 
     // ---- Shape box -------------------------------------------------------
