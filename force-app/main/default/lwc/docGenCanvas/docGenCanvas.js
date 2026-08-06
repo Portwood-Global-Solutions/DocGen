@@ -971,6 +971,79 @@ export default class DocGenCanvas extends LightningElement {
         return { size: 11, color: '#1a1a1a', bold: true, align: 'left', ...(t.headerText || {}) };
     }
 
+    // ---- Nested (grandchild) rows ---------------------------------------
+    /** LWC compiles a literal {…} in markup as a binding, so example tags are getters. */
+    get columnTagPlaceholder() {
+        return '{Name}';
+    }
+
+    get selSubRel() {
+        return ((this.selectedBox || {}).table || {}).subRelationship || '';
+    }
+
+    get selSubColumns() {
+        const t = (this.selectedBox || {}).table || {};
+        return (t.subColumns || []).map((c, i) => ({ ...c, idx: i, num: i + 1 }));
+    }
+
+    get hasSubRel() {
+        return !!this.selSubRel;
+    }
+
+    get selSubText() {
+        const t = (this.selectedBox || {}).table || {};
+        return { size: 10, color: '#41546b', bold: false, align: 'left', ...(t.subText || {}) };
+    }
+
+    get selSubFill() {
+        return ((this.selectedBox || {}).table || {}).subFill || '#f7f9fc';
+    }
+
+    get selSubIndent() {
+        const t = (this.selectedBox || {}).table || {};
+        return t.subIndent == null ? 12 : t.subIndent;
+    }
+
+    handleSubRelChange(event) {
+        const rel = (event.target.value || '').trim();
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        const patch = { subRelationship: rel };
+        // Seed one column the moment a relationship is named. A relationship with no
+        // columns emits nothing at all, so the setting would look like it did not take.
+        if (rel && !(box.table.subColumns || []).length) {
+            patch.subColumns = [{ label: 'Column 1', tag: '', width: '' }];
+        }
+        this._patchTable(patch);
+    }
+
+    handleSubColumnChange(event) {
+        const idx = parseInt(event.currentTarget.dataset.idx, 10);
+        const key = event.currentTarget.dataset.key;
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        const subColumns = (box.table.subColumns || []).map((c, i) =>
+            i === idx ? { ...c, [key]: event.target.value } : c
+        );
+        this._patchTable({ subColumns });
+    }
+
+    handleAddSubColumn() {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        const cur = box.table.subColumns || [];
+        this._patchTable({
+            subColumns: [...cur, { label: 'Column ' + (cur.length + 1), tag: '', width: '' }]
+        });
+    }
+
+    handleRemoveSubColumn(event) {
+        const idx = parseInt(event.currentTarget.dataset.idx, 10);
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        this._patchTable({ subColumns: (box.table.subColumns || []).filter((c, i) => i !== idx) });
+    }
+
     get selTotalsText() {
         const t = (this.selectedBox || {}).table || {};
         return { size: 11, color: '#1a1a1a', bold: true, align: 'left', ...(t.totalsText || {}) };
@@ -1013,7 +1086,13 @@ export default class DocGenCanvas extends LightningElement {
         const box = this.selectedBox;
         if (!box || box.kind !== 'table') return;
         const current =
-            which === 'header' ? this.selHeaderText : which === 'totals' ? this.selTotalsText : this.selRowText;
+            which === 'header'
+                ? this.selHeaderText
+                : which === 'totals'
+                  ? this.selTotalsText
+                  : which === 'sub'
+                    ? this.selSubText
+                    : this.selRowText;
         let value;
         if (key === 'bold') {
             value = !current.bold;
@@ -1023,7 +1102,14 @@ export default class DocGenCanvas extends LightningElement {
         } else {
             value = event.target.value;
         }
-        const field = which === 'header' ? 'headerText' : which === 'totals' ? 'totalsText' : 'rowText';
+        const field =
+            which === 'header'
+                ? 'headerText'
+                : which === 'totals'
+                  ? 'totalsText'
+                  : which === 'sub'
+                    ? 'subText'
+                    : 'rowText';
         this._patchTable({ [field]: { ...current, [key]: value } });
     }
 

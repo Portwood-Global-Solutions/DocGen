@@ -452,6 +452,93 @@
                         </div>
                     </template>
 
+                    <h4 class="dg-panel-sub">Nested rows</h4>
+                    <p class="dg-panel-note">
+                        A second list under each row — an opportunity's line items, say. Leave blank for none.
+                    </p>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selSubRel}
+                        placeholder="OpportunityLineItems"
+                        onchange={handleSubRelChange}
+                    />
+                    <template lwc:if={hasSubRel}>
+                        <template for:each={selSubColumns} for:item="sc">
+                            <div key={sc.idx} class="dg-col-block">
+                                <div class="dg-row-head">
+                                    <span class="dg-col-num">Cell {sc.num}</span>
+                                    <button
+                                        class="dg-sbtn dg-row-del"
+                                        data-idx={sc.idx}
+                                        onclick={handleRemoveSubColumn}
+                                        title="Remove this cell"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                                <input
+                                    type="text"
+                                    class="dg-prop-text"
+                                    value={sc.tag}
+                                    data-idx={sc.idx}
+                                    data-key="tag"
+                                    placeholder={columnTagPlaceholder}
+                                    onchange={handleSubColumnChange}
+                                />
+                            </div>
+                        </template>
+                        <button class="dg-panel-btn" onclick={handleAddSubColumn}>Add nested cell</button>
+                        <p class="dg-panel-note">
+                            Tags read from the nested record. Fewer cells than the table has columns is fine — the last
+                            one stretches to fill.
+                        </p>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Fill</label>
+                            <input
+                                type="color"
+                                class="dg-prop-color"
+                                value={selSubFill}
+                                data-key="subFill"
+                                onchange={handleTableStyleChange}
+                            />
+                            <label class="dg-prop-label">Text</label>
+                            <input
+                                type="color"
+                                class="dg-prop-color"
+                                value={selSubText.color}
+                                data-which="sub"
+                                data-key="color"
+                                onchange={handleRowTextChange}
+                            />
+                        </div>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Size</label>
+                            <input
+                                type="number"
+                                class="dg-prop-num"
+                                min="5"
+                                max="72"
+                                step="0.5"
+                                value={selSubText.size}
+                                data-which="sub"
+                                data-key="size"
+                                onchange={handleRowTextChange}
+                            />
+                            <label class="dg-prop-label">Indent</label>
+                            <input
+                                type="number"
+                                class="dg-prop-num"
+                                min="0"
+                                max="72"
+                                step="2"
+                                value={selSubIndent}
+                                data-key="subIndent"
+                                onchange={handleTableStyleChange}
+                            />
+                        </div>
+                    </template>
+
                     <h4 class="dg-panel-sub">Extra rows</h4>
                     <p class="dg-panel-note">Literal rows, appended after the repeating ones.</p>
                     <template for:each={selTableRows} for:item="row">

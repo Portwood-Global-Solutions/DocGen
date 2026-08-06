@@ -223,6 +223,13 @@ export const DEFAULT_HEADER_TEXT = { size: 11, color: '#1a1a1a', bold: true, ali
  */
 export const DEFAULT_TOTALS_TEXT = { size: 11, color: '#1a1a1a', bold: true, align: 'left' };
 
+/**
+ * The NESTED row's typography and band. Separate from rowText because the point of a
+ * sub-row is that it reads as subordinate to the row above it — usually smaller, often
+ * on a tint, always indented.
+ */
+export const DEFAULT_SUB_TEXT = { size: 10, color: '#41546b', bold: false, align: 'left' };
+
 export const DEFAULT_TABLE_STYLE = {
     headerFill: '#eeeeee',
     headerBold: true,
@@ -232,7 +239,15 @@ export const DEFAULT_TABLE_STYLE = {
     headerText: { ...DEFAULT_HEADER_TEXT },
     rowText: { ...DEFAULT_ROW_TEXT },
     totalsFill: '#eeeeee',
-    totalsText: { ...DEFAULT_TOTALS_TEXT }
+    totalsText: { ...DEFAULT_TOTALS_TEXT },
+    // The GRANDCHILD loop, rendered once per parent row inside the parent's loop.
+    // Blank relationship = off, which is why this can be added to any existing table
+    // without changing what it already produces.
+    subRelationship: '',
+    subColumns: [],
+    subFill: '#f7f9fc',
+    subIndent: 12,
+    subText: { ...DEFAULT_SUB_TEXT }
 };
 
 /**
@@ -265,7 +280,12 @@ export function newTableBox(xIn, yIn, wIn) {
             columns: [
                 { label: 'Item', tag: '{Name}', width: '' },
                 { label: 'Amount', tag: '{Amount}', width: '' }
-            ]
+            ],
+            subRelationship: '',
+            subColumns: [],
+            subFill: '#f7f9fc',
+            subIndent: 12,
+            subText: { ...DEFAULT_SUB_TEXT }
         },
         x: round3(xIn),
         y: round3(yIn),
@@ -872,6 +892,45 @@ function totalsCell(t, tt, frame, value) {
     return '<td style="' + css + '">' + (value || '') + '</td>';
 }
 
+/**
+ * One nested row per grandchild record, wrapped in its own loop.
+ *
+ * The sub row carries its own columns, which are usually fewer than the parent's — a
+ * line item is a product, a quantity and a price under an opportunity's four columns.
+ * The last cell takes a colspan to fill the remainder so the grid stays square; without
+ * it the table develops a ragged right edge wherever the counts differ.
+ */
+function subLoopRow(t, parentColCount) {
+    const rel = String(t.subRelationship || '').trim();
+    const subs = t.subColumns || [];
+    if (!rel || !subs.length) {
+        return '';
+    }
+    const stx = { ...DEFAULT_SUB_TEXT, ...(t.subText || {}) };
+    const frame = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
+    const indent = t.subIndent == null ? 12 : t.subIndent;
+    const base =
+        frame +
+        ' font-size: ' +
+        stx.size +
+        'pt; color: ' +
+        stx.color +
+        '; text-align: ' +
+        stx.align +
+        ';' +
+        (stx.bold ? ' font-weight: bold;' : ' font-weight: normal;') +
+        (t.subFill ? ' background: ' + t.subFill + ';' : '');
+    const span = Math.max(1, parentColCount - subs.length + 1);
+    const cells = subs
+        .map((c, i) => {
+            const pad = i === 0 ? ' padding-left: ' + (t.cellPadding + indent) + 'pt;' : '';
+            const colspan = i === subs.length - 1 && span > 1 ? ' colspan="' + span + '"' : '';
+            return '<td' + colspan + ' style="' + base + pad + '">' + (c.tag || '') + '</td>';
+        })
+        .join('');
+    return '{#' + rel + '}<tr data-dg-row="subloop" data-dg-subrel="' + esc(rel) + '">' + cells + '</tr>{/' + rel + '}';
+}
+
 function tableToHtml(box) {
     const t = box.table || {};
     const cols = t.columns || [];
@@ -912,9 +971,13 @@ function tableToHtml(box) {
     // literal row AND a fresh totals row was appended on the next save. Rows
     // multiplied every time the template was opened.
     const loopRow = '<tr data-dg-row="loop">' + cols.map((c) => cell(c.tag)).join('') + '</tr>';
+    const subRow = subLoopRow(t, cols.length);
     out += '<tbody>';
     if (t.relationship) {
-        out += '{#' + t.relationship + '}' + loopRow + '{/' + t.relationship + '}';
+        // The sub loop lives INSIDE the parent loop, after the parent's row, so each
+        // parent record is followed by its own children. Outside it, the grandchildren
+        // would all pile up once at the end under whichever parent happened to be last.
+        out += '{#' + t.relationship + '}' + loopRow + subRow + '{/' + t.relationship + '}';
     } else if (!(t.rows || []).length) {
         // No loop and no literal rows — keep one row so the table is not just a header.
         out += loopRow;
@@ -968,8 +1031,38 @@ export function tablePreviewHtml(box) {
     // The repeating body. Two sample rows when bound to a relationship, so it reads as
     // a list rather than a single row.
     const sampleRows = t.relationship ? 2 : (t.rows || []).length ? 0 : 1;
+    const subRel = (t.subRelationship || '').trim();
+    const subs = t.subColumns || [];
+    const stx = { ...DEFAULT_SUB_TEXT, ...(t.subText || {}) };
+    const indent = t.subIndent == null ? 12 : t.subIndent;
+    const subSpan = Math.max(1, cols.length - subs.length + 1);
     for (let i = 0; i < sampleRows; i++) {
         out += '<tr>' + cols.map((c) => '<td style="' + cellCss + '">' + esc(c.tag || '') + '</td>').join('') + '</tr>';
+        if (subRel && subs.length) {
+            // Drawn under EVERY sample parent row, because that is where it prints —
+            // showing it once at the bottom would misrepresent the nesting.
+            const scss =
+                frame +
+                ' font-size: ' +
+                stx.size +
+                'pt; color: ' +
+                stx.color +
+                '; text-align: ' +
+                stx.align +
+                ';' +
+                (stx.bold ? ' font-weight: bold;' : ' font-weight: normal;') +
+                (t.subFill ? ' background: ' + t.subFill + ';' : '');
+            out +=
+                '<tr>' +
+                subs
+                    .map((c, j) => {
+                        const pad = j === 0 ? ' padding-left: ' + (t.cellPadding + indent) + 'pt;' : '';
+                        const cs = j === subs.length - 1 && subSpan > 1 ? ' colspan="' + subSpan + '"' : '';
+                        return '<td' + cs + ' style="' + scss + pad + '">' + esc(c.tag || '') + '</td>';
+                    })
+                    .join('') +
+                '</tr>';
+        }
     }
     if (t.relationship) {
         out +=
@@ -1494,7 +1587,11 @@ function readTable(wrapper, tableEl) {
     // cells), so a two-column table with one extra row and a totals row came back with
     // six columns, and the count multiplied again on every reload. That is the "random
     // columns" bug: a table that grew wider each time it was opened.
-    const loopRow = tableEl.querySelector('tbody tr[data-dg-row="loop"]') || tableEl.querySelector('tbody tr');
+    // Never the SUB row: it carries the grandchild's columns, which are usually fewer
+    // than the parent's, so falling back to it would shrink the table's column count.
+    const loopRow =
+        tableEl.querySelector('tbody tr[data-dg-row="loop"]') ||
+        tableEl.querySelector('tbody tr:not([data-dg-row="subloop"])');
     const tds = loopRow ? [...loopRow.querySelectorAll('td')] : [];
     // The loop marker lives as a text node inside <tbody>, around the <tr>.
     // Read the loop marker from the WRAPPER, not from <tbody>.
@@ -1529,6 +1626,25 @@ function readTable(wrapper, tableEl) {
         }
         const tds2 = [...tr.querySelectorAll('td')];
         const cells = tds2.map((td) => (td.textContent || '').trim());
+        if (role === 'subloop') {
+            // The relationship rides on the row as an attribute. The {#Rel} tags around
+            // it are bare text nodes in the tbody, and recovering a name from those
+            // means re-parsing markup the browser has already reshaped.
+            t.subRelationship = tr.getAttribute('data-dg-subrel') || '';
+            t.subColumns = cells.map((v, i) => ({ label: 'Column ' + (i + 1), tag: v, width: '' }));
+            const scs = tds2[0] ? tds2[0].getAttribute('style') || '' : '';
+            if (scs) {
+                t.subFill = readCss(scs, 'background') || t.subFill;
+                t.subText = {
+                    ...DEFAULT_SUB_TEXT,
+                    size: parseFloat(readCss(scs, 'font-size')) || DEFAULT_SUB_TEXT.size,
+                    color: readCss(scs, 'color') || DEFAULT_SUB_TEXT.color,
+                    align: readCss(scs, 'text-align') || DEFAULT_SUB_TEXT.align,
+                    bold: /font-weight:\s*bold/.test(scs)
+                };
+            }
+            continue;
+        }
         if (role === 'totals') {
             t.totals = { enabled: true, cells };
             // Recover the row's own styling, or reopening the template would silently
@@ -1740,6 +1856,14 @@ export function collectUsedFields(doc) {
                 const rel = t.relationship || '';
                 for (const c of t.columns || []) {
                     collectFromText(c.tag, out, rel);
+                }
+                // Grandchild columns belong to rel.subRel, so the derived query nests
+                // the subquery rather than asking the account for line items.
+                const subRel = (t.subRelationship || '').trim();
+                if (subRel && rel) {
+                    for (const c of t.subColumns || []) {
+                        collectFromText(c.tag, out, rel + '.' + subRel);
+                    }
                 }
                 for (const r of t.rows || []) {
                     for (const cell of r) collectFromText(cell, out, rel);

@@ -123,6 +123,23 @@ condBox.html = '{#IF Amount > 100}{Rating}{/IF}';
 qDoc.artboards[0].boxes.push(condBox);
 const derived = m.buildQueryConfig(qDoc);
 
+// --- nested table rows (grandchildren) -------------------------------------
+const nestDoc = m.blankDocument();
+const nestTable = m.newTableBox(0.5, 2, 7);
+nestTable.table.relationship = 'Opportunities';
+nestTable.table.columns = [
+    { label: 'Opportunity', tag: '{Name}', width: '' },
+    { label: 'Stage', tag: '{StageName}', width: '' },
+    { label: 'Amount', tag: '{Amount}', width: '' }
+];
+nestTable.table.subRelationship = 'OpportunityLineItems';
+nestTable.table.subColumns = [
+    { label: 'Product', tag: '{Name}', width: '' },
+    { label: 'Qty', tag: '{Quantity}', width: '' }
+];
+nestDoc.artboards[0].boxes.push(nestTable);
+const nestHtml = m.serialize(nestDoc, geo);
+
 const checks = [
     // 2.5in authored is the OUTER width. The default 2pt padding sits inside it, so the
     // emitted content width is 2.5 - 2x2pt = 2.444in and the box still measures 2.5in
@@ -252,6 +269,30 @@ const checks = [
     // {#IF …} opens a block, not a child collection. Treating it as one filed the
     // fields inside under a relationship that does not exist.
     ['a conditional does not become a relationship', derived.includes('Rating') && !derived.includes('FROM IF')],
+
+    // The sub loop must sit INSIDE the parent loop. Outside it, every grandchild piles
+    // up once at the end under whichever parent happened to be last.
+    [
+        'the nested loop sits inside the parent loop',
+        /\{#Opportunities\}[\s\S]*\{#OpportunityLineItems\}[\s\S]*\{\/OpportunityLineItems\}[\s\S]*\{\/Opportunities\}/.test(
+            nestHtml
+        )
+    ],
+    // Fewer sub columns than the table has: the last cell stretches, or the grid goes
+    // ragged wherever the counts differ.
+    [
+        'a short nested row spans the remaining columns',
+        nestHtml.includes('colspan="3"') === false && nestHtml.includes('colspan="2"')
+    ],
+    ['the nested relationship round-trips as an attribute', nestHtml.includes('data-dg-subrel="OpportunityLineItems"')],
+    [
+        'grandchild fields nest in the derived query',
+        m
+            .buildQueryConfig(nestDoc)
+            .includes(
+                '(SELECT Name, StageName, Amount, (SELECT Name, Quantity FROM OpportunityLineItems) FROM Opportunities)'
+            )
+    ],
 
     ['a custom size emits two lengths', /@page \{ size: 5.5in 8.5in;/.test(customHtml)],
     // Zero margins are what make the canvas and the page share an origin.
