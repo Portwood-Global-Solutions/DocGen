@@ -14,6 +14,7 @@ import {
     STARTERS,
     extractQueryShape,
     buildStarterHtml,
+    buildCanvasStarter,
     buildAiPrompt,
     prettyPrintHtml,
     scopeHtmlForInlinePreview,
@@ -4833,7 +4834,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      */
     async _applyStarterBody(templateId, starterKey, shape, logoTag) {
         try {
-            let html = buildStarterHtml(starterKey, shape);
+            // A Canvas template gets a CANVAS-native starter — boxes already placed,
+            // each one draggable and editable with the tool that owns it. Running the
+            // HTML starter through the importer instead would be lossless on content
+            // but would land as a couple of large blocks: a page of prose is one text
+            // box, and an authored table stays markup because reshaping an arbitrary
+            // table into the table model was measured to drop merge tags. Right for
+            // someone else's document; wrong for a starting point.
+            const wantsCanvas = this.newTemplateType === 'Canvas';
+            let html = wantsCanvas ? buildCanvasStarter(starterKey, shape) : buildStarterHtml(starterKey, shape);
             // Starter bodies carry SIZED {%asset:logo:Nx} slots (144x header
             // logos, 120x on the agreement); an existing asset picked in the
             // wizard swaps its own merge tag in, inheriting the slot's size

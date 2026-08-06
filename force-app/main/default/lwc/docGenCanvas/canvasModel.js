@@ -1983,7 +1983,7 @@ export function deserialize(html) {
  * Returns { doc, page, report } — report lists what could not be carried over, because
  * a conversion that silently drops a running header is worse than one that refuses.
  */
-export function htmlToCanvas(html) {
+export function htmlToCanvas(html, measure) {
     const report = { dropped: [], notes: [], boxes: 0 };
     if (!html || typeof document === 'undefined') {
         return { doc: blankDocument(), page: null, report };
@@ -2071,6 +2071,7 @@ export function htmlToCanvas(html) {
         box.style = importedStyle();
         box.text = '';
         box.html = html;
+        box.h = measuredHeight(measure, html, geo.w, 0.35);
         board.boxes.push(box);
         cursorIn = round3(box.y + box.h);
     };
@@ -2082,7 +2083,7 @@ export function htmlToCanvas(html) {
             continue;
         }
         flushRun();
-        const box = blockToBox(node, geo, cursorIn, report);
+        const box = blockToBox(node, geo, cursorIn, report, measure);
         if (!box) {
             continue;
         }
@@ -2223,6 +2224,11 @@ function isGroupableFlowNode(node) {
     if (tag === 'TABLE') {
         return null;
     }
+    // A block CONTAINING a table also needs its own box, or the table is buried inside
+    // a prose run and never becomes editable.
+    if (node.querySelector && node.querySelector('table')) {
+        return null;
+    }
     const style = node.getAttribute('style') || '';
     if (/position\s*:\s*(absolute|fixed)/i.test(style)) {
         return null;
@@ -2231,7 +2237,32 @@ function isGroupableFlowNode(node) {
     return sanitizeInline(node.outerHTML);
 }
 
-function blockToBox(node, geo, cursorIn, report) {
+/**
+ * The real on-screen height of a block, when the caller can measure one.
+ *
+ * Heights matter ONLY to the editor: a flow box never emits a height (see boxToHtml),
+ * so this cannot move the PDF. What it does fix is the canvas — every imported box was
+ * 0.35in tall regardless of content, so a page of prose and a twenty-row table were
+ * drawn the same size, stacked on top of each other, and the import looked broken even
+ * though it rendered correctly.
+ *
+ * Measuring POSITIONS in the browser would be a different and much worse idea, because
+ * the browser and the PDF engine lay out differently. A height used only to draw the
+ * editor carries none of that risk.
+ */
+function measuredHeight(measure, html, widthIn, fallback) {
+    if (typeof measure !== 'function') {
+        return fallback;
+    }
+    try {
+        const h = measure(html, widthIn);
+        return h && h > 0.05 ? round3(h) : fallback;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+function blockToBox(node, geo, cursorIn, report, measure) {
     if (node.nodeType === 3) {
         const text = (node.textContent || '').trim();
         if (!text) {
@@ -2273,6 +2304,7 @@ function blockToBox(node, geo, cursorIn, report) {
         // eslint-disable-next-line @lwc/lwc/no-inner-html
         box.html = sanitizeInline(node.innerHTML);
         box.text = '';
+        box.h = measuredHeight(measure, box.html, box.w, box.h);
         return isEmptyBlockHtml(box.html) ? null : box;
     }
 
@@ -2283,6 +2315,7 @@ function blockToBox(node, geo, cursorIn, report) {
         box.style = { ...DEFAULT_STYLE, padding: 0, borderWidth: 0 };
         box.html = sanitizeInline(node.outerHTML);
         box.text = '';
+        box.h = measuredHeight(measure, box.html, box.w, box.h);
         return isEmptyBlockHtml(box.html) ? null : box;
     }
 
@@ -2291,12 +2324,18 @@ function blockToBox(node, geo, cursorIn, report) {
     box.style = importedStyle();
     box.text = '';
     if (tag === 'TABLE') {
+        // Carried as MARKUP, deliberately. Reshaping an authored table into the table
+        // model was tried and measured: it dropped merge tags on two of the five
+        // starters, because an arbitrary table does not reliably decompose into the
+        // header/loop/extras/totals shape the tool describes. Rendering exactly as
+        // before and saying the tool cannot edit it is the honest trade — a converter
+        // that quietly loses a {SUM:} is worse than one that admits a limit.
         report.notes.push(
             'A table was carried across as markup — it renders as before, but the table tool cannot edit it.'
         );
-        box.h = 1;
         // eslint-disable-next-line @lwc/lwc/no-inner-html
         box.html = sanitizeInline(node.outerHTML);
+        box.h = measuredHeight(measure, box.html, box.w, 1);
         return box;
     }
     // eslint-disable-next-line @lwc/lwc/no-inner-html
