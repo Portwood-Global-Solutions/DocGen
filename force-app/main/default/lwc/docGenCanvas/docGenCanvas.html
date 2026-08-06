@@ -284,6 +284,18 @@
                         />
                     </div>
 
+                    <lightning-combobox
+                        label="Lines"
+                        variant="label-stacked"
+                        value={selGridStyle}
+                        options={gridStyleOptions}
+                        data-key="gridStyle"
+                        onchange={handleTableStyleChange}
+                    ></lightning-combobox>
+                    <p class="dg-panel-note">
+                        Rules under rows reads as a document; a full grid reads as a spreadsheet.
+                    </p>
+
                     <h4 class="dg-panel-sub">Header text</h4>
                     <div class="dg-prop-row">
                         <label class="dg-prop-label">Size</label>

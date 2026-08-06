@@ -211,7 +211,7 @@ export function newTextBox(xIn, yIn, wIn, hIn) {
  * choose from anyway.
  */
 export const DEFAULT_ROW_TEXT = { size: 11, color: '#1a1a1a', bold: false, align: 'left' };
-export const DEFAULT_HEADER_TEXT = { size: 11, color: '#1a1a1a', bold: true, align: 'left' };
+export const DEFAULT_HEADER_TEXT = { size: 10.5, color: '#ffffff', bold: true, align: 'left' };
 
 /**
  * The totals row carries its OWN fill and typography.
@@ -221,7 +221,7 @@ export const DEFAULT_HEADER_TEXT = { size: 11, color: '#1a1a1a', bold: true, ali
  * ends of the table, and an author wanting a dark total band had to accept a dark
  * header too.
  */
-export const DEFAULT_TOTALS_TEXT = { size: 11, color: '#1a1a1a', bold: true, align: 'left' };
+export const DEFAULT_TOTALS_TEXT = { size: 11, color: '#1f3a5f', bold: true, align: 'left' };
 
 /**
  * The NESTED row's typography and band. Separate from rowText because the point of a
@@ -230,15 +230,31 @@ export const DEFAULT_TOTALS_TEXT = { size: 11, color: '#1a1a1a', bold: true, ali
  */
 export const DEFAULT_SUB_TEXT = { size: 10, color: '#41546b', bold: false, align: 'left' };
 
+/**
+ * How a table is ruled. Flying Saucer honours per-side borders (v2.8 added the
+ * per-side translation), so "horizontal rules only" is a real option rather than an
+ * approximation — and it is the one that looks like a designed document instead of a
+ * spreadsheet. Vertical lines between every column are what make a table look busy.
+ */
+export const GRID_STYLES = [
+    { label: 'Rules under rows', value: 'rows' },
+    { label: 'Full grid', value: 'grid' },
+    { label: 'No lines', value: 'none' }
+];
+
 export const DEFAULT_TABLE_STYLE = {
-    headerFill: '#eeeeee',
+    // A banded header with white type reads as deliberate; grey-on-grey reads as a
+    // default nobody chose.
+    headerFill: '#1f3a5f',
     headerBold: true,
-    gridColor: '#999999',
-    gridWidth: 0.5,
-    cellPadding: 3,
+    gridStyle: 'rows',
+    gridColor: '#d5dde6',
+    gridWidth: 0.75,
+    // Room to breathe. 3pt crams the text against the rules.
+    cellPadding: 6,
     headerText: { ...DEFAULT_HEADER_TEXT },
     rowText: { ...DEFAULT_ROW_TEXT },
-    totalsFill: '#eeeeee',
+    totalsFill: '#eef3f9',
     totalsText: { ...DEFAULT_TOTALS_TEXT },
     // The GRANDCHILD loop, rendered once per parent row inside the parent's loop.
     // Blank relationship = off, which is why this can be added to any existing table
@@ -990,11 +1006,41 @@ function esc(v) {
  * expansion looks for, and the same pattern the reference templates use. The header
  * lives in <thead> so it repeats on every continuation page.
  */
+/**
+ * The rules for one cell, per the table's grid style.
+ *
+ * `rows` draws a line UNDER each row and nothing between columns — the difference
+ * between a document and a spreadsheet. `grid` is the old four-sided box. `none`
+ * leaves the header band and the whitespace to do the work.
+ */
+function gridCss(t, where) {
+    const w = t.gridWidth == null ? 0.75 : t.gridWidth;
+    const color = t.gridColor || '#d5dde6';
+    const pad = 'padding: ' + (t.cellPadding == null ? 6 : t.cellPadding) + 'pt;';
+    const style = t.gridStyle || 'rows';
+    if (style === 'grid') {
+        return 'border: ' + w + 'pt solid ' + color + '; ' + pad;
+    }
+    if (style === 'none') {
+        return 'border: 0; ' + pad;
+    }
+    // Header carries the heavier rule beneath it; body rows a hairline.
+    return where === 'head'
+        ? 'border: 0; border-bottom: ' + Math.max(w, 1) + 'pt solid ' + color + '; ' + pad
+        : 'border: 0; border-bottom: ' + w + 'pt solid ' + color + '; ' + pad;
+}
+
 /** One totals cell, styled from the table's own totals settings. */
 function totalsCell(t, tt, frame, value) {
     const fill = t.totalsFill ? ' background: ' + t.totalsFill + ';' : '';
+    // A total is separated from the rows above it, which is what a reader looks for.
+    const rule =
+        (t.gridStyle || 'rows') === 'grid'
+            ? ''
+            : ' border-top: ' + Math.max(t.gridWidth == null ? 0.75 : t.gridWidth, 1) + 'pt solid #1f3a5f;';
     const css =
         frame +
+        rule +
         ' font-size: ' +
         tt.size +
         'pt; color: ' +
@@ -1066,11 +1112,14 @@ function tableToHtml(box) {
         x.align +
         ';' +
         (x.bold ? ' font-weight: bold;' : ' font-weight: normal;');
-    const frame = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
+    const frame = gridCss(t, 'body');
     const cellCss = frame + typo(rt);
-    const headCss = frame + typo(ht);
+    const headCss = gridCss(t, 'head') + typo(ht);
     const tt = { ...DEFAULT_TOTALS_TEXT, ...(t.totalsText || {}) };
-    let out = '<table style="border-collapse: collapse; width: 100%; -fs-table-paginate: paginate;">';
+    let out =
+        '<table data-dg-grid="' +
+        (t.gridStyle || 'rows') +
+        '" style="border-collapse: collapse; width: 100%; -fs-table-paginate: paginate;">';
     if (t.showHeader) {
         out += '<thead style="display: table-header-group;"><tr>';
         for (const c of cols) {
@@ -1130,9 +1179,9 @@ export function tablePreviewHtml(box) {
         x.align +
         ';' +
         (x.bold ? ' font-weight: bold;' : ' font-weight: normal;');
-    const frame = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
+    const frame = gridCss(t, 'body');
     const cellCss = frame + typo(rt);
-    const headCss = frame + typo(ht);
+    const headCss = gridCss(t, 'head') + typo(ht);
     let out = '<table style="border-collapse: collapse; width: 100%;">';
     if (t.showHeader) {
         out += '<thead><tr>';
@@ -1833,6 +1882,7 @@ function readTable(wrapper, tableEl) {
         }
     }
 
+    t.gridStyle = tableEl.getAttribute('data-dg-grid') || 'rows';
     const firstCell = ths[0] || tds[0];
     if (firstCell) {
         const cs = firstCell.getAttribute('style') || '';

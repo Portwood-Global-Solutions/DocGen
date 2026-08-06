@@ -1900,30 +1900,104 @@ function cvFlow(y, w, h, inner, css, gap) {
  * row wrapped in {#Rel} inside <tbody>, and each row tagged with its role so a reload
  * cannot mistake a totals row for a literal one.
  */
+/**
+ * A styled table: banded header, rules under rows, no vertical lines, money on the
+ * right. A four-sided grey grid reads as a spreadsheet; this reads as a document, and
+ * it is most of what makes a starter look designed rather than defaulted.
+ *
+ * Columns whose name or tag suggests a number are right-aligned automatically — the
+ * single change that does most for how a table looks, and the one an author is least
+ * likely to think to make.
+ */
+const CV_INK = '#1f3a5f';
+const CV_RULE = '#d5dde6';
+
+function cvIsNumeric(c) {
+    return /amount|total|price|cost|qty|quantity|count|sum|rate|discount|tax|subtotal|fee|balance|revenue|units|hours/i.test(
+        (c.label || '') + ' ' + (c.tag || '')
+    );
+}
+
 function cvTable(cols, relationship, totals) {
-    const grid = 'border: 0.5pt solid #999999; padding: 3pt;';
-    const typo = ' font-family: sans-serif; font-size: 11pt; color: #1a1a1a; text-align: left;';
-    let out = '<table style="border-collapse: collapse; width: 100%; -fs-table-paginate: paginate;">';
+    const pad = 'padding: 6pt;';
+    const headCell =
+        'border: 0; border-bottom: 1pt solid ' +
+        CV_RULE +
+        '; ' +
+        pad +
+        ' font-family: sans-serif; font-size: 10.5pt; color: #ffffff; font-weight: bold; background: ' +
+        CV_INK +
+        ';';
+    const bodyCell =
+        'border: 0; border-bottom: 0.75pt solid ' +
+        CV_RULE +
+        '; ' +
+        pad +
+        ' font-family: sans-serif; font-size: 11pt; color: #1a1a1a; font-weight: normal;';
+    const totalCell =
+        'border: 0; border-top: 1pt solid ' +
+        CV_INK +
+        '; ' +
+        pad +
+        ' font-family: sans-serif; font-size: 11pt; color: ' +
+        CV_INK +
+        '; font-weight: bold; background: #eef3f9;';
+    const align = (c) => ' text-align: ' + (cvIsNumeric(c) ? 'right' : 'left') + ';';
+
+    let out =
+        '<table data-dg-grid="rows" style="border-collapse: collapse; width: 100%; -fs-table-paginate: paginate;">';
     out += '<thead style="display: table-header-group;"><tr>';
     for (const c of cols) {
-        out += '<th style="' + grid + typo + ' font-weight: bold; background: #eeeeee;">' + cvEsc(c.label) + '</th>';
+        out += '<th style="' + headCell + align(c) + '">' + cvEsc(c.label) + '</th>';
     }
     out += '</tr></thead><tbody>';
     const row =
         '<tr data-dg-row="loop">' +
-        cols.map((c) => '<td style="' + grid + typo + ' font-weight: normal;">' + c.tag + '</td>').join('') +
+        cols.map((c) => '<td style="' + bodyCell + align(c) + '">' + c.tag + '</td>').join('') +
         '</tr>';
     out += relationship ? '{#' + relationship + '}' + row + '{/' + relationship + '}' : row;
     if (totals && totals.length) {
         out +=
             '<tr data-dg-row="totals">' +
-            totals
-                .map(
-                    (v) =>
-                        '<td style="' + grid + typo + ' font-weight: bold; background: #eeeeee;">' + (v || '') + '</td>'
-                )
-                .join('') +
+            cols.map((c, i) => '<td style="' + totalCell + align(c) + '">' + (totals[i] || '') + '</td>').join('') +
             '</tr>';
+    }
+    return out + '</tbody></table>';
+}
+
+/**
+ * Field name on the left, value on the right.
+ *
+ * A details block laid out as one wide row gives six fields about an inch each on a
+ * 7in page, and real values wrap into a mess. Stacked pairs stay readable however long
+ * the values turn out to be.
+ */
+function cvPairTable(fields) {
+    const pad = 'padding: 5pt 6pt;';
+    const label =
+        'border: 0; border-bottom: 0.75pt solid ' +
+        CV_RULE +
+        '; ' +
+        pad +
+        ' width: 34%; font-family: sans-serif; font-size: 10.5pt; color: #5a6b7f; font-weight: bold;';
+    const value =
+        'border: 0; border-bottom: 0.75pt solid ' +
+        CV_RULE +
+        '; ' +
+        pad +
+        ' font-family: sans-serif; font-size: 11pt; color: #1a1a1a;';
+    let out = '<table data-dg-grid="rows" style="border-collapse: collapse; width: 100%;"><tbody>';
+    for (const f of fields) {
+        out +=
+            '<tr data-dg-row="extra"><td style="' +
+            label +
+            '">' +
+            cvEsc(humanizeField(f)) +
+            '</td><td style="' +
+            value +
+            '">{' +
+            f +
+            '}</td></tr>';
     }
     return out + '</tbody></table>';
 }
@@ -2013,19 +2087,7 @@ function buildCanvasReport(shape) {
             '<div data-dg-shape="hline" style="width: 100%; height: 0; border-top: 2pt solid #1f3a5f; font-size: 0; line-height: 0;"></div>'
         )
     );
-    boxes.push(
-        cvFlow(
-            0.75,
-            W,
-            1.2,
-            cvTable(
-                fields.map((f) => ({ label: humanizeField(f), tag: '{' + f + '}' })),
-                ''
-            ),
-            '',
-            0.75
-        )
-    );
+    boxes.push(cvFlow(0.75, W, 1.2, cvPairTable(fields), '', 0.75));
     if (child) {
         const cf = (child.fields || []).slice(0, 4);
         boxes.push(

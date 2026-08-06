@@ -25,6 +25,7 @@ import {
     pxToIn,
     FONT_CHOICES,
     DEFAULT_STYLE,
+    GRID_STYLES,
     newTableBox,
     tablePreviewHtml,
     snapBox,
@@ -950,6 +951,14 @@ export default class DocGenCanvas extends LightningElement {
         if (!box || box.kind !== 'table') return;
         const columns = box.table.columns.map((c, i) => (i === idx ? { ...c, [key]: event.target.value } : c));
         this._patchTable({ columns });
+    }
+
+    get gridStyleOptions() {
+        return GRID_STYLES;
+    }
+
+    get selGridStyle() {
+        return ((this.selectedBox || {}).table || {}).gridStyle || 'rows';
     }
 
     get selTableHeaderFill() {
