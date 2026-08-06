@@ -84,6 +84,33 @@
                 </template>
 
                 <template lwc:if={canInsertLink}>
+                    <h4 class="dg-panel-sub">Table in this box</h4>
+                    <div class="dg-row">
+                        <label class="dg-prop-label">Rows</label>
+                        <input
+                            type="number"
+                            class="dg-panel-input dg-panel-input_sm"
+                            min="1"
+                            max="20"
+                            value={tableRows}
+                            onchange={handleTableRowsChange}
+                        />
+                        <label class="dg-prop-label">Cols</label>
+                        <input
+                            type="number"
+                            class="dg-panel-input dg-panel-input_sm"
+                            min="1"
+                            max="10"
+                            value={tableCols}
+                            onchange={handleTableColsChange}
+                        />
+                    </div>
+                    <button class="dg-panel-btn" onclick={handleInsertTable}>Add table</button>
+                    <p class="dg-panel-note">
+                        A fixed table inside this text. For a list that repeats over records, use the <b>Table</b> tool
+                        instead — it binds a relationship and totals.
+                    </p>
+
                     <h4 class="dg-panel-sub">Link</h4>
                     <input
                         class="dg-panel-input"

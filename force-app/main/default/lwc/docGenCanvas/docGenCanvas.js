@@ -2820,6 +2820,58 @@ export default class DocGenCanvas extends LightningElement {
         this.statusText = 'Link added';
     }
 
+    // ---- Table inside a text box -----------------------------------------
+    //
+    // The Table TOOL is the right answer for a data table — it binds a relationship,
+    // loops, totals and stays editable. This is for the other case: a small fixed table
+    // inside a paragraph of text, where a whole box would be overkill.
+    //
+    // Built here rather than left to the editor's toolbar because that toolbar belongs
+    // to lightning-input-rich-text and what it offers is not ours to change. `table` is
+    // already in the formats we pass, so nothing on our side is holding it back.
+    @track tableRows = 2;
+    @track tableCols = 2;
+
+    handleTableRowsChange(event) {
+        const v = parseInt(event.target.value, 10);
+        if (!isNaN(v) && v > 0) this.tableRows = Math.min(20, v);
+    }
+
+    handleTableColsChange(event) {
+        const v = parseInt(event.target.value, 10);
+        if (!isNaN(v) && v > 0) this.tableCols = Math.min(10, v);
+    }
+
+    /** Matches the canvas table look: banded header, rules under rows, no vertical lines. */
+    handleInsertTable() {
+        const box = this.selectedBox;
+        if (!box) {
+            return;
+        }
+        const rows = this.tableRows;
+        const cols = this.tableCols;
+        const head =
+            'border: 0; border-bottom: 1pt solid #d5dde6; padding: 6pt; ' +
+            'font-size: 10.5pt; color: #ffffff; font-weight: bold; background: #1f3a5f;';
+        const cell = 'border: 0; border-bottom: 0.75pt solid #d5dde6; padding: 6pt; font-size: 11pt;';
+        let html = '<table style="width: 100%; border-collapse: collapse;"><thead><tr>';
+        for (let c = 0; c < cols; c++) {
+            html += '<th style="' + head + '">Heading ' + (c + 1) + '</th>';
+        }
+        html += '</tr></thead><tbody>';
+        for (let r = 0; r < rows; r++) {
+            html += '<tr>';
+            for (let c = 0; c < cols; c++) {
+                html += '<td style="' + cell + '">&nbsp;</td>';
+            }
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        const current = box.html != null ? box.html : box.text || '';
+        this.applyToBox(box.id, { html: sanitizeInline(current + html) });
+        this.statusText = rows + 'x' + cols + ' table added';
+    }
+
     handleSourceChange(event) {
         const box = this.selectedBox;
         if (!box) return;
