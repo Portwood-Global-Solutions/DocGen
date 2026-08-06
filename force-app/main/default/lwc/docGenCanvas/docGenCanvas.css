@@ -494,3 +494,22 @@ textarea.dg-cbox-text {
     width: 230px;
     vertical-align: middle;
 }
+
+/* The query builder is too wide for a 260px panel, so it takes over the stage. */
+.dg-builder-wrap {
+    padding: 10px;
+    background: var(--slds-g-color-surface-1, #fff);
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    max-height: 70vh;
+    overflow: auto;
+}
+
+.dg-builder-bar {
+    font-size: 0.78rem;
+    margin-bottom: 8px;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-builder-bar button {
+    float: right;
+}

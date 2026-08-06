@@ -289,6 +289,43 @@ export default class DocGenCanvas extends LightningElement {
         return (t.columns || []).map((c, i) => ({ idx: i, label: c.label, value: cells[i] || '' }));
     }
 
+    get selHeaderText() {
+        const t = (this.selectedBox || {}).table || {};
+        return { size: 11, color: '#1a1a1a', bold: true, align: 'left', ...(t.headerText || {}) };
+    }
+
+    get selRowText() {
+        const t = (this.selectedBox || {}).table || {};
+        return { size: 11, color: '#1a1a1a', bold: false, align: 'left', ...(t.rowText || {}) };
+    }
+
+    get headerBoldClass() {
+        return this.selHeaderText.bold ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+
+    get rowBoldClass() {
+        return this.selRowText.bold ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+
+    /** Header and body rows are styled separately — see DEFAULT_HEADER_TEXT. */
+    handleRowTextChange(event) {
+        const which = event.currentTarget.dataset.which;
+        const key = event.currentTarget.dataset.key;
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        const current = which === 'header' ? this.selHeaderText : this.selRowText;
+        let value;
+        if (key === 'bold') {
+            value = !current.bold;
+        } else if (key === 'size') {
+            value = parseFloat(event.target.value);
+            if (isNaN(value)) return;
+        } else {
+            value = event.target.value;
+        }
+        this._patchTable({ [which === 'header' ? 'headerText' : 'rowText']: { ...current, [key]: value } });
+    }
+
     handleAddColumn() {
         const box = this.selectedBox;
         if (!box || box.kind !== 'table') return;
@@ -493,6 +530,39 @@ export default class DocGenCanvas extends LightningElement {
 
     handleQueryEdit(event) {
         this.queryDraft = event.target.value;
+    }
+
+    @track showQueryBuilder = false;
+
+    /**
+     * Opens the existing query builder rather than a second implementation.
+     *
+     * It already knows how to walk relationships, validate fields and preview against
+     * a record; rebuilding a cut-down version in a 260px panel would be a worse tool
+     * AND a second place for the V1/V3 config formats to diverge, which CLAUDE.md
+     * calls out as a standing hazard.
+     */
+    handleOpenQueryBuilder() {
+        this.showQueryBuilder = true;
+    }
+
+    /**
+     * Done SAVES. Building a query and then having to find a separate Save button is
+     * how people end up with a canvas that references fields the template never
+     * queries — the exact failure this was meant to remove.
+     */
+    async handleCloseQueryBuilder() {
+        this.showQueryBuilder = false;
+        if (this.queryDraft != null && this.queryDraft !== (this.queryConfig || '')) {
+            await this.handleSaveQuery();
+        }
+    }
+
+    handleBuilderConfigChange(event) {
+        const cfg = event.detail && (event.detail.queryConfig || event.detail.config || event.detail.value);
+        if (cfg != null) {
+            this.queryDraft = cfg;
+        }
     }
 
     handleUseGenerated() {

@@ -111,12 +111,25 @@ export function newTextBox(xIn, yIn, wIn, hIn) {
     };
 }
 
+/**
+ * Header and body rows carry their OWN typography.
+ *
+ * One setting for the whole table meant a heading could not be bigger than its data,
+ * which is the first thing anyone reaches for. Font family stays box-level — mixing
+ * families inside one table is almost always a mistake, and there are only three to
+ * choose from anyway.
+ */
+export const DEFAULT_ROW_TEXT = { size: 11, color: '#1a1a1a', bold: false, align: 'left' };
+export const DEFAULT_HEADER_TEXT = { size: 11, color: '#1a1a1a', bold: true, align: 'left' };
+
 export const DEFAULT_TABLE_STYLE = {
     headerFill: '#eeeeee',
     headerBold: true,
     gridColor: '#999999',
     gridWidth: 0.5,
-    cellPadding: 3
+    cellPadding: 3,
+    headerText: { ...DEFAULT_HEADER_TEXT },
+    rowText: { ...DEFAULT_ROW_TEXT }
 };
 
 /**
@@ -379,28 +392,31 @@ function tableToHtml(box) {
     const t = box.table || {};
     const cols = t.columns || [];
     const st = { ...DEFAULT_STYLE, ...(box.style || {}) };
-    // Typography goes onto the CELLS, not left to inherit. Flying Saucer gives
-    // tables their own defaults, so a cell inheriting nothing renders at the
-    // engine's font no matter what the box says — and the canvas would stop
-    // matching the PDF, which is the one promise this editor makes.
-    const typo = ' font-family: ' + st.font + '; font-size: ' + st.size + 'pt; color: ' + st.color + ';';
-    const cellCss = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;' + typo;
+    const ht = { ...DEFAULT_HEADER_TEXT, ...(t.headerText || {}) };
+    const rt = { ...DEFAULT_ROW_TEXT, ...(t.rowText || {}) };
+    // Typography goes onto the CELLS, not left to inherit. Flying Saucer gives tables
+    // their own defaults, so a cell inheriting nothing renders at the engine's font no
+    // matter what the box says — and the canvas would stop matching the PDF.
+    const typo = (x) =>
+        ' font-family: ' +
+        st.font +
+        '; font-size: ' +
+        x.size +
+        'pt; color: ' +
+        x.color +
+        '; text-align: ' +
+        x.align +
+        ';' +
+        (x.bold ? ' font-weight: bold;' : ' font-weight: normal;');
+    const frame = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
+    const cellCss = frame + typo(rt);
+    const headCss = frame + typo(ht);
     let out = '<table style="border-collapse: collapse; width: 100%; -fs-table-paginate: paginate;">';
     if (t.showHeader) {
         out += '<thead style="display: table-header-group;"><tr>';
         for (const c of cols) {
             const w = c.width ? ' width: ' + c.width + ';' : '';
-            out +=
-                '<th style="' +
-                cellCss +
-                w +
-                ' background: ' +
-                t.headerFill +
-                ';' +
-                (t.headerBold ? ' font-weight: bold;' : ' font-weight: normal;') +
-                ' text-align: left;">' +
-                esc(c.label) +
-                '</th>';
+            out += '<th style="' + headCss + w + ' background: ' + t.headerFill + ';">' + esc(c.label) + '</th>';
         }
         out += '</tr></thead>';
     }
@@ -451,23 +467,29 @@ function tableToHtml(box) {
 export function tablePreviewHtml(box) {
     const t = box.table || {};
     const cols = t.columns || [];
-    const cellCss = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
+    const st = { ...DEFAULT_STYLE, ...(box.style || {}) };
+    const ht = { ...DEFAULT_HEADER_TEXT, ...(t.headerText || {}) };
+    const rt = { ...DEFAULT_ROW_TEXT, ...(t.rowText || {}) };
+    const typo = (x) =>
+        ' font-family: ' +
+        st.font +
+        '; font-size: ' +
+        x.size +
+        'pt; color: ' +
+        x.color +
+        '; text-align: ' +
+        x.align +
+        ';' +
+        (x.bold ? ' font-weight: bold;' : ' font-weight: normal;');
+    const frame = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
+    const cellCss = frame + typo(rt);
+    const headCss = frame + typo(ht);
     let out = '<table style="border-collapse: collapse; width: 100%;">';
     if (t.showHeader) {
         out += '<thead><tr>';
         for (const c of cols) {
             const w = c.width ? ' width: ' + c.width + ';' : '';
-            out +=
-                '<th style="' +
-                cellCss +
-                w +
-                ' background: ' +
-                t.headerFill +
-                ';' +
-                (t.headerBold ? ' font-weight: bold;' : ' font-weight: normal;') +
-                ' text-align: left;">' +
-                esc(c.label) +
-                '</th>';
+            out += '<th style="' + headCss + w + ' background: ' + t.headerFill + ';">' + esc(c.label) + '</th>';
         }
         out += '</tr></thead>';
     }
