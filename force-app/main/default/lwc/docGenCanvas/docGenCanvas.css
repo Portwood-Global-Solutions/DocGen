@@ -10,7 +10,8 @@
 
 .dg-rail,
 .dg-panel,
-.dg-stage {
+.dg-stage,
+.dg-layers {
     display: table-cell;
     vertical-align: top;
 }
@@ -693,9 +694,13 @@ textarea.dg-cbox-text {
    A third column, because once boxes overlap the artboard alone cannot reach the
    one underneath — and a full-bleed background makes everything under it
    unreachable at once. */
+/* A real table-cell with a stated width. As a plain div it became an ANONYMOUS cell
+   in the table-layout:fixed shell, which threw the column widths out — the stage was
+   squeezed until the page itself was clipped, and dead space opened to the right.
+   Off by default so it costs nothing until it is wanted. */
 .dg-layers {
-    width: 190px;
-    flex: none;
+    width: 170px;
+    vertical-align: top;
     border-left: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
     background: var(--slds-g-color-surface-1, #fff);
     overflow-y: auto;
@@ -772,4 +777,15 @@ textarea.dg-cbox-text {
 
 .dg-page-dup:hover {
     text-decoration: underline;
+}
+
+.dg-layers-close {
+    float: right;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    padding: 0 2px;
 }

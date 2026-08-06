@@ -982,20 +982,28 @@
             </div>
         </div>
 
-        <!-- Layers. The way back to a box that something else is sitting on top of. -->
-        <div class="dg-layers">
-            <div class="dg-layers-head">Elements</div>
-            <template lwc:if={hasLayers}>
-                <template for:each={layerItems} for:item="l">
-                    <button key={l.id} class={l.cls} data-id={l.id} onclick={handleLayerClick} title={l.label}>
-                        <span class="dg-layer-kind">{l.kindLabel}</span>
-                        <span class="dg-layer-name">{l.label}</span>
+        <!-- Layers. The way back to a box that something else is sitting on top of.
+             Off by default: it is worth its width only when boxes overlap. -->
+        <template lwc:if={showLayers}>
+            <div class="dg-layers">
+                <div class="dg-layers-head">
+                    Elements
+                    <button class="dg-layers-close" onclick={handleToggleLayers} title="Hide the element list">
+                        &times;
                     </button>
+                </div>
+                <template lwc:if={hasLayers}>
+                    <template for:each={layerItems} for:item="l">
+                        <button key={l.id} class={l.cls} data-id={l.id} onclick={handleLayerClick} title={l.label}>
+                            <span class="dg-layer-kind">{l.kindLabel}</span>
+                            <span class="dg-layer-name">{l.label}</span>
+                        </button>
+                    </template>
                 </template>
-            </template>
-            <template lwc:else>
-                <p class="dg-layers-empty">Nothing placed yet.</p>
-            </template>
-        </div>
+                <template lwc:else>
+                    <p class="dg-layers-empty">Nothing placed yet.</p>
+                </template>
+            </div>
+        </template>
     </div>
 </template>

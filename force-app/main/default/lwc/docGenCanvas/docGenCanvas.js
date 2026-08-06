@@ -342,6 +342,12 @@ export default class DocGenCanvas extends LightningElement {
         return out.sort((a, c) => c.z - a.z || a.y - c.y);
     }
 
+    @track showLayers = false;
+
+    handleToggleLayers() {
+        this.showLayers = !this.showLayers;
+    }
+
     get hasLayers() {
         return this.layerItems.length > 0;
     }
@@ -735,6 +741,13 @@ export default class DocGenCanvas extends LightningElement {
                 d: 'M3 4h11v11H3zM10 16a5 5 0 1 0 10 0 5 5 0 1 0-10 0'
             },
             {
+                id: 'layers',
+                label: 'Elements',
+                title: 'List every element — reach one that is underneath another',
+                action: 'layers',
+                d: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5'
+            },
+            {
                 id: 'data',
                 label: 'Data',
                 title: 'Choose the fields this document uses',
@@ -766,6 +779,7 @@ export default class DocGenCanvas extends LightningElement {
         if (t.action === 'tool') return this.activeTool === t.id;
         if (t.action === 'data') return this.showData === true;
         if (t.action === 'pagesetup') return this.showPageSetup === true;
+        if (t.action === 'layers') return this.showLayers === true;
         return false;
     }
 
@@ -781,6 +795,10 @@ export default class DocGenCanvas extends LightningElement {
         }
         if (action === 'addpage') {
             this.handleAddArtboard();
+            return;
+        }
+        if (action === 'layers') {
+            this.handleToggleLayers();
             return;
         }
         this.activeTool = event.currentTarget.dataset.tool;
