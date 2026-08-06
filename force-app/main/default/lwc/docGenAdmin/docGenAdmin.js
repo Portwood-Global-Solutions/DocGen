@@ -418,10 +418,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     newTemplateQuery = '';
     // HTML-first authoring path. 'starter' (recommended) and 'ai' both create
     // HTML templates; 'file' exposes the classic Type picker for uploads.
-    // Canvas is where a new template starts. The wizard used to open on "I have an
-    // existing file", which put uploading ahead of authoring and made the editor
-    // something you had to go looking for.
-    @track newAuthoringMode = 'canvas';
+    // Opens on the recommended path. It still lands on a canvas — a starter now builds
+    // a Canvas template — so "start with a design" and "start on the canvas" are the
+    // same journey, one of them with the page already laid out.
+    @track newAuthoringMode = 'starter';
     @track newStarterKey = 'report';
     // One-click create: auto-built query + optional company logo asset
     @track isAutoCreating = false;
@@ -2319,45 +2319,38 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         return this.newAuthoringMode === 'canvas';
     }
 
+    /**
+     * Three ways in, and no more than three.
+     *
+     * All of them land on a Canvas except an upload, which keeps the format it arrived
+     * in. Two modes are deliberately absent rather than deleted: 'scratch' (the blank
+     * legacy designer, which a blank canvas replaces) and 'ai' (Agentforce generation,
+     * parked until it earns its place beside an editor that is now easy to use). Both
+     * still exist in code so a template already created that way opens normally — they
+     * are simply not somewhere the wizard sends anyone.
+     */
     get authoringCards() {
         const defs = [
             {
-                mode: 'canvas',
-                title: 'Design on a Canvas',
-                badge: 'Beta',
-                icon: 'utility:layout',
-                desc: 'A Canva-style artboard. Drop boxes exactly where you want them and they land there in the PDF, to the inch. Line-item lists still flow and spill onto as many pages as the data needs.'
-            },
-            {
                 mode: 'starter',
-                title: 'Start from a Design',
+                title: 'Start with a Design',
                 badge: 'Recommended',
                 icon: 'utility:brush',
-                desc: 'Pick a professional starter layout — your fields are dropped in automatically and the template renders on the first click. Opens on the canvas, ready to rearrange.'
+                desc: 'Pick a layout and your fields drop straight in. Built as canvas boxes — a title, tables, signature blocks — so it is pixel perfect from the first click and nothing was translated to get there.'
             },
-            {
-                mode: 'ai',
-                title: 'Generate with AI',
-                badge: this.isAgentforceAvailable ? 'Agentforce' : null,
-                icon: 'utility:einstein',
-                // Both routes send the identical prompt; the only difference is
-                // whether it leaves the org. Say that, rather than describing
-                // copy-paste as the only option once Agentforce is available.
-                desc: this.isAgentforceAvailable
-                    ? "We assemble a prompt with your fields and Portwood's tag syntax. Generate it right here with Agentforce, or copy the prompt into Claude, ChatGPT, or Copilot and paste the HTML back. Either way you land in the designer."
-                    : "We assemble a ready-to-paste prompt with your fields and Portwood's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor."
-            },
-            // "Start From Scratch" (the blank flow designer) is deliberately absent.
-            // A blank canvas is the same offer with a better editor, and pointing new
-            // authors at the legacy designer only creates templates that will need
-            // migrating. The mode still exists — an existing template can still open it
-            // — it is just no longer somewhere the wizard sends anyone.
             {
                 mode: 'file',
-                title: 'I Have an Existing File',
+                title: 'Bring an Existing Template',
                 badge: null,
                 icon: 'utility:upload',
-                desc: 'Upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain. Word documents are converted to HTML for PDF output — complex layouts may not convert exactly.'
+                desc: 'Upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain. HTML can be imported onto a canvas from the editor; Word keeps its own format and converts to HTML for PDF output.'
+            },
+            {
+                mode: 'canvas',
+                title: 'Start from a Blank Canvas',
+                badge: null,
+                icon: 'utility:layout',
+                desc: 'An empty artboard. Drop text, tables, images, shapes, codes and signature blocks exactly where you want them and they land there in the PDF, to the inch. Lists still flow onto as many pages as the data needs.'
             }
         ];
         return defs.map((d) => ({
