@@ -345,9 +345,39 @@
 }
 
 /* Table cells inside a canvas box must not inherit the box's text padding twice. */
+/* The table display model, pinned explicitly.
+   SLDS normalizes tables across the whole page, and a cell that inherits `display:
+   block` stops being a cell — the columns stack into a single ragged column and the
+   table looks broken on the canvas while the PDF, which never sees SLDS, renders it
+   correctly. This is the same trap that removed list markers earlier: the inline
+   styles the serializer writes cover borders, padding and typography, so nothing was
+   defending `display`, and a reset elsewhere on the page wins by default.
+   Stated here so no page-level stylesheet can take the table apart. */
 .dg-cbox-body table {
+    display: table;
     width: 100%;
     border-collapse: collapse;
+    table-layout: auto;
+}
+
+.dg-cbox-body thead {
+    display: table-header-group;
+}
+
+.dg-cbox-body tbody {
+    display: table-row-group;
+}
+
+.dg-cbox-body tr {
+    display: table-row;
+}
+
+.dg-cbox-body th,
+.dg-cbox-body td {
+    display: table-cell;
+    vertical-align: top;
+    /* A long unbroken merge tag must not force a column wider than the page. */
+    word-break: break-word;
 }
 
 /* The text box IS a textarea — see canvasModel's note on why. It has to look like
