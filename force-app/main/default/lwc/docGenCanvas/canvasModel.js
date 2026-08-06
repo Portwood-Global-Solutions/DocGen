@@ -491,7 +491,54 @@ export function tablePreviewHtml(box) {
 }
 
 /**
- * Plain text to safe markup: escaped, with newlines becoming real line breaks.
+ * Inline formatting marks, applied to a SELECTION inside the plain-text box.
+ *
+ * Marks in the text rather than HTML in a contenteditable, deliberately. A
+ * contenteditable box reintroduces Lightning's "/" hotkey stealing focus mid-typing —
+ * measured, not theorised — because Lightning binds it on window capture and LWS does
+ * not deliver window-capture listeners to component code. A textarea is exempt from
+ * those shortcuts, so keeping the box a textarea keeps typing safe; the formatting
+ * rides along as marks the serializer expands.
+ *
+ * Chosen to be things nobody types by accident in a business document, and to avoid
+ * the braces and colons that merge tags already use.
+ */
+export const INLINE_MARKS = [
+    { name: 'bold', open: '**', close: '**', tag: 'b' },
+    { name: 'italic', open: '//', close: '//', tag: 'i' },
+    { name: 'underline', open: '__', close: '__', tag: 'u' },
+    { name: 'strike', open: '~~', close: '~~', tag: 's' }
+];
+
+function escapeRe(v) {
+    return v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Expands inline marks into tags. Runs on ALREADY-ESCAPED text, so a literal "<" the
+ * author typed stays escaped and only the marks become markup.
+ */
+function expandMarks(escaped) {
+    let out = escaped;
+    for (const m of INLINE_MARKS) {
+        const re = new RegExp(escapeRe(m.open) + '([\\s\\S]+?)' + escapeRe(m.close), 'g');
+        out = out.replace(re, '<' + m.tag + '>$1</' + m.tag + '>');
+    }
+    return out;
+}
+
+/** Inverse of expandMarks, for reading a stored document back into the editor. */
+export function collapseMarks(html) {
+    let out = String(html == null ? '' : html);
+    for (const m of INLINE_MARKS) {
+        const re = new RegExp('<' + m.tag + '>([\\s\\S]*?)</' + m.tag + '>', 'gi');
+        out = out.replace(re, m.open + '$1' + m.close);
+    }
+    return out;
+}
+
+/**
+ * Plain text to safe markup: escaped, marks expanded, newlines becoming line breaks.
  *
  * Escaping does NOT break conditionals that use angle brackets. `{#IF Amount > 100}`
  * serializes as `{#IF Amount &gt; 100}` and the engine decodes it —
@@ -501,7 +548,7 @@ export function tablePreviewHtml(box) {
  * the document's markup.
  */
 function textToHtml(box) {
-    return esc(box.text == null ? '' : box.text).replace(/\n/g, '<br />');
+    return expandMarks(esc(box.text == null ? '' : box.text)).replace(/\n/g, '<br />');
 }
 
 function boxToHtml(box) {
@@ -582,6 +629,7 @@ function readInches(style, prop) {
 /** Inverse of textToHtml — <br> back to newlines, entities back to characters. */
 function htmlToText(html) {
     const tmp = document.createElement('div');
+    html = collapseMarks(html);
     // eslint-disable-next-line @lwc/lwc/no-inner-html
     tmp.innerHTML = String(html == null ? '' : html).replace(/<br\s*\/?>/gi, '\n');
     return tmp.textContent || '';

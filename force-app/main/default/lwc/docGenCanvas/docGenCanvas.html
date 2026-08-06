@@ -386,6 +386,43 @@
                 <span class="dg-qb-zoom">{zoomPercent}</span>
                 <button class="dg-qb-btn" data-dir="in" onclick={handleZoom}>+</button>
                 <span class="dg-qb-sep"></span>
+                <button
+                    class="dg-sbtn"
+                    data-mark="bold"
+                    onmousedown={handleMarkMouseDown}
+                    onclick={handleMark}
+                    title="Bold the selection"
+                >
+                    <b>B</b>
+                </button>
+                <button
+                    class="dg-sbtn"
+                    data-mark="italic"
+                    onmousedown={handleMarkMouseDown}
+                    onclick={handleMark}
+                    title="Italicise the selection"
+                >
+                    <i>I</i>
+                </button>
+                <button
+                    class="dg-sbtn"
+                    data-mark="underline"
+                    onmousedown={handleMarkMouseDown}
+                    onclick={handleMark}
+                    title="Underline the selection"
+                >
+                    <u>U</u>
+                </button>
+                <button
+                    class="dg-sbtn"
+                    data-mark="strike"
+                    onmousedown={handleMarkMouseDown}
+                    onclick={handleMark}
+                    title="Strike through the selection"
+                >
+                    <s>S</s>
+                </button>
+                <span class="dg-qb-sep"></span>
                 <button class="dg-qb-save" onclick={handleSave} disabled={isSaving}>
                     <template lwc:if={isSaving}>Saving…</template>
                     <template lwc:else>Save</template>
@@ -415,6 +452,7 @@
                                             data-id={box.id}
                                             oninput={handleBoxInput}
                                             onkeydown={handleBoxKeydown}
+                                            onfocus={handleBoxFocus}
                                             spellcheck="false"
                                         ></textarea>
                                     </template>

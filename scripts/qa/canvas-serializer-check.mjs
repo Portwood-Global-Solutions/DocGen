@@ -23,6 +23,10 @@ const pin = m.newTextBox(2.4, 3.1, 2.5, 0.4);
 pin.text = '{Name}\nIndustry: {Industry}';
 doc.artboards[0].boxes.push(pin);
 
+const marks = m.newTextBox(0.5, 3.6, 3, 0.4);
+marks.text = 'Terms: **Net/30** //rush// __signed__ ~~void~~ {Name} 5 < 10';
+doc.artboards[0].boxes.push(marks);
+
 const cond = m.newTextBox(0.5, 4.2, 3, 0.4);
 cond.text = '{#IF Amount > 100000}Large deal{/IF}';
 doc.artboards[0].boxes.push(cond);
@@ -73,7 +77,17 @@ const checks = [
     ['totals row is NOT in tfoot', !html.includes('<tfoot')],
     // Both learned from reading the suggester's own output rather than trusting it.
     ['totals carry the column format through', suggested[1] === '{SUM:Opportunities.Amount:currency:USD}'],
-    ['no aggregate suggested for a non-numeric field', suggested[0] === '']
+    ['no aggregate suggested for a non-numeric field', suggested[0] === ''],
+    // Inline marks live in the plain text and expand on serialize. This is what lets
+    // the box stay a <textarea> — a contenteditable would hand Lightning's "/" hotkey
+    // the chance to steal focus mid-typing, which was measured, not feared.
+    ['bold mark expands', html.includes('<b>Net/30</b>')],
+    ['italic mark expands', html.includes('<i>rush</i>')],
+    ['underline mark expands', html.includes('<u>signed</u>')],
+    ['strike mark expands', html.includes('<s>void</s>')],
+    ['a slash inside a mark survives', html.includes('<b>Net/30</b>')],
+    ['merge tag beside marks is untouched', html.includes('{Name}')],
+    ['a literal < stays escaped, not turned into markup', html.includes('5 &lt; 10')]
 ];
 
 let bad = 0;

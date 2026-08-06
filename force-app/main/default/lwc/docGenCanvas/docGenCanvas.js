@@ -22,7 +22,8 @@ import {
     tablePreviewHtml,
     snapBox,
     suggestTotals,
-    buildQueryConfig
+    buildQueryConfig,
+    INLINE_MARKS
 } from './canvasModel';
 
 /**
@@ -728,6 +729,86 @@ export default class DocGenCanvas extends LightningElement {
      * single box — the browser's contenteditable restructuring cannot escape it, so
      * it cannot corrupt the document the way reading back a whole canvas can.
      */
+    /**
+     * Wraps (or unwraps) the textarea selection in an inline mark.
+     *
+     * selectionStart/selectionEnd are plain integers on a textarea, so this needs no
+     * range surgery and no contenteditable — which is the whole point. A
+     * contenteditable box would hand Lightning's "/" hotkey the chance to steal focus
+     * mid-typing again, and that was measured, not feared.
+     *
+     * preventDefault on MOUSEDOWN is what keeps the selection alive: clicking a button
+     * would otherwise blur the textarea and collapse it before the handler ran.
+     */
+    handleMark(event) {
+        const name = event.currentTarget.dataset.mark;
+        const mark = INLINE_MARKS.find((m) => m.name === name);
+        const el = this._activeTextarea;
+        if (!mark || !el) {
+            this.statusText = 'Select some text in a box first';
+            return;
+        }
+        const value = el.value || '';
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        if (start === end) {
+            this.statusText = 'Select the words to format';
+            return;
+        }
+        const selected = value.slice(start, end);
+        const before = value.slice(0, start);
+        const after = value.slice(end);
+
+        let next;
+        let caretStart;
+        let caretEnd;
+        const alreadyWrapped =
+            selected.startsWith(mark.open) &&
+            selected.endsWith(mark.close) &&
+            selected.length > mark.open.length + mark.close.length;
+        const wrappedOutside = before.endsWith(mark.open) && after.startsWith(mark.close);
+
+        if (alreadyWrapped) {
+            const inner = selected.slice(mark.open.length, selected.length - mark.close.length);
+            next = before + inner + after;
+            caretStart = start;
+            caretEnd = start + inner.length;
+        } else if (wrappedOutside) {
+            // Toggling off when the marks sit just outside the selection.
+            next = before.slice(0, before.length - mark.open.length) + selected + after.slice(mark.close.length);
+            caretStart = start - mark.open.length;
+            caretEnd = caretStart + selected.length;
+        } else {
+            next = before + mark.open + selected + mark.close + after;
+            caretStart = start + mark.open.length;
+            caretEnd = caretStart + selected.length;
+        }
+
+        el.value = next;
+        this.applyToBox(el.dataset.id, { text: next });
+        // Put the selection back so the author can stack marks without re-selecting.
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        setTimeout(() => {
+            el.focus();
+            el.setSelectionRange(caretStart, caretEnd);
+        }, 0);
+    }
+
+    /**
+     * Remembers the last focused textarea and its selection.
+     *
+     * Read on the toolbar click rather than asking for activeElement then: even with
+     * preventDefault on mousedown, this is the value that is unambiguously the box the
+     * author was editing.
+     */
+    handleBoxFocus(event) {
+        this._activeTextarea = event.currentTarget;
+    }
+
+    handleMarkMouseDown(event) {
+        event.preventDefault();
+    }
+
     handleBoxInput(event) {
         const id = event.currentTarget.dataset.id;
         this.applyToBox(id, { text: event.currentTarget.value });
