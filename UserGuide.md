@@ -100,7 +100,7 @@ A native Salesforce document generation engine that turns merge-tag templates in
 - **Word (`.docx`)** templates — the most common authoring tool, fully supported.
 - **HTML / Google Docs / Notion / ChatGPT** — any HTML source. Fully supported.
 - **PowerPoint (`.pptx`)** for slide decks. _Alpha — see note below._
-- **Excel (`.xlsx`)** for spreadsheets. _Alpha — see note below._
+- **Excel (`.xlsx` / `.xlsm`)** for spreadsheets, including macro-enabled workbooks. _Alpha — see note below._
 
 **Render to:**
 
@@ -228,7 +228,7 @@ Open the Portwood app → **My Templates** → the **Create New** tab. The wizar
 - **Start from a Design** (recommended) — pick a professional starter (Record Report, Invoice / Line Items, Business Letter, signature-ready Agreement, landscape Certificate / Award). Your object's real merge fields are injected automatically and the template renders on the first click. Starters that need a specific page setup bring it along — the Certificate creates a landscape Letter page with 0.5" margins without you touching anything.
 - **Generate with AI** — a six-step flow, top to bottom on one page: build your query in the full visual builder (fields, parent lookups, related lists with filters), pick your images, describe the document in your own words, copy the assembled prompt (it carries Portwood's full tag syntax and the PDF engine's CSS rules), paste it into Claude / ChatGPT / Copilot, then paste the returned HTML back. The prompt updates live as you build. The result opens in the designer.
 - **Start From Scratch** — a blank page in the visual designer.
-- **I Have an Existing File** — upload **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), fillable **PDF** (_testing_), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx`, _alpha_) containing `{FieldName}` merge tags.
+- **I Have an Existing File** — upload **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), fillable **PDF** (_testing_), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx` / `.xlsm`, _alpha_) containing `{FieldName}` merge tags.
 
 Every path also asks for:
 
@@ -244,7 +244,7 @@ Every path also asks for:
 - HTML (`.html` / `.htm` / `.zip`) template → output PDF only (see [§5.7](#57-html-templates-google-docs-notion-any-html-source))
 - PDF (`.pdf`) fillable template → output PDF only (PDF-to-PDF / AcroForm filling is currently in testing)
 - PowerPoint (`.pptx`) template → output PPTX only (PowerPoint→PDF is not supported by the Salesforce platform)
-- Excel (`.xlsx`) template → output XLSX only
+- Excel (`.xlsx` / `.xlsm`) template → output XLSX only (macro-enabled templates output `.xlsm`)
 
 > **One template → one output format.** Templates render in whatever format
 > they were saved with — there's no runtime "Output As" picker. To offer the
@@ -3482,6 +3482,12 @@ Excel (`.xlsx`) templates handle plain field tags, parent lookups, child-record 
 With 3 contacts, rows 2–4 each carry one contact's `FirstName` / `LastName` / `Email` across columns A–C. Keep the loop as the only tagged region in its row — a second loop in the same row falls back to in-cell repetition. If the relationship returns no records, the row is removed.
 
 Not yet supported in Excel output: **images** (`{%…}` tags are removed cleanly), **charts** (`{Chart:…}` renders a text placeholder), **shared assets** (tag removed), and **rich-text fields** (may carry Word-style formatting artifacts). Use Word or HTML templates when you need those.
+
+**Macro-enabled workbooks (`.xlsm`).** Upload a `.xlsm` template and Portwood detects it automatically — no extra configuration. The generated file downloads (and saves to the record) as `.xlsm` with the correct MIME type, and the VBA project, form controls, and VML drawings pass through byte-identical. Notes:
+
+- **Excel blocks macros in downloaded files by default** (Mark of the Web, Microsoft policy since 2022). Recipients must unblock the file (right-click → Properties → Unblock), open it from a Trusted Location, or your org can sign the VBA project. This is a consumer-side Excel setting, not something Portwood can bypass.
+- Macros that reference their workbook by a **hard-coded filename** (`Workbooks("MyTemplate.xlsm")`) fail with "Subscript out of range" after generation, because the generated copy has a different name. Use `ThisWorkbook` instead — it always refers to the workbook the macro lives in.
+- VBA that reads **cell values** is unaffected by the merge. VBA that parses `sharedStrings.xml` directly would break (the merge inlines shared strings), but that is considered pathological.
 
 ---
 
