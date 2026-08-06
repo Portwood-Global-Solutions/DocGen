@@ -144,48 +144,50 @@
                     </div>
                 </template>
 
-                <div class="dg-prop-row">
-                    <label class="dg-prop-label">Fill</label>
-                    <input
-                        type="color"
-                        class="dg-prop-color"
-                        value={selFill}
-                        data-key="fill"
-                        onchange={handleColorChange}
-                    />
-                    <button class="dg-sbtn" onclick={handleClearFill} title="No fill">&#8709;</button>
-                </div>
-                <div class="dg-prop-row">
-                    <label class="dg-prop-label">Border</label>
-                    <input
-                        type="number"
-                        class="dg-prop-num dg-prop-num_sm"
-                        min="0"
-                        max="12"
-                        step="0.5"
-                        value={selBorderWidth}
-                        data-key="borderWidth"
-                        onchange={handleNumChange}
-                    />
-                    <input
-                        type="color"
-                        class="dg-prop-color"
-                        value={selBorderColor}
-                        data-key="borderColor"
-                        onchange={handleColorChange}
-                    />
-                    <label class="dg-prop-label">Pad</label>
-                    <input
-                        type="number"
-                        class="dg-prop-num dg-prop-num_sm"
-                        min="0"
-                        max="36"
-                        step="1"
-                        value={selPadding}
-                        data-key="padding"
-                        onchange={handleNumChange}
-                    />
-                </div>
+                <template lwc:if={showBoxChrome}>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Fill</label>
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selFill}
+                            data-key="fill"
+                            onchange={handleColorChange}
+                        />
+                        <button class="dg-sbtn" onclick={handleClearFill} title="No fill">&#8709;</button>
+                    </div>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Border</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="0"
+                            max="12"
+                            step="0.5"
+                            value={selBorderWidth}
+                            data-key="borderWidth"
+                            onchange={handleNumChange}
+                        />
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selBorderColor}
+                            data-key="borderColor"
+                            onchange={handleColorChange}
+                        />
+                        <label class="dg-prop-label">Pad</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="0"
+                            max="36"
+                            step="1"
+                            value={selPadding}
+                            data-key="padding"
+                            onchange={handleNumChange}
+                        />
+                    </div>
+                </template>
 
                 <template lwc:if={selectedIsTable}>
                     <h4 class="dg-panel-sub">Table</h4>

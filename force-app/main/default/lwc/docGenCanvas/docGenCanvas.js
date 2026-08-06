@@ -513,8 +513,15 @@ export default class DocGenCanvas extends LightningElement {
         }));
     }
 
+    /**
+     * Field chips insert a merge tag, so they only make sense where a tag can go: into
+     * a text box's content or a table's columns. An image binds to a field through its
+     * own input, and a shape has nowhere to put one.
+     */
     get hasPickableFields() {
-        return this.pickableFields.length > 0;
+        const box = this.selectedBox;
+        const kind = box ? box.kind || 'text' : null;
+        return this.pickableFields.length > 0 && (kind === 'text' || kind === 'table');
     }
 
     /**
@@ -1243,12 +1250,15 @@ export default class DocGenCanvas extends LightningElement {
         }
         if (model.kind === 'image') {
             const img = model.image || {};
+            const imgHPx = Math.max(1, inToPx(model.h, this.zoom));
             if (img.src) {
                 const fit = img.keepRatio === false ? 'fill' : 'contain';
                 return (
                     '<img src="' +
                     img.src +
-                    '" style="width:100%;height:100%;object-fit:' +
+                    '" style="width:100%;height:' +
+                    imgHPx +
+                    'px;object-fit:' +
                     fit +
                     ';" alt="" draggable="false" />'
                 );
@@ -1257,7 +1267,9 @@ export default class DocGenCanvas extends LightningElement {
             // Say so rather than showing an empty box the author reads as broken.
             const label = img.tag ? img.tag : 'Pick an image';
             return (
-                '<div style="width:100%;height:100%;border:1px dashed #a8b3c2;color:#5a6b7f;' +
+                '<div style="width:100%;height:' +
+                imgHPx +
+                'px;border:1px dashed #a8b3c2;color:#5a6b7f;' +
                 'font:11px sans-serif;display:table-cell;text-align:center;vertical-align:middle;">' +
                 label +
                 '</div>'
@@ -1265,6 +1277,13 @@ export default class DocGenCanvas extends LightningElement {
         }
         if (model.kind === 'shape') {
             const sh = model.shape || {};
+            // An EXPLICIT pixel height, not height:100%.
+            //
+            // The body element these previews are written into is auto-height (it sizes
+            // to its text), so a percentage height resolved against nothing and every
+            // rectangle drew as a flat line. The box's own height in inches is the real
+            // answer, projected to screen pixels the same way the box itself is.
+            const hPx = Math.max(1, inToPx(model.h, this.zoom));
             if (sh.type === 'hline') {
                 return (
                     '<div style="width:100%;height:0;border-top:' +
@@ -1276,7 +1295,9 @@ export default class DocGenCanvas extends LightningElement {
             }
             if (sh.type === 'vline') {
                 return (
-                    '<div style="height:100%;width:0;border-left:' +
+                    '<div style="height:' +
+                    hPx +
+                    'px;width:0;border-left:' +
                     Math.max(0.5, sh.borderWidth) +
                     'pt solid ' +
                     sh.borderColor +
@@ -1284,7 +1305,9 @@ export default class DocGenCanvas extends LightningElement {
                 );
             }
             return (
-                '<div style="width:100%;height:100%;' +
+                '<div style="width:100%;height:' +
+                hPx +
+                'px;box-sizing:border-box;' +
                 (sh.fill ? 'background:' + sh.fill + ';' : '') +
                 (sh.borderWidth > 0 ? 'border:' + sh.borderWidth + 'pt solid ' + sh.borderColor + ';' : '') +
                 '"></div>'
@@ -1453,6 +1476,16 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     /**
+     * Fill, border and padding on the box wrapper. Hidden for a shape, which has its
+     * own fill and border — two sets of controls writing to different properties, both
+     * labelled "Fill", is a guessing game rather than an editor.
+     */
+    get showBoxChrome() {
+        const box = this.selectedBox;
+        return !!box && box.kind !== 'shape';
+    }
+
+    /**
      * Only formats the PDF engine actually renders.
      *
      * link and image are deliberately absent: a link is dead in a printed document and
@@ -1480,9 +1513,16 @@ export default class DocGenCanvas extends LightningElement {
         ];
     }
 
+    /**
+     * Only a TEXT box has text to edit.
+     *
+     * This used to be "anything that is not a table", which put a rich-text editor
+     * under every image and shape — a content field for objects that have no content,
+     * where anything typed would be silently discarded by the serializer.
+     */
     get canEditRichText() {
         const box = this.selectedBox;
-        return !!box && box.kind !== 'table';
+        return !!box && (box.kind === 'text' || !box.kind);
     }
 
     /**
