@@ -16,6 +16,7 @@ import {
     blankDocument,
     newTextBox,
     newArtboard,
+    cloneArtboard,
     pageGeometry,
     serialize,
     deserialize,
@@ -150,6 +151,7 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     handleCustomPageChange(event) {
+        this.pushHistory('page');
         const key = event.currentTarget.dataset.key;
         this.customPage = normalizeCustomPage({ ...this.customPage, [key]: event.target.value });
         this.reflowToPage();
@@ -193,27 +195,32 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     handlePageSizeChange(event) {
+        this.pushHistory('page');
         this.canvasPageSize = event.detail.value;
         this.reflowToPage();
     }
 
     handleOrientationChange(event) {
+        this.pushHistory('page');
         this.canvasOrientation = event.detail.value;
         this.reflowToPage();
     }
 
     handleMarginChange(event) {
+        this.pushHistory('page');
         const key = event.currentTarget.dataset.key;
         this.margins = normalizeMargins({ ...this.margins, [key]: event.target.value });
         this.reflowToPage();
     }
 
     handleMarginZero() {
+        this.pushHistory('page');
         this.margins = normalizeMargins({ top: 0, right: 0, bottom: 0, left: 0 });
         this.reflowToPage();
     }
 
     handleMarginPreset(event) {
+        this.pushHistory('page');
         const v = event.currentTarget.dataset.all;
         this.margins = normalizeMargins({ top: v, right: v, bottom: v, left: v });
         this.reflowToPage();
@@ -239,6 +246,8 @@ export default class DocGenCanvas extends LightningElement {
      */
     reflowToPage() {
         const geo = this.geo;
+        // Not pushed here — the page handlers snapshot BEFORE changing the setting, so
+        // undo restores the old page as well as the box positions it moved.
         this.doc = {
             ...this.doc,
             artboards: this.doc.artboards.map((b) => ({
@@ -436,6 +445,159 @@ export default class DocGenCanvas extends LightningElement {
         const zs = this.layerItems.filter((l) => l.id !== box.id).map((l) => l.z);
         this.applyToBox(box.id, { z: zs.length ? Math.min(...zs) - 1 : -1 });
         this.statusText = 'Sent to back';
+    }
+
+    // ---- Undo / redo -----------------------------------------------------
+    //
+    // Snapshots of the whole document, taken BEFORE each change. Whole-document rather
+    // than per-action inverse operations: an inverse for every mutation is a second
+    // implementation of the editor that has to be kept in step, and the one that gets
+    // it wrong corrupts the document instead of restoring it. The documents here are
+    // small enough that copying one is cheap.
+    _past = [];
+    _future = [];
+    _suppressHistory = false;
+
+    get canUndo() {
+        return this._past.length > 0;
+    }
+
+    get canRedo() {
+        return this._future.length > 0;
+    }
+
+    // `disabled` needs the inverse — a template cannot negate an expression.
+    get undoDisabled() {
+        return !this.canUndo;
+    }
+
+    get redoDisabled() {
+        return !this.canRedo;
+    }
+
+    get undoClass() {
+        return this.canUndo ? 'dg-qb-btn' : 'dg-qb-btn dg-qb-btn_off';
+    }
+
+    get redoClass() {
+        return this.canRedo ? 'dg-qb-btn' : 'dg-qb-btn dg-qb-btn_off';
+    }
+
+    _snapshot() {
+        return {
+            doc: JSON.stringify(this.doc),
+            pageSize: this.canvasPageSize,
+            orientation: this.canvasOrientation,
+            margins: { ...this.margins },
+            customPage: { ...this.customPage },
+            selectedId: this.selectedId
+        };
+    }
+
+    _restore(snap) {
+        this.doc = JSON.parse(snap.doc);
+        this.canvasPageSize = snap.pageSize;
+        this.canvasOrientation = snap.orientation;
+        this.margins = { ...snap.margins };
+        this.customPage = { ...snap.customPage };
+        // Only reselect if that box still exists — undoing a delete should restore the
+        // selection, undoing a create must not leave a selection pointing at nothing.
+        const ids = new Set();
+        for (const b of this.doc.artboards || []) {
+            for (const x of b.boxes || []) ids.add(x.id);
+        }
+        this.selectedId = ids.has(snap.selectedId) ? snap.selectedId : null;
+    }
+
+    /**
+     * Records the state about to be replaced.
+     *
+     * `tag` coalesces a run of the same action into ONE undo step — without it, typing
+     * a sentence into the rich-text editor would take a separate undo per keystroke and
+     * the feature would be useless for the thing people most want it for. Different
+     * tag, or a pause, starts a new step.
+     */
+    pushHistory(tag) {
+        if (this._suppressHistory) {
+            return;
+        }
+        const now = Date.now();
+        const top = this._past[this._past.length - 1];
+        if (top && top.tag === tag && now - top.at < 700) {
+            top.at = now;
+            return;
+        }
+        this._past.push({ ...this._snapshot(), tag, at: now });
+        // Bounded: an unbounded stack in a long session is a slow memory leak.
+        if (this._past.length > 60) {
+            this._past.shift();
+        }
+        this._future = [];
+    }
+
+    handleUndo() {
+        if (!this._past.length) {
+            return;
+        }
+        this._future.push(this._snapshot());
+        this._restore(this._past.pop());
+        this.statusText = 'Undone';
+    }
+
+    handleRedo() {
+        if (!this._future.length) {
+            return;
+        }
+        this._past.push({ ...this._snapshot(), tag: 'redo', at: Date.now() });
+        this._restore(this._future.pop());
+        this.statusText = 'Redone';
+    }
+
+    /**
+     * Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or Ctrl+Y).
+     *
+     * Deliberately ignored while a text field has focus: the rich-text editor keeps its
+     * own undo stack, and hijacking the shortcut there would undo a whole box's worth
+     * of layout when the author meant to take back a word.
+     */
+    handleKeyDown(e) {
+        const key = (e.key || '').toLowerCase();
+        if (!(e.metaKey || e.ctrlKey) || (key !== 'z' && key !== 'y')) {
+            return;
+        }
+        const t = e.target;
+        const tag = t && t.tagName ? t.tagName.toUpperCase() : '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (t && t.isContentEditable)) {
+            return;
+        }
+        e.preventDefault();
+        if (key === 'y' || e.shiftKey) {
+            this.handleRedo();
+        } else {
+            this.handleUndo();
+        }
+    }
+
+    /**
+     * Copies a page and everything on it, straight after the original.
+     *
+     * This is how a header, footer or letterhead gets onto a second page: build it
+     * once, duplicate, and edit only what differs. A pinned box does not repeat across
+     * pages by itself — the engine only repeats running elements — so without this the
+     * only route was rebuilding the furniture by hand on every page.
+     */
+    handleDuplicateArtboard(event) {
+        const id = event.currentTarget.dataset.boardId;
+        const boards = this.doc.artboards || [];
+        const idx = boards.findIndex((b) => b.id === id);
+        if (idx === -1) {
+            return;
+        }
+        this.pushHistory('duplicate-page');
+        const copy = cloneArtboard(boards[idx]);
+        const next = [...boards.slice(0, idx + 1), copy, ...boards.slice(idx + 1)];
+        this.doc = { ...this.doc, artboards: next };
+        this.statusText = 'Page duplicated with its ' + (copy.boxes.length || 0) + ' element(s)';
     }
 
     get boardStyle() {
@@ -1247,12 +1409,18 @@ export default class DocGenCanvas extends LightningElement {
 
     async connectedCallback() {
         this._connected = true;
+        this._onKey = (e) => this.handleKeyDown(e);
+        window.addEventListener('keydown', this._onKey);
         await this.loadBody();
         await this.loadVersions();
     }
 
     disconnectedCallback() {
         this._connected = false;
+        if (this._onKey) {
+            window.removeEventListener('keydown', this._onKey);
+            this._onKey = null;
+        }
         if (this.previewUrl) {
             URL.revokeObjectURL(this.previewUrl);
             this.previewUrl = null;
@@ -1283,6 +1451,8 @@ export default class DocGenCanvas extends LightningElement {
         this.showData = false;
         this._showPageSetup = false;
         this._sampleOverride = null;
+        this._past = [];
+        this._future = [];
         this.margins = { ...DEFAULT_MARGINS };
         this.customPage = { ...DEFAULT_CUSTOM_PAGE };
         // A new canvas starts Letter / portrait / no margins. An existing one has these
@@ -1858,6 +2028,7 @@ export default class DocGenCanvas extends LightningElement {
         } else {
             fresh = newTextBox(x, y, 2.5, 0.4);
         }
+        this.pushHistory('place');
         const box = clampBox(fresh, this.geo);
         target.boxes = [...target.boxes, box];
         this.doc = { ...this.doc };
@@ -1887,6 +2058,9 @@ export default class DocGenCanvas extends LightningElement {
         const handle = event.target.dataset.handle || null;
         const box = this.selectedBox;
         if (!box) return;
+        // Snapshot at mousedown, so a drag is one undo step rather than one per
+        // mousemove — applyToBox coalescing alone would still split a slow drag.
+        this.pushHistory('drag:' + id);
         this._drag = {
             id,
             handle,
@@ -1903,6 +2077,8 @@ export default class DocGenCanvas extends LightningElement {
     onDragMove(e) {
         const d = this._drag;
         if (!d) return;
+        // The whole drag was already recorded at mousedown.
+        this._suppressHistory = true;
         const dx = pxToIn(e.clientX - d.startX, this.zoom);
         const dy = pxToIn(e.clientY - d.startY, this.zoom);
         const next = { ...d.origin };
@@ -1933,6 +2109,7 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     onDragEnd() {
+        this._suppressHistory = false;
         window.removeEventListener('mousemove', this._onMove, true);
         window.removeEventListener('mouseup', this._onUp, true);
         this._drag = null;
@@ -1940,6 +2117,10 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     applyToBox(id, patch) {
+        // One snapshot per RUN of same-kind edits (see pushHistory) — the patch keys
+        // identify the kind, so typing coalesces while a move and a recolour stay
+        // separate undo steps.
+        this.pushHistory('box:' + id + ':' + Object.keys(patch).sort().join(','));
         const geo = this.geo;
         this.doc = {
             ...this.doc,
@@ -2098,6 +2279,7 @@ export default class DocGenCanvas extends LightningElement {
                 return;
             }
         }
+        this.pushHistory('delete-page');
         this.doc = { ...this.doc, artboards: boards.filter((b) => b.id !== id) };
         if (board && (board.boxes || []).some((b) => b.id === this.selectedId)) {
             this.selectedId = null;
@@ -2106,12 +2288,14 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     handleAddArtboard() {
+        this.pushHistory('add-page');
         this.doc = { ...this.doc, artboards: [...this.doc.artboards, newArtboard()] };
         this.statusText = 'Page added';
     }
 
     handleDelete() {
         if (!this.selectedId) return;
+        this.pushHistory('delete-box');
         this.doc = {
             ...this.doc,
             artboards: this.doc.artboards.map((b) => ({

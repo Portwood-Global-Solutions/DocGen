@@ -617,6 +617,27 @@ export function newArtboard() {
     return { id: nextId('board'), boxes: [] };
 }
 
+/**
+ * A copy of an artboard, boxes and all, with fresh ids.
+ *
+ * Fresh ids matter: ids key the selection, the drag state and the DOM sync, so a
+ * duplicated page sharing them would make selecting a box on page 2 highlight and drag
+ * its twin on page 1.
+ *
+ * Deep-copied rather than shallow: boxes carry nested `table`, `image`, `shape` and
+ * `code` objects, and sharing those references would make editing a column on the
+ * duplicate silently change the original.
+ */
+export function cloneArtboard(board) {
+    return {
+        id: nextId('board'),
+        boxes: (board.boxes || []).map((b) => ({
+            ...JSON.parse(JSON.stringify(b)),
+            id: nextId('box')
+        }))
+    };
+}
+
 export function blankDocument() {
     return { artboards: [newArtboard()] };
 }

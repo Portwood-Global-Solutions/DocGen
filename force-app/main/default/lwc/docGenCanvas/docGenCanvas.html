@@ -701,6 +701,36 @@
                     </svg>
                     Templates
                 </button>
+                <button class={undoClass} onclick={handleUndo} disabled={undoDisabled} title="Undo (Ctrl/Cmd+Z)">
+                    <svg
+                        class="dg-qb-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        focusable="false"
+                    >
+                        <path d="M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-1"></path>
+                    </svg>
+                </button>
+                <button class={redoClass} onclick={handleRedo} disabled={redoDisabled} title="Redo (Ctrl/Cmd+Shift+Z)">
+                    <svg
+                        class="dg-qb-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        focusable="false"
+                    >
+                        <path d="M15 7l5 5-5 5M20 12H9a5 5 0 0 0 0 10h1"></path>
+                    </svg>
+                </button>
                 <button class="dg-qb-btn" data-dir="out" onclick={handleZoom}>&minus;</button>
                 <span class="dg-qb-zoom">{zoomPercent}</span>
                 <button class="dg-qb-btn" data-dir="in" onclick={handleZoom}>+</button>
@@ -895,6 +925,14 @@
                     <div key={board.id} class="dg-board-wrap">
                         <div class="dg-board-label">
                             Page {board.index}
+                            <button
+                                class="dg-page-dup"
+                                data-board-id={board.id}
+                                onclick={handleDuplicateArtboard}
+                                title="Copy this page and everything on it — the way to reuse a header or letterhead"
+                            >
+                                Duplicate page
+                            </button>
                             <template lwc:if={board.canDelete}>
                                 <button
                                     class="dg-page-del"
