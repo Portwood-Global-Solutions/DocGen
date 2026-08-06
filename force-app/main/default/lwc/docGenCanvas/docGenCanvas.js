@@ -123,6 +123,7 @@ export default class DocGenCanvas extends LightningElement {
     @track customPage = { ...DEFAULT_CUSTOM_PAGE };
     @track imageLibrary = [];
     @track imageLoading = false;
+    _assetsRequested = false;
     @track _showPageSetup = false;
 
     _loaded = false;
@@ -1463,6 +1464,7 @@ export default class DocGenCanvas extends LightningElement {
         this.versions = [];
         this.activeVersionId = null;
         this.imageLibrary = [];
+        this._assetsRequested = false;
         this.queryDraft = null;
         this.saveError = null;
         this.statusText = '';
@@ -1571,6 +1573,7 @@ export default class DocGenCanvas extends LightningElement {
             this.doc = parsed || blankDocument();
             this.selectedId = null;
             this._savedHtml = serialize(this.doc, this.geo);
+            this.hydrateImageSources();
             this.statusText = parsed ? 'Loaded that version' : 'That version has no canvas content';
             await this.loadVersions();
         } catch (e) {
@@ -1605,6 +1608,10 @@ export default class DocGenCanvas extends LightningElement {
                 this.statusText = html ? 'Existing body is not canvas-shaped — starting a new artboard' : 'New canvas';
             }
             this._savedHtml = serialize(this.doc, this.geo);
+            // Not awaited: the layout is already correct and the pictures fill in when
+            // the asset list arrives. Awaiting would hold the whole canvas blank on a
+            // slow query for something purely cosmetic.
+            this.hydrateImageSources();
         } catch (e) {
             this.doc = blankDocument();
             this.statusText = 'Could not load the saved body: ' + (e.body ? e.body.message : e.message);
@@ -1646,6 +1653,12 @@ export default class DocGenCanvas extends LightningElement {
                     el.value = want;
                 }
             }
+        }
+        // Selecting an image box needs the asset grid populated. Requested once per
+        // load rather than on every render — this runs after every keystroke.
+        if (this.selectedIsImage && !this._assetsRequested && !(this.imageLibrary || []).length) {
+            this._assetsRequested = true;
+            this.loadImageLibrary();
         }
         const byId = new Map();
         for (const board of this.doc.artboards) {
@@ -1782,7 +1795,64 @@ export default class DocGenCanvas extends LightningElement {
 
     handleRefreshAssets() {
         this.imageLibrary = [];
-        this.loadImageLibrary();
+        this._assetsRequested = true;
+        this.loadImageLibrary().then(() => this.hydrateImageSources());
+    }
+
+    /**
+     * Puts the preview URL back on every image box after a load.
+     *
+     * A saved image box carries only its ASSET KEY — the resolved /sfc/ URL is a
+     * preview convenience and is deliberately never serialized, because baking a
+     * ContentVersion id into the document would pin it to one version of the asset. The
+     * cost is that a reloaded box has a key and no picture, so the canvas drew the
+     * "Pick an image" placeholder over a box that was correctly configured, and the
+     * only way out looked like re-picking the image.
+     *
+     * Resolving the key against the asset list restores the picture without touching
+     * what gets saved: src is not serialized while an assetKey is set, so the document
+     * is byte-identical before and after this runs and the unsaved-changes check is
+     * unaffected.
+     */
+    async hydrateImageSources() {
+        const needs = [];
+        for (const board of this.doc.artboards || []) {
+            for (const b of board.boxes || []) {
+                if (b.kind === 'image' && b.image && b.image.assetKey && !b.image.src) {
+                    needs.push(b.id);
+                }
+            }
+        }
+        if (!needs.length) {
+            return;
+        }
+        if (!(this.imageLibrary || []).length) {
+            await this.loadImageLibrary();
+        }
+        const byKey = new Map();
+        for (const a of this.imageLibrary || []) {
+            if (a.latestVersionCvId) {
+                byKey.set(a.assetKey, '/sfc/servlet.shepherd/version/download/' + a.latestVersionCvId);
+            }
+        }
+        let changed = false;
+        const artboards = (this.doc.artboards || []).map((board) => ({
+            ...board,
+            boxes: (board.boxes || []).map((b) => {
+                if (b.kind !== 'image' || !b.image || !b.image.assetKey || b.image.src) {
+                    return b;
+                }
+                const url = byKey.get(b.image.assetKey);
+                if (!url) {
+                    return b;
+                }
+                changed = true;
+                return { ...b, image: { ...b.image, src: url } };
+            })
+        }));
+        if (changed) {
+            this.doc = { ...this.doc, artboards };
+        }
     }
 
     handlePickImage(event) {
