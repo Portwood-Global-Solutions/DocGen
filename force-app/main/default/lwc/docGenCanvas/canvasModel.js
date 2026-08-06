@@ -608,6 +608,102 @@ function readCode(el) {
     };
 }
 
+/**
+ * Signature placement types the signing service recognises
+ * (DocGenSignatureSenderController.parseSignaturePlacements). Anything else is
+ * normalised to Full there, so offering more here would be offering choices that
+ * silently collapse.
+ */
+export const SIGNATURE_TYPES = [
+    { label: 'Signature', value: 'Full' },
+    { label: 'Initials', value: 'Initials' },
+    { label: 'Date signed', value: 'Date' },
+    { label: 'Date picker', value: 'DatePick' }
+];
+
+export const DEFAULT_SIGNATURE = { role: 'Signer', order: 1, type: 'Full', inline: false };
+
+/** A sensible footprint per type — initials and dates are small, a signature is not. */
+export function signatureBoxSize(sig) {
+    const t = (sig || {}).type || 'Full';
+    if (t === 'Initials') {
+        return { w: 1, h: 0.5 };
+    }
+    if (t === 'Date' || t === 'DatePick') {
+        return { w: 1.6, h: 0.4 };
+    }
+    return { w: 2.6, h: 0.6 };
+}
+
+export function newSignatureBox(xIn, yIn) {
+    const size = signatureBoxSize(DEFAULT_SIGNATURE);
+    return {
+        id: nextId('box'),
+        kind: 'signature',
+        mode: 'pinned',
+        z: DEFAULT_Z,
+        condition: '',
+        style: { ...DEFAULT_STYLE, padding: 0 },
+        signature: { ...DEFAULT_SIGNATURE },
+        x: round3(xIn),
+        y: round3(yIn),
+        w: size.w,
+        h: size.h
+    };
+}
+
+/**
+ * A signature box emits the signing service's own placement tag.
+ *
+ * `{@Signature_<Role>[:<order>][:<Type>[:inline]]}` — role underscored, because the
+ * parser turns underscores back into spaces, so a role typed as "Account Manager"
+ * has to travel as "Account_Manager" or it terminates the role at the first space.
+ *
+ * The tag is STRIPPED during ordinary generation and only preserved during a signature
+ * send, which is deliberate — a generated PDF must never show a raw signing tag. It
+ * also means Preview shows nothing where the box is, so the panel says so.
+ */
+function signatureToHtml(box) {
+    const sig = { ...DEFAULT_SIGNATURE, ...(box.signature || {}) };
+    const role = String(sig.role || 'Signer')
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^A-Za-z0-9_]/g, '');
+    if (!role) {
+        return '';
+    }
+    const order = parseInt(sig.order, 10) > 0 ? parseInt(sig.order, 10) : 1;
+    let tag = '{@Signature_' + role + ':' + order + ':' + (sig.type || 'Full');
+    if (sig.inline) {
+        tag += ':inline';
+    }
+    return tag + '}';
+}
+
+function signatureAttrs(box) {
+    const sig = { ...DEFAULT_SIGNATURE, ...(box.signature || {}) };
+    return (
+        ' data-dg-sig-role="' +
+        esc(sig.role) +
+        '" data-dg-sig-order="' +
+        (sig.order || 1) +
+        '" data-dg-sig-type="' +
+        (sig.type || 'Full') +
+        '" data-dg-sig-inline="' +
+        (sig.inline ? '1' : '0') +
+        '"'
+    );
+}
+
+function readSignature(el) {
+    return {
+        role: el.getAttribute('data-dg-sig-role') || DEFAULT_SIGNATURE.role,
+        order: parseInt(el.getAttribute('data-dg-sig-order'), 10) || 1,
+        type: el.getAttribute('data-dg-sig-type') || DEFAULT_SIGNATURE.type,
+        inline: el.getAttribute('data-dg-sig-inline') === '1'
+    };
+}
+
 /** Field names that plausibly hold a number worth totalling. */
 const NUMERIC_HINT =
     /(amount|total|price|cost|qty|quantity|count|sum|rate|discount|tax|subtotal|fee|balance|revenue|margin|hours|units)/i;
@@ -1341,6 +1437,9 @@ function authoringAttrs(box) {
     if (box.kind === 'code') {
         return baseAuthoringAttrs(box) + codeAttrs(box);
     }
+    if (box.kind === 'signature') {
+        return baseAuthoringAttrs(box) + signatureAttrs(box);
+    }
     return baseAuthoringAttrs(box);
 }
 
@@ -1429,6 +1528,8 @@ function boxToHtml(box, cursor) {
         inner = shapeToHtml(box);
     } else if (box.kind === 'code') {
         inner = codeToHtml(box);
+    } else if (box.kind === 'signature') {
+        inner = signatureToHtml(box);
     } else {
         inner = textToHtml(box);
     }
@@ -1750,6 +1851,9 @@ export function deserialize(html) {
                 } else if (assetImg) {
                     box.kind = 'image';
                     box.image = assetImg;
+                } else if (el.hasAttribute('data-dg-sig-role')) {
+                    box.kind = 'signature';
+                    box.signature = readSignature(el);
                 } else if (el.hasAttribute('data-dg-code-type')) {
                     box.kind = 'code';
                     box.code = readCode(el);

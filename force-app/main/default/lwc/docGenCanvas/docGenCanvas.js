@@ -41,7 +41,10 @@ import {
     normalizeCustomPage,
     newCodeBox,
     codeBoxSize,
-    CODE_TYPES
+    CODE_TYPES,
+    newSignatureBox,
+    signatureBoxSize,
+    SIGNATURE_TYPES
 } from './canvasModel';
 
 /**
@@ -375,6 +378,10 @@ export default class DocGenCanvas extends LightningElement {
         if (b.kind === 'code') {
             const c = b.code || {};
             return (c.type || 'qr').toUpperCase() + (c.field ? ' · ' + c.field : '');
+        }
+        if (b.kind === 'signature') {
+            const sig = b.signature || {};
+            return (sig.type || 'Full') + ' · ' + (sig.role || 'Signer');
         }
         // Strip the markup so the label is the words the author typed, not their tags.
         const raw = (b.html != null ? b.html : b.text || '').replace(/<[^>]*>/g, ' ');
@@ -733,6 +740,13 @@ export default class DocGenCanvas extends LightningElement {
                 title: 'Add a QR code or barcode',
                 action: 'tool',
                 d: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z'
+            },
+            {
+                id: 'signature',
+                label: 'Signature',
+                title: 'Add a place for someone to sign',
+                action: 'tool',
+                d: 'M3 17c3-1 4-9 7-9s2 7 5 7 3-4 6-4M3 21h18'
             },
             {
                 id: 'shape',
@@ -2112,6 +2126,59 @@ export default class DocGenCanvas extends LightningElement {
         this.statusText = 'Code reads ' + field;
     }
 
+    // ---- Signature -------------------------------------------------------
+    get selectedIsSignature() {
+        const b = this.selectedBox;
+        return !!b && b.kind === 'signature';
+    }
+
+    get selSignature() {
+        return (this.selectedBox || {}).signature || {};
+    }
+
+    get signatureTypeOptions() {
+        return SIGNATURE_TYPES;
+    }
+
+    /** The tag as it will be written, so the author can see what the box produces. */
+    get signatureTagPreview() {
+        const sig = this.selSignature;
+        const role = String(sig.role || 'Signer')
+            .trim()
+            .replace(/\s+/g, '_')
+            .replace(/[^A-Za-z0-9_]/g, '');
+        return '{@Signature_' + (role || 'Signer') + ':' + (sig.order || 1) + ':' + (sig.type || 'Full') + '}';
+    }
+
+    /**
+     * Changing the TYPE resizes the box, the same way the code tool does — initials and
+     * a date need a fraction of the room a signature does, and leaving a signature-sized
+     * rectangle behind for a date field means every layout starts by fixing it.
+     */
+    handleSignatureChange(event) {
+        const key = event.currentTarget.dataset.key;
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'signature') return;
+        let value =
+            event.target.type === 'checkbox'
+                ? event.target.checked
+                : event.detail && event.detail.value != null
+                  ? event.detail.value
+                  : event.target.value;
+        if (key === 'order') {
+            value = parseInt(value, 10);
+            if (isNaN(value) || value < 1) return;
+        }
+        const signature = { ...box.signature, [key]: value };
+        const patch = { signature };
+        if (key === 'type') {
+            const size = signatureBoxSize(signature);
+            patch.w = size.w;
+            patch.h = size.h;
+        }
+        this.applyToBox(box.id, patch);
+    }
+
     // ---- Shape box -------------------------------------------------------
     get selectedIsShape() {
         const b = this.selectedBox;
@@ -2204,6 +2271,29 @@ export default class DocGenCanvas extends LightningElement {
                 '</div>'
             );
         }
+        if (model.kind === 'signature') {
+            const sig = model.signature || {};
+            const wPx = Math.max(1, inToPx(model.w, this.zoom));
+            const hPx = Math.max(1, inToPx(model.h, this.zoom));
+            const T = { Full: 'Signature', Initials: 'Initials', Date: 'Date signed', DatePick: 'Date picker' };
+            const label = (T[sig.type] || 'Signature') + ' · ' + (sig.role || 'Signer');
+            // A signing line, because that is what the reader will see space for. The
+            // tag itself is stripped from an ordinary render, so drawing the tag text
+            // would show something the document never contains.
+            return (
+                '<div style="width:' +
+                wPx +
+                'px;height:' +
+                hPx +
+                'px;border:1px dashed #7a8a9c;background:#fbfcfe;position:relative;' +
+                'font:10px sans-serif;color:#41546b;">' +
+                '<span style="position:absolute;left:4px;bottom:2px;">' +
+                label +
+                '</span>' +
+                '<span style="position:absolute;left:4px;right:4px;bottom:14px;border-bottom:1px solid #7a8a9c;"></span>' +
+                '</div>'
+            );
+        }
         if (model.kind === 'shape') {
             const sh = model.shape || {};
             // An EXPLICIT pixel height, not height:100%.
@@ -2251,7 +2341,7 @@ export default class DocGenCanvas extends LightningElement {
 
     /** Click the artboard with the Text tool armed to place a box where you clicked. */
     handleBoardClick(event) {
-        const PLACING = ['text', 'table', 'image', 'shape', 'code'];
+        const PLACING = ['text', 'table', 'image', 'shape', 'code', 'signature'];
         if (PLACING.indexOf(this.activeTool) === -1) {
             if (event.target.classList.contains('dg-board')) {
                 this.selectedId = null;
@@ -2275,6 +2365,8 @@ export default class DocGenCanvas extends LightningElement {
             fresh = newShapeBox(x, y, 2, 1);
         } else if (tool === 'code') {
             fresh = newCodeBox(x, y);
+        } else if (tool === 'signature') {
+            fresh = newSignatureBox(x, y);
         } else {
             fresh = newTextBox(x, y, 2.5, 0.4);
         }
@@ -2286,7 +2378,14 @@ export default class DocGenCanvas extends LightningElement {
         this.activeTool = 'select';
         // Read the tool from `tool`, not from this.activeTool — that was just reset to
         // 'select' above, so the status line always said "Text box placed".
-        const LABELS = { table: 'Table', image: 'Image', shape: 'Shape', code: 'Code', text: 'Text box' };
+        const LABELS = {
+            table: 'Table',
+            image: 'Image',
+            shape: 'Shape',
+            code: 'Code',
+            signature: 'Signature',
+            text: 'Text box'
+        };
         this.statusText = (LABELS[tool] || 'Box') + ' placed';
         if (tool === 'image') {
             this.loadImageLibrary();

@@ -745,6 +745,57 @@
                     <p class="dg-panel-note">Footprint: {codeSizeLabel}</p>
                 </template>
 
+                <template lwc:if={selectedIsSignature}>
+                    <h4 class="dg-panel-sub">Signature</h4>
+                    <lightning-combobox
+                        label="What is collected"
+                        variant="label-stacked"
+                        value={selSignature.type}
+                        options={signatureTypeOptions}
+                        data-key="type"
+                        onchange={handleSignatureChange}
+                    ></lightning-combobox>
+                    <label class="dg-panel-label">Who signs it</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selSignature.role}
+                        placeholder="Signer"
+                        data-key="role"
+                        onchange={handleSignatureChange}
+                    />
+                    <p class="dg-panel-note">
+                        A role, not a person — "Customer", "Account Manager". Each distinct role becomes a signer on the
+                        request.
+                    </p>
+                    <label class="dg-panel-label">Signing order</label>
+                    <input
+                        type="number"
+                        class="dg-panel-input dg-panel-input_sm"
+                        min="1"
+                        max="20"
+                        step="1"
+                        value={selSignature.order}
+                        data-key="order"
+                        onchange={handleSignatureChange}
+                    />
+                    <label class="dg-panel-check">
+                        <input
+                            type="checkbox"
+                            checked={selSignature.inline}
+                            data-key="inline"
+                            onchange={handleSignatureChange}
+                        />
+                        Compact mark, in place
+                    </label>
+                    <p class="dg-panel-note">Writes {signatureTagPreview}</p>
+                    <p class="dg-panel-warn">
+                        Signing tags are removed from an ordinary document, so <b>Preview shows nothing here</b> — by
+                        design, a generated PDF must never print a raw signing tag. It appears when the template is sent
+                        for signature.
+                    </p>
+                </template>
+
                 <template lwc:if={selectedIsShape}>
                     <h4 class="dg-panel-sub">Shape</h4>
                     <lightning-combobox
