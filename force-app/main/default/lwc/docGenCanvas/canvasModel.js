@@ -1267,6 +1267,11 @@ export function tablePreviewHtml(box) {
  * per-cell borders both work).
  */
 const SAFE_TAGS = new Set([
+    // Anchors survive because the output honours them: Blob.toPdf emits a real /Link
+    // annotation for an http(s) href and a /GoTo jump for an in-document #anchor.
+    // Their href is filtered by scheme below — it is the one attribute here that can
+    // carry executable content.
+    'A',
     'B',
     'STRONG',
     'I',
@@ -1400,6 +1405,25 @@ function restoreEscapedBraces(html) {
         .join('&#125;');
 }
 
+/**
+ * An href the document may carry, or null.
+ *
+ * Allows http, https and in-document #anchors — the three the PDF actually turns into
+ * annotations. Everything else is refused rather than filtered: `javascript:` and
+ * `data:` are the reason this function exists, and a scheme allow-list cannot be
+ * outflanked by encoding tricks the way a blocklist can.
+ */
+function safeHref(raw) {
+    const v = String(raw == null ? '' : raw).trim();
+    if (!v) {
+        return null;
+    }
+    if (v.startsWith('#')) {
+        return v;
+    }
+    return /^https?:\/\//i.test(v) ? v : null;
+}
+
 export function sanitizeInline(html) {
     const tpl = document.createElement('template');
     // Heal first, then parse: stripping tags out of the braces can leave an orphan
@@ -1433,10 +1457,12 @@ export function sanitizeInline(html) {
             }
             const colspan = child.getAttribute('colspan');
             const rowspan = child.getAttribute('rowspan');
+            const href = child.tagName === 'A' ? safeHref(child.getAttribute('href')) : null;
             for (const attr of [...child.attributes]) child.removeAttribute(attr.name);
             if (keep.length) child.setAttribute('style', keep.join('; '));
             if (colspan) child.setAttribute('colspan', colspan);
             if (rowspan) child.setAttribute('rowspan', rowspan);
+            if (href) child.setAttribute('href', href);
             walk(child);
         }
     };

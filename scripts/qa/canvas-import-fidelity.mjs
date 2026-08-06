@@ -79,6 +79,28 @@ function census(html) {
 }
 
 let failures = 0;
+
+// --- links -----------------------------------------------------------------
+// Blob.toPdf emits a real /Link annotation: an http(s) href becomes a /URI action and
+// an in-document #anchor a /GoTo jump — measured against a rendered PDF, which is why
+// the link button exists at all after being removed on the opposite assumption.
+// The href is filtered by SCHEME because it is the one attribute here that can carry
+// executable content, and refusing one must never take its text away with it.
+const linkClean = m.sanitizeInline(
+    '<p><a href="https://example.com">ok</a> <a href="javascript:alert(1)">bad</a> <a href="#terms">jump</a></p>'
+);
+const linkChecks = [
+    ['an https link keeps its href', linkClean.includes('href="https://example.com"')],
+    ['an in-document anchor keeps its href', linkClean.includes('href="#terms"')],
+    ['a javascript: href is refused', !/javascript/i.test(linkClean)],
+    ['refusing an href never removes its text', linkClean.includes('bad')]
+];
+process.stdout.write('\nSanitizer — links\n' + '='.repeat(64) + '\n');
+for (const [name, ok] of linkChecks) {
+    if (!ok) failures++;
+    process.stdout.write((ok ? '  PASS  ' : '  FAIL  ') + name + '\n');
+}
+
 process.stdout.write('\nHTML → Canvas import fidelity\n' + '='.repeat(64) + '\n');
 
 for (const starter of kit.STARTERS) {

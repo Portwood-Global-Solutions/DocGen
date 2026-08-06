@@ -2671,7 +2671,16 @@ export default class DocGenCanvas extends LightningElement {
             'background',
             'header',
             'clean',
-            'table'
+            'table',
+            // Links ARE clickable in the output — measured, not assumed. Blob.toPdf
+            // emits a real /Link annotation: an http(s) href becomes a /URI action and
+            // an in-document #anchor becomes a /GoTo jump. This button was removed
+            // earlier on the assumption that "a link is dead in print"; that was wrong
+            // and the probe says so.
+            //
+            // `mailto:` is the exception — it produces no annotation at all and renders
+            // as ordinary text. Still readable, just not clickable.
+            'link'
         ];
     }
 

@@ -1,5 +1,4 @@
-// Canvas serializer check — asserts the SHIPPED canvasModel emits the layout contract
-// that was measured to work (scripts/canvas-layout-model-probe.apex).
+// Canvas serializer check — asserts the SHIPPED canvasModel emits the layout contract// that was measured to work (scripts/canvas-layout-model-probe.apex).
 // Pure Node, no org needed:  node scripts/qa/canvas-serializer-check.mjs
 //
 // Guards the rules that are counter-intuitive and would otherwise be "tidied" away:
@@ -311,6 +310,7 @@ const checks = [
     ['a multi-word signer role is underscored', sigHtml.includes('{@Signature_Account_Manager:2:Full}')],
     ['the inline flag rides after the type', sigHtml.includes('{@Signature_Customer:1:Date:inline}')],
     ['signature settings round-trip as attributes', sigHtml.includes('data-dg-sig-role="Account Manager"')],
+
 
     ['a custom size emits two lengths', /@page \{ size: 5.5in 8.5in;/.test(customHtml)],
     // Zero margins are what make the canvas and the page share an origin.
