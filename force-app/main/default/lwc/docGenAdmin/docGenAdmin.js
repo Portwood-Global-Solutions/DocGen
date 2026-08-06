@@ -125,6 +125,7 @@ import testRecordFilter from '@salesforce/apex/DocGenController.testRecordFilter
 // 1.61 — HTML zip sidesteps File Upload Security via client-side unzip + per-part upload
 import saveHtmlTemplateImage from '@salesforce/apex/DocGenController.saveHtmlTemplateImage';
 import saveHtmlTemplateBody from '@salesforce/apex/DocGenController.saveHtmlTemplateBody';
+import saveAndPublishHtmlBody from '@salesforce/apex/DocGenController.saveAndPublishHtmlBody';
 // Agentforce authoring: same prompt as Copy AI Prompt, but it never leaves the org.
 import isAiAvailable from '@salesforce/apex/DocGenAiTemplateController.isAiAvailable';
 import generateTemplateBody from '@salesforce/apex/DocGenAiTemplateController.generateTemplateBody';
@@ -4706,6 +4707,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Snapshot authoring-path inputs before resetForm() clears them — the
         // starter body is built and attached after the modal opens.
         const authoringMode = this.newAuthoringMode;
+        // Snapshot the TYPE too. resetForm() runs before the starter body is attached
+        // and puts newTemplateType back to 'Word', so reading it later reported the
+        // wizard's default rather than the template just created — every starter wrote
+        // the HTML body and none wrote the canvas one.
+        const wantsCanvas = this.newTemplateType === 'Canvas';
         const starterKey = this.newStarterKey;
         const starterShape =
             authoringMode === 'starter' ? extractQueryShape(this.newTemplateQuery, this.newTemplateObject) : null;
@@ -4753,7 +4759,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             await this.openEditModal(newRow, 'document');
             if (authoringMode === 'starter') {
                 await this._ensureLogoAsset(record.id);
-                await this._applyStarterBody(record.id, starterKey, starterShape, chosenLogoTag);
+                await this._applyStarterBody(record.id, starterKey, starterShape, chosenLogoTag, wantsCanvas);
                 // Land straight in the full-screen designer with the starter open.
                 this.isEditModalOpen = false;
                 await this._openDesignerSurface();
@@ -4825,7 +4831,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * fields and attach it as the template body, so the very first "Save as
      * New Version" click produces a working v1 that renders on Generate.
      */
-    async _applyStarterBody(templateId, starterKey, shape, logoTag) {
+    async _applyStarterBody(templateId, starterKey, shape, logoTag, wantsCanvas) {
         try {
             // A Canvas template gets a CANVAS-native starter — boxes already placed,
             // each one draggable and editable with the tool that owns it. Running the
@@ -4834,7 +4840,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // box, and an authored table stays markup because reshaping an arbitrary
             // table into the table model was measured to drop merge tags. Right for
             // someone else's document; wrong for a starting point.
-            const wantsCanvas = this.newTemplateType === 'Canvas';
             let html = wantsCanvas ? buildCanvasStarter(starterKey, shape) : buildStarterHtml(starterKey, shape);
             // Starter bodies carry SIZED {%asset:logo:Nx} slots (144x header
             // logos, 120x on the agreement); an existing asset picked in the
@@ -4847,7 +4852,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 });
             }
             const fileName = (this.selectedStarterLabelFor(starterKey) || 'Starter').replace(/[^\w]+/g, '_') + '.html';
-            const bodyResult = await saveHtmlTemplateBody({ templateId, fileName, htmlContent: html });
+            // PUBLISHED as the active version, not left as a loose body CV.
+            //
+            // The canvas reads the active version's body — deliberately, so the editor
+            // and the renderer look at the same bytes. A starter written only as a loose
+            // CV is therefore invisible to it, and the author lands on a blank artboard
+            // over a template that does have content. Publishing makes the thing just
+            // written the thing that opens, and the thing that generates.
+            const bodyResult = wantsCanvas
+                ? await saveAndPublishHtmlBody({ templateId, fileName, htmlContent: html, newVersion: true })
+                : await saveHtmlTemplateBody({ templateId, fileName, htmlContent: html });
             this.currentFileId = bodyResult.contentDocumentId;
             this.uploadedContentVersionId = bodyResult.contentVersionId;
             this.uploadedFileName = fileName;
