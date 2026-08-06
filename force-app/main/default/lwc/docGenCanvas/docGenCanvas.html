@@ -489,6 +489,23 @@
                             </div>
                         </template>
                         <button class="dg-panel-btn" onclick={handleAddSubColumn}>Add nested cell</button>
+                        <template lwc:if={hasSubPickableFields}>
+                            <p class="dg-panel-note">Fields on the nested record — click to add a cell.</p>
+                            <div class="dg-field-chips">
+                                <template for:each={subPickableFields} for:item="sf">
+                                    <button
+                                        key={sf.key}
+                                        class="dg-field-chip"
+                                        data-tag={sf.tag}
+                                        data-label={sf.label}
+                                        onclick={handlePickSubField}
+                                        title={sf.tag}
+                                    >
+                                        {sf.label}
+                                    </button>
+                                </template>
+                            </div>
+                        </template>
                         <p class="dg-panel-note">
                             Tags read from the nested record. Fewer cells than the table has columns is fine — the last
                             one stretches to fill.

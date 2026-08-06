@@ -1017,6 +1017,44 @@ export default class DocGenCanvas extends LightningElement {
         this._patchTable(patch);
     }
 
+    /**
+     * The NESTED relationship's own fields, offered as chips.
+     *
+     * Without these an author types tags into the nested cells blind, and the failure mode
+     * is quiet: a field the nested object does not have renders empty, and a standard
+     * field can mean something unexpected — OpportunityLineItem.Name is composed by the
+     * platform as "<Opportunity> <Product>", so it looks like the wrong record's data
+     * when it is really the right field doing what Salesforce defined it to do.
+     *
+     * extractQueryShape flattens grandchildren into the same children list, so the
+     * lookup is the same as the parent's.
+     */
+    get subPickableFields() {
+        const rel = this.selSubRel;
+        if (!rel) {
+            return [];
+        }
+        const shape = this.querySpace;
+        const child = (shape.children || []).find((c) => (c.relationshipName || c.alias) === rel);
+        return ((child && child.fields) || []).map((f) => ({ key: rel + f, label: f, tag: '{' + f + '}' }));
+    }
+
+    get hasSubPickableFields() {
+        return this.subPickableFields.length > 0;
+    }
+
+    /** Clicking a nested-field chip adds a cell for it, mirroring the column chips. */
+    handlePickSubField(event) {
+        const tag = event.currentTarget.dataset.tag;
+        const label = event.currentTarget.dataset.label;
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        this._patchTable({
+            subColumns: [...(box.table.subColumns || []), { label, tag, width: '' }]
+        });
+        this.statusText = 'Nested cell added: ' + label;
+    }
+
     handleSubColumnChange(event) {
         const idx = parseInt(event.currentTarget.dataset.idx, 10);
         const key = event.currentTarget.dataset.key;
