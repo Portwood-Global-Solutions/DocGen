@@ -27,19 +27,63 @@
 /** CSS reference pixels per inch. Fixed by the CSS spec, not by the display. */
 export const PX_PER_IN = 96;
 
-/** Page geometry in inches, content area only (page size minus 0.5in margins). */
-const PAGE_GEOMETRY = {
-    'Letter|portrait': { css: 'Letter portrait', w: 7.5, h: 10 },
-    'Letter|landscape': { css: 'Letter landscape', w: 10, h: 7.5 },
-    'A4|portrait': { css: 'A4 portrait', w: 7.27, h: 10.69 },
-    'A4|landscape': { css: 'A4 landscape', w: 10.69, h: 7.27 },
-    'Legal|portrait': { css: 'Legal portrait', w: 7.5, h: 13 },
-    'Legal|landscape': { css: 'Legal landscape', w: 13, h: 7.5 }
+/**
+ * PAPER sizes in inches. The artboard is paper minus margins, computed rather than
+ * tabulated — margins are author-controlled now, so a table of content sizes baked
+ * against 0.5in would silently be wrong the moment anyone changed them.
+ */
+const PAPER = {
+    Letter: { w: 8.5, h: 11 },
+    A4: { w: 8.27, h: 11.69 },
+    Legal: { w: 8.5, h: 14 }
 };
 
-export function pageGeometry(pageSize, orientation) {
-    const key = (pageSize || 'Letter') + '|' + (orientation || 'Portrait').toLowerCase();
-    return PAGE_GEOMETRY[key] || PAGE_GEOMETRY['Letter|portrait'];
+export const PAGE_SIZES = [
+    { label: 'Letter (8.5 x 11 in)', value: 'Letter' },
+    { label: 'A4 (210 x 297 mm)', value: 'A4' },
+    { label: 'Legal (8.5 x 14 in)', value: 'Legal' }
+];
+
+export const DEFAULT_MARGINS = { top: 0.5, right: 0.5, bottom: 0.5, left: 0.5 };
+
+function clampMargin(v, fallback) {
+    const n = parseFloat(v);
+    if (isNaN(n) || n < 0) {
+        return fallback;
+    }
+    // 3in of margin on one side of Letter leaves 2.5in of page. Past that the author
+    // is fighting the tool rather than using it.
+    return Math.min(3, round3(n));
+}
+
+export function normalizeMargins(m) {
+    const src = m || {};
+    return {
+        top: clampMargin(src.top, DEFAULT_MARGINS.top),
+        right: clampMargin(src.right, DEFAULT_MARGINS.right),
+        bottom: clampMargin(src.bottom, DEFAULT_MARGINS.bottom),
+        left: clampMargin(src.left, DEFAULT_MARGINS.left)
+    };
+}
+
+/**
+ * The artboard is the CONTENT area — paper minus margins — because that is the box a
+ * pinned coordinate is measured inside. `@page { margin }` shifts the whole content
+ * box, so a box at x=0 sits at the left margin, not at the paper edge, and the canvas
+ * shows exactly that.
+ */
+export function pageGeometry(pageSize, orientation, margins) {
+    const paper = PAPER[pageSize] || PAPER.Letter;
+    const landscape = String(orientation || 'Portrait').toLowerCase() === 'landscape';
+    const pw = landscape ? paper.h : paper.w;
+    const ph = landscape ? paper.w : paper.h;
+    const m = normalizeMargins(margins);
+    return {
+        css: (PAPER[pageSize] ? pageSize : 'Letter') + (landscape ? ' landscape' : ' portrait'),
+        w: round3(Math.max(1, pw - m.left - m.right)),
+        h: round3(Math.max(1, ph - m.top - m.bottom)),
+        margins: m
+    };
 }
 
 let seq = 0;
@@ -168,6 +212,182 @@ export function newTableBox(xIn, yIn, wIn) {
         h: 1,
         html: ''
     };
+}
+
+/**
+ * An image box.
+ *
+ * Two sources, one box. `src` is a relative /sfc/ ContentVersion URL — an asset file or
+ * a file uploaded to the template — and renders the same picture for every record.
+ * `tag` is a merge tag like {%Logo__c}, which renders whatever the record points at.
+ * Setting a tag wins, because a box with both is an author who changed their mind.
+ *
+ * Pinned by default: an image is a fixed piece of furniture (a logo, a signature
+ * block), not something that should push text around as it paginates.
+ */
+export function newImageBox(xIn, yIn, wIn, hIn) {
+    return {
+        id: nextId('box'),
+        kind: 'image',
+        mode: 'pinned',
+        style: { ...DEFAULT_STYLE, padding: 0 },
+        image: {
+            src: '',
+            tag: '',
+            fileName: '',
+            // Keep the aspect ratio by default — dragging a corner on a logo and
+            // getting it squashed is the single most annoying thing an image tool can
+            // do. When on, only the width is emitted and height follows.
+            keepRatio: true
+        },
+        x: round3(xIn),
+        y: round3(yIn),
+        w: round3(wIn),
+        h: round3(hIn)
+    };
+}
+
+/**
+ * Shape kinds are limited to what the PDF engine ACTUALLY renders, measured against a
+ * real Blob.toPdf (scripts/css-probe-canvas-features.apex).
+ *
+ * A rectangle is a div with a background and a border; a line is a div with one border
+ * side. Both are plain CSS 2.1 and render exactly. Deliberately ABSENT: circles and
+ * diamonds. border-radius and transform are CSS 3 — Flying Saucer ignores them
+ * silently, so a circle tool would put a rectangle in the PDF while showing a circle on
+ * the canvas, which breaks the one promise this editor makes. They need the rasterizer
+ * (the route the chart engine already takes) and that is a separate piece of work.
+ */
+export const SHAPE_CHOICES = [
+    { label: 'Rectangle', value: 'rect' },
+    { label: 'Horizontal line', value: 'hline' },
+    { label: 'Vertical line', value: 'vline' }
+];
+
+export const DEFAULT_SHAPE = {
+    type: 'rect',
+    // Flat hex only. rgba() renders NOTHING in this engine rather than degrading, so
+    // there is no opacity control here and 'none' is spelled as an empty string.
+    fill: '#e8eef7',
+    borderWidth: 1,
+    borderColor: '#33475b'
+};
+
+export function newShapeBox(xIn, yIn, wIn, hIn) {
+    return {
+        id: nextId('box'),
+        kind: 'shape',
+        mode: 'pinned',
+        style: { ...DEFAULT_STYLE, padding: 0 },
+        shape: { ...DEFAULT_SHAPE },
+        x: round3(xIn),
+        y: round3(yIn),
+        w: round3(wIn),
+        h: round3(hIn)
+    };
+}
+
+/** Inches to CSS px, for the size-keyed image cache-bust. */
+function inToCssPx(v) {
+    return Math.max(1, Math.round((parseFloat(v) || 0) * PX_PER_IN));
+}
+
+/**
+ * An image box becomes an <img> at an EXACT size, with the size-keyed cache-bust the
+ * engine's own image path uses.
+ *
+ * Flying Saucer computes a replaced element's layout size once per unique URL and
+ * reuses it for every later <img> with that src — so the same logo placed twice at
+ * different sizes silently renders at the first one's size. Appending ?dgsz=<key> gives
+ * each size its own URL. This is the same rule as DocGenService.buildHtmlImageMarkup;
+ * if that rule ever changes, both have to change together.
+ */
+function imageToHtml(box) {
+    const img = box.image || {};
+    const wPx = inToCssPx(box.w);
+    const hPx = inToCssPx(box.h);
+    const tag = String(img.tag || '').trim();
+    if (tag) {
+        // Hand the sizing to the engine's own {%Field:WxH} token rather than wrapping
+        // the tag in styled markup — the engine replaces the whole tag, so any CSS put
+        // around it here would be describing a box that no longer exists.
+        const m = /^\{%([A-Za-z0-9_.]+)(?::[^}]*)?\}$/.exec(tag);
+        const field = m ? m[1] : tag.replace(/^\{%?|\}$/g, '');
+        return '{%' + field + ':' + (img.keepRatio ? wPx + 'x' : wPx + 'x' + hPx) + '}';
+    }
+    if (!img.src) {
+        return '';
+    }
+    const sizeKey = img.keepRatio ? 'w' + wPx : 'w' + wPx + 'h' + hPx;
+    const url = img.src + (img.src.indexOf('?') === -1 ? '?' : '&') + 'dgsz=' + sizeKey;
+    const css = img.keepRatio ? 'width: ' + wPx + 'px; height: auto;' : 'width: ' + wPx + 'px; height: ' + hPx + 'px;';
+    return (
+        '<img src="' +
+        esc(url) +
+        '" style="' +
+        css +
+        ' image-orientation: from-image;" alt="' +
+        esc(img.fileName || '') +
+        '" />'
+    );
+}
+
+/**
+ * A shape is emitted as a sized div and marked with data-dg-shape so it reads back as a
+ * shape rather than as an empty text box. A line is a single border side on a
+ * zero-thickness div, which is how you draw a rule in CSS 2.1.
+ */
+function shapeToHtml(box) {
+    const sh = { ...DEFAULT_SHAPE, ...(box.shape || {}) };
+    if (sh.type === 'hline' || sh.type === 'vline') {
+        const side = sh.type === 'hline' ? 'border-top' : 'border-left';
+        const size = sh.type === 'hline' ? 'width: 100%; height: 0;' : 'height: ' + box.h + 'in; width: 0;';
+        return (
+            '<div data-dg-shape="' +
+            sh.type +
+            '" style="' +
+            size +
+            ' ' +
+            side +
+            ': ' +
+            Math.max(0.5, sh.borderWidth) +
+            'pt solid ' +
+            sh.borderColor +
+            '; font-size: 0; line-height: 0;"></div>'
+        );
+    }
+    let css = 'width: 100%; height: ' + box.h + 'in; font-size: 0; line-height: 0;';
+    if (sh.fill) css += ' background: ' + sh.fill + ';';
+    if (sh.borderWidth > 0) css += ' border: ' + sh.borderWidth + 'pt solid ' + sh.borderColor + ';';
+    return '<div data-dg-shape="rect" style="' + css + '"></div>';
+}
+
+/** Reads an <img> back into the model, dropping the size-keyed cache-bust. */
+function readImage(imgEl) {
+    const raw = imgEl.getAttribute('src') || '';
+    const src = raw.replace(/[?&]dgsz=[^&]*/, '').replace(/\?$/, '');
+    const style = imgEl.getAttribute('style') || '';
+    return {
+        src: src,
+        tag: '',
+        fileName: imgEl.getAttribute('alt') || '',
+        keepRatio: /height:\s*auto/i.test(style)
+    };
+}
+
+function readShape(el, boxStyle) {
+    const inner = el.querySelector('[data-dg-shape]') || el;
+    const type = inner.getAttribute('data-dg-shape') || 'rect';
+    const style = inner.getAttribute('style') || boxStyle || '';
+    const sh = { ...DEFAULT_SHAPE, type: type };
+    const bm = /border(?:-top|-left)?:\s*([0-9.]+)pt\s+solid\s+([^;]+)/.exec(style);
+    if (bm) {
+        sh.borderWidth = parseFloat(bm[1]);
+        sh.borderColor = bm[2].trim();
+    }
+    const fill = readCss(style, 'background');
+    sh.fill = type === 'rect' ? fill || '' : '';
+    return sh;
 }
 
 /** Field names that plausibly hold a number worth totalling. */
@@ -330,10 +550,19 @@ export function snapBox(box, others, geo) {
  *                              boxes on top of the overflow
  */
 export function buildCanvasCss(geo) {
+    const m = normalizeMargins(geo && geo.margins);
     return (
         '@page { size: ' +
         geo.css +
-        '; margin: 0.5in; }\n' +
+        '; margin: ' +
+        m.top +
+        'in ' +
+        m.right +
+        'in ' +
+        m.bottom +
+        'in ' +
+        m.left +
+        'in; }\n' +
         'body { font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; margin: 0; }\n' +
         '.dg-artboard { position: relative; width: ' +
         geo.w +
@@ -596,12 +825,26 @@ function healSplitTags(html) {
     );
 }
 
+/**
+ * Braces must survive verbatim or the merge tag is not a merge tag.
+ *
+ * Rich-text editors normalize freely, and a `{` that comes back as `&#123;` produces a
+ * tag the engine never matches — the reader gets `{Name}` printed literally and nothing
+ * anywhere reports a problem. Decoding the brace entities is safe because a brace has
+ * no structural meaning in markup, so there is nothing it could break out of.
+ */
+function decodeBraces(html) {
+    return String(html == null ? '' : html)
+        .replace(/&#0*123;|&#x0*7b;|&lbrace;/gi, '{')
+        .replace(/&#0*125;|&#x0*7d;|&rbrace;/gi, '}');
+}
+
 export function sanitizeInline(html) {
     const tpl = document.createElement('template');
     // Heal first, then parse: stripping tags out of the braces can leave an orphan
     // closing tag, and the parser is what tidies that up.
     // eslint-disable-next-line @lwc/lwc/no-inner-html
-    tpl.innerHTML = healSplitTags(html);
+    tpl.innerHTML = healSplitTags(decodeBraces(html));
     const walk = (node) => {
         for (const child of [...node.childNodes]) {
             if (child.nodeType === 3) {
@@ -698,6 +941,19 @@ export function collapseMarks(html) {
  * the document's markup.
  */
 function textToHtml(box) {
+    // A box edited in the rich-text editor carries `html`, and that is what the author
+    // actually sees. Serializing `text` here meant every bold, bullet and colour was
+    // dropped on the way to the PDF while the canvas kept showing them — the editor
+    // silently stopped being WYSIWYG. `text` remains the fallback for boxes authored
+    // before the rich-text editor existed, and for a box whose html was cleared.
+    if (box.html != null && String(box.html).trim() !== '') {
+        // Guarded so the serializer stays runnable without a DOM — scripts/qa/
+        // canvas-serializer-check.mjs is a pure-Node guard on exactly these rules, and
+        // a serializer that only runs in a browser cannot be checked before it ships.
+        // The html was already sanitized on the way IN (handleRichTextChange) and again
+        // on load, so the brace repair is what actually has to happen here.
+        return typeof document === 'undefined' ? decodeBraces(box.html) : sanitizeInline(box.html);
+    }
     return expandMarks(esc(box.text == null ? '' : box.text)).replace(/\n/g, '<br />');
 }
 
@@ -751,7 +1007,16 @@ function authoringAttrs(box) {
 }
 
 function boxToHtml(box, cursor) {
-    const inner = box.kind === 'table' ? tableToHtml(box) : textToHtml(box);
+    let inner;
+    if (box.kind === 'table') {
+        inner = tableToHtml(box);
+    } else if (box.kind === 'image') {
+        inner = imageToHtml(box);
+    } else if (box.kind === 'shape') {
+        inner = shapeToHtml(box);
+    } else {
+        inner = textToHtml(box);
+    }
     if (box.mode === 'flow') {
         return (
             '<div class="dg-flow"' +
@@ -889,7 +1154,15 @@ function readTable(wrapper, tableEl) {
     const t = { ...DEFAULT_TABLE_STYLE, showHeader: false, relationship: '', columns: [] };
     const ths = [...tableEl.querySelectorAll('thead th')];
     t.showHeader = ths.length > 0;
-    const tds = [...tableEl.querySelectorAll('tbody tr td')];
+    // Cells from the LOOP row only.
+    //
+    // This was 'tbody tr td', which collects cells from every row — the loop row, the
+    // literal rows AND the totals row. The column count was then max(headers, all
+    // cells), so a two-column table with one extra row and a totals row came back with
+    // six columns, and the count multiplied again on every reload. That is the "random
+    // columns" bug: a table that grew wider each time it was opened.
+    const loopRow = tableEl.querySelector('tbody tr[data-dg-row="loop"]') || tableEl.querySelector('tbody tr');
+    const tds = loopRow ? [...loopRow.querySelectorAll('td')] : [];
     // The loop marker lives as a text node inside <tbody>, around the <tr>.
     // Read the loop marker from the WRAPPER, not from <tbody>.
     //
@@ -985,19 +1258,31 @@ export function deserialize(html) {
                     box.x = readInches(style, 'left') || 0;
                     box.y = readInches(style, 'top') || 0;
                 }
-                if (!isNaN(ah)) {
-                    box.h = ah;
-                }
-                // Height is never serialized (see boxToHtml) — recover a sensible
-                // editing rectangle instead of collapsing the box to nothing.
-                box.h = readInches(style, 'height') || 0.5;
+                // Height, in preference order: the authored attribute, then any CSS
+                // height, then a sensible default. The unconditional CSS read that used
+                // to sit here overwrote the authored value with 0.5in on EVERY load,
+                // because height is deliberately not emitted as CSS (see boxToHtml).
+                // Flow gaps are computed from box heights, so every box below a
+                // resized one crept upward a little more with each save.
+                box.h = !isNaN(ah) ? ah : readInches(style, 'height') || 0.5;
                 box.style = readStyle(style);
                 const tableEl = el.querySelector('table');
+                const imgEl = el.querySelector('img');
                 if (tableEl) {
                     box.kind = 'table';
                     box.table = readTable(el, tableEl);
                     box.html = '';
+                } else if (imgEl) {
+                    box.kind = 'image';
+                    box.image = readImage(imgEl);
+                } else if (el.hasAttribute('data-dg-shape')) {
+                    box.kind = 'shape';
+                    box.shape = readShape(el, style);
                 } else {
+                    // Keep BOTH: the markup is what renders, the flattened text is what
+                    // a plain-text edit would start from. Keeping only the text lost
+                    // every author's formatting on reload.
+                    box.html = sanitizeInline(el.innerHTML);
                     box.text = htmlToText(el.innerHTML);
                 }
                 return box;

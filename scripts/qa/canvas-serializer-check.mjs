@@ -55,6 +55,30 @@ below.mode = 'flow';
 below.text = 'Below the table';
 doc.artboards[0].boxes.push(below);
 
+// --- fixtures for rich text, images, shapes and page setup ------------------
+const rich = m.newTextBox(0.5, 5.2, 3, 0.4);
+rich.html = '<p><b>Rich</b> text with {Owner.Name} and a &#123;braced&#125; entity</p>';
+doc.artboards[0].boxes.push(rich);
+
+const logo = m.newImageBox(0.5, 0.2, 1.5, 0.75);
+logo.image.src = '/sfc/servlet.shepherd/version/download/068000000000001';
+logo.image.keepRatio = true;
+doc.artboards[0].boxes.push(logo);
+
+const fieldImg = m.newImageBox(5, 0.2, 1, 1);
+fieldImg.image.tag = '{%Logo__c}';
+doc.artboards[0].boxes.push(fieldImg);
+
+const rect = m.newShapeBox(0.5, 6, 2, 0.5);
+doc.artboards[0].boxes.push(rect);
+
+const rule = m.newShapeBox(0.5, 6.8, 6, 0.02);
+rule.shape.type = 'hline';
+doc.artboards[0].boxes.push(rule);
+
+const a4Geo = m.pageGeometry('A4', 'Landscape', { top: 1, right: 0.75, bottom: 1, left: 0.75 });
+const a4Html = m.serialize(doc, a4Geo);
+
 const html = m.serialize(doc, geo);
 
 const checks = [
@@ -109,10 +133,42 @@ const checks = [
         'every box records its mode',
         (html.match(/data-dg-mode="/g) || []).length === doc.artboards.reduce((n, b) => n + b.boxes.length, 0)
     ],
-    ['height is stored, not just implied', /data-dg-h="/.test(html)]
+    ['height is stored, not just implied', /data-dg-h="/.test(html)],
+
+    // --- Rich text ---------------------------------------------------------
+    // A text box edited in the rich-text editor carries `html`. Serializing `text`
+    // instead silently dropped every bold, bullet and MERGE TAG the author typed, while
+    // the canvas went on showing them — the editor stopped being WYSIWYG and nothing
+    // reported it.
+    ['rich-text html is what gets serialized', html.includes('<b>Rich</b>')],
+    ['merge tags typed in rich text survive', html.includes('{Owner.Name}')],
+    // A brace that comes back from an editor as &#123; produces a tag the engine never
+    // matches, and the reader gets {Name} printed literally.
+    ['brace entities are decoded back to real braces', !/&#0*123;/.test(html)],
+
+    // --- Images ------------------------------------------------------------
+    // Flying Saucer computes a replaced element's size ONCE PER URL, so the same image
+    // at two sizes collapses to the first one's size unless each size gets its own URL.
+    ['images carry the size-keyed cache-bust', /dgsz=w144/.test(html)],
+    ['keep-ratio images size by width and let height follow', /width: 144px; height: auto/.test(html)],
+    ['a field-bound image emits the engine token, not styled markup', html.includes('{%Logo__c:')],
+
+    // --- Shapes ------------------------------------------------------------
+    ['shapes are marked so they read back as shapes', /data-dg-shape="rect"/.test(html)],
+    ['a horizontal line is one border side', /data-dg-shape="hline"[^>]*border-top:/.test(html)],
+    // rgba() renders NOTHING in this engine rather than degrading to a solid colour.
+    ['no rgba anywhere in the output', !/rgba?\(/.test(html)],
+
+    // --- Page setup --------------------------------------------------------
+    ['margins reach the @page rule', /@page \{ size: A4 landscape; margin: 1in 0.75in 1in 0.75in; \}/.test(a4Html)],
+    // The artboard is the CONTENT area, so a pinned coordinate is measured inside the
+    // margins. A4 landscape is 11.69 x 8.27in of paper.
+    ['the artboard is paper minus margins', a4Geo.w === 10.19 && a4Geo.h === 6.27],
+    ['page setup round-trips through the saved @page', /size: A4 landscape/.test(a4Html)]
 ];
 
 let bad = 0;
+
 for (const [name, ok] of checks) {
     if (!ok) bad++;
     process.stdout.write((ok ? '  PASS  ' : '  FAIL  ') + name + '\n');

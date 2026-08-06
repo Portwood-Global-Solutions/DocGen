@@ -522,3 +522,68 @@ textarea.dg-cbox-text {
     float: right;
     margin-left: 6px;
 }
+
+/* ---- Image picker -------------------------------------------------------- */
+.dg-file {
+    width: 100%;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.dg-imggrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.dg-imgcard {
+    background: #fff;
+    border: 1px solid #d4dbe4;
+    border-radius: 4px;
+    padding: 4px;
+    cursor: pointer;
+    text-align: center;
+    overflow: hidden;
+}
+
+.dg-imgcard_on {
+    border-color: #0176d3;
+    box-shadow: 0 0 0 1px #0176d3;
+}
+
+.dg-imgthumb {
+    display: block;
+    width: 100%;
+    height: 48px;
+    object-fit: contain;
+}
+
+.dg-imgname {
+    display: block;
+    font-size: 10px;
+    color: #444;
+    /* One line, clipped — a long file name must not stretch the 260px panel. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Page setup ---------------------------------------------------------- */
+.dg-pagesetup {
+    padding: 10px 12px 14px;
+    display: grid;
+    grid-template-columns: 200px 200px 1fr;
+    gap: 14px;
+    align-items: start;
+}
+
+.dg-margin-grid .dg-row {
+    gap: 4px;
+}
+
+@media (max-width: 900px) {
+    .dg-pagesetup {
+        grid-template-columns: 1fr;
+    }
+}

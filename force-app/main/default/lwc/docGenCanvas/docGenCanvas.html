@@ -14,13 +14,25 @@
                 <lightning-icon icon-name="utility:table" size="small"></lightning-icon>
                 <span class="dg-rail-label">Table</span>
             </button>
+            <button class={toolImageClass} data-tool="image" onclick={handleToolSelect} title="Add an image">
+                <lightning-icon icon-name="utility:image" size="small"></lightning-icon>
+                <span class="dg-rail-label">Image</span>
+            </button>
+            <button class={toolShapeClass} data-tool="shape" onclick={handleToolSelect} title="Add a shape or a line">
+                <lightning-icon icon-name="utility:shape_alt" size="small"></lightning-icon>
+                <span class="dg-rail-label">Shape</span>
+            </button>
             <button class={dataToolClass} onclick={handleToggleData} title="Choose the fields this document uses">
                 <lightning-icon icon-name="utility:database" size="small"></lightning-icon>
                 <span class="dg-rail-label">Data</span>
             </button>
-            <button class="dg-tool" onclick={handleAddArtboard} title="Add a page">
+            <button class={pageToolClass} onclick={handleTogglePageSetup} title="Page size, orientation and margins">
                 <lightning-icon icon-name="utility:page" size="small"></lightning-icon>
                 <span class="dg-rail-label">Page</span>
+            </button>
+            <button class="dg-tool" onclick={handleAddArtboard} title="Add another page">
+                <lightning-icon icon-name="utility:add" size="small"></lightning-icon>
+                <span class="dg-rail-label">Add page</span>
             </button>
         </div>
 
@@ -35,6 +47,7 @@
                         label="Content"
                         variant="label-stacked"
                         value={richTextValue}
+                        formats={richTextFormats}
                         onchange={handleRichTextChange}
                         message-when-bad-input="Content could not be read"
                         placeholder="Type here. Merge tags work anywhere — pick one from Fields below."
@@ -431,6 +444,105 @@
                     </template>
                 </template>
 
+                <template lwc:if={selectedIsImage}>
+                    <h4 class="dg-panel-sub">Image</h4>
+                    <p class="dg-panel-note">
+                        Drag the handles to size it. The picture prints at exactly the size of the box.
+                    </p>
+
+                    <label class="dg-panel-label">Upload</label>
+                    <input type="file" accept="image/*" class="dg-file" onchange={handleImageUpload} />
+
+                    <template lwc:if={hasImageChoices}>
+                        <label class="dg-panel-label">Or pick one already in this org</label>
+                        <div class="dg-imggrid">
+                            <template for:each={imageChoices} for:item="f">
+                                <button
+                                    key={f.contentVersionId}
+                                    class={f.cls}
+                                    data-url={f.url}
+                                    data-name={f.fileName}
+                                    onclick={handlePickImage}
+                                    title={f.fileName}
+                                >
+                                    <img src={f.url} alt={f.fileName} class="dg-imgthumb" />
+                                    <span class="dg-imgname">{f.fileName}</span>
+                                </button>
+                            </template>
+                        </div>
+                    </template>
+
+                    <label class="dg-panel-label">Or from a field on the record</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selImage.tag}
+                        placeholder={imageTagPlaceholder}
+                        onchange={handleImageTagChange}
+                    />
+                    <p class="dg-panel-note">
+                        A field holding a file or an image. It prints whatever that record points at, so there is
+                        nothing to preview here.
+                    </p>
+
+                    <label class="dg-panel-check">
+                        <input type="checkbox" checked={selImageKeepRatio} onchange={handleImageRatioToggle} />
+                        Keep the original proportions
+                    </label>
+                    <template lwc:if={selImageHasSource}>
+                        <button class="dg-panel-btn" onclick={handleImageClear}>Remove the picture</button>
+                    </template>
+                </template>
+
+                <template lwc:if={selectedIsShape}>
+                    <h4 class="dg-panel-sub">Shape</h4>
+                    <lightning-combobox
+                        label="Shape"
+                        variant="label-stacked"
+                        value={selShape.type}
+                        options={shapeOptions}
+                        data-key="type"
+                        onchange={handleShapeChange}
+                    ></lightning-combobox>
+                    <template lwc:if={selShapeIsRect}>
+                        <label class="dg-panel-label">Fill</label>
+                        <div class="dg-row">
+                            <input
+                                type="color"
+                                class="dg-panel-color"
+                                value={selShape.fill}
+                                data-key="fill"
+                                onchange={handleShapeChange}
+                            />
+                            <button class="dg-sbtn" onclick={handleShapeFillNone}>No fill</button>
+                        </div>
+                    </template>
+                    <label class="dg-panel-label">Line</label>
+                    <div class="dg-row">
+                        <input
+                            type="number"
+                            class="dg-panel-input dg-panel-input_sm"
+                            min="0"
+                            max="12"
+                            step="0.5"
+                            value={selShape.borderWidth}
+                            data-key="borderWidth"
+                            onchange={handleShapeChange}
+                        />
+                        <input
+                            type="color"
+                            class="dg-panel-color"
+                            value={selShape.borderColor}
+                            data-key="borderColor"
+                            onchange={handleShapeChange}
+                        />
+                    </div>
+                    <p class="dg-panel-note">
+                        Rectangles and lines only. Circles and rounded corners are not drawn by the PDF engine — it
+                        would print a plain rectangle and the page would not match this canvas.
+                    </p>
+                </template>
+
                 <button class="dg-panel-btn" onclick={handleModeToggle}>
                     <template lwc:if={selectedIsFlow}>Make it pinned</template>
                     <template lwc:else>Let it flow across pages</template>
@@ -504,6 +616,86 @@
                 </button>
                 <span class="dg-qb-status">{statusText}</span>
             </div>
+
+            <template lwc:if={showPageSetup}>
+                <div class="dg-data-wrap">
+                    <div class="dg-data-bar">
+                        Page setup
+                        <button class="dg-sbtn" onclick={handleClosePageSetup}>Done</button>
+                    </div>
+                    <div class="dg-pagesetup">
+                        <lightning-combobox
+                            label="Page size"
+                            value={pageSize}
+                            options={pageSizeOptions}
+                            onchange={handlePageSizeChange}
+                        ></lightning-combobox>
+                        <lightning-combobox
+                            label="Orientation"
+                            value={orientation}
+                            options={orientationOptions}
+                            onchange={handleOrientationChange}
+                        ></lightning-combobox>
+                        <div class="dg-margin-grid">
+                            <label class="dg-panel-label">Margins (inches)</label>
+                            <div class="dg-row">
+                                <input
+                                    type="number"
+                                    class="dg-panel-input dg-panel-input_sm"
+                                    min="0"
+                                    max="3"
+                                    step="0.05"
+                                    value={marginTop}
+                                    data-key="top"
+                                    onchange={handleMarginChange}
+                                    title="Top"
+                                />
+                                <input
+                                    type="number"
+                                    class="dg-panel-input dg-panel-input_sm"
+                                    min="0"
+                                    max="3"
+                                    step="0.05"
+                                    value={marginRight}
+                                    data-key="right"
+                                    onchange={handleMarginChange}
+                                    title="Right"
+                                />
+                                <input
+                                    type="number"
+                                    class="dg-panel-input dg-panel-input_sm"
+                                    min="0"
+                                    max="3"
+                                    step="0.05"
+                                    value={marginBottom}
+                                    data-key="bottom"
+                                    onchange={handleMarginChange}
+                                    title="Bottom"
+                                />
+                                <input
+                                    type="number"
+                                    class="dg-panel-input dg-panel-input_sm"
+                                    min="0"
+                                    max="3"
+                                    step="0.05"
+                                    value={marginLeft}
+                                    data-key="left"
+                                    onchange={handleMarginChange}
+                                    title="Left"
+                                />
+                            </div>
+                            <p class="dg-panel-note">Top, right, bottom, left. {pageAreaLabel}.</p>
+                            <div class="dg-row">
+                                <button class="dg-sbtn" data-all="0.5" onclick={handleMarginPreset}>Narrow 0.5"</button>
+                                <button class="dg-sbtn" data-all="0.75" onclick={handleMarginPreset}>
+                                    Normal 0.75"
+                                </button>
+                                <button class="dg-sbtn" data-all="1" onclick={handleMarginPreset}>Wide 1"</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
 
             <template lwc:if={showData}>
                 <div class="dg-data-wrap">

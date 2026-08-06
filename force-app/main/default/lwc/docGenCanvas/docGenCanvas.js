@@ -4,6 +4,8 @@ import saveAndPublishHtmlBody from '@salesforce/apex/DocGenController.saveAndPub
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVersions';
 import getVersionBody from '@salesforce/apex/DocGenController.getVersionBody';
+import listCanvasImages from '@salesforce/apex/DocGenController.listCanvasImages';
+import saveHtmlTemplateImage from '@salesforce/apex/DocGenController.saveHtmlTemplateImage';
 import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import { extractQueryShape } from 'c/docGenAuthoringKit';
 import { updateRecord } from 'lightning/uiRecordApi';
@@ -26,7 +28,13 @@ import {
     snapBox,
     suggestTotals,
     buildQueryConfig,
-    sanitizeInline
+    sanitizeInline,
+    newImageBox,
+    newShapeBox,
+    SHAPE_CHOICES,
+    PAGE_SIZES,
+    DEFAULT_MARGINS,
+    normalizeMargins
 } from './canvasModel';
 
 /**
@@ -67,6 +75,13 @@ export default class DocGenCanvas extends LightningElement {
     @track saveError = null;
     @track versions = [];
     @track activeVersionId = null;
+    // Page setup lives on the component, is serialized into @page, and is read back on
+    // load — the canvas owns its own page. The engine defers to a source @page rule
+    // (v1.90), so what is set here is what the PDF uses.
+    @track margins = { ...DEFAULT_MARGINS };
+    @track imageLibrary = [];
+    @track imageLoading = false;
+    @track _showPageSetup = false;
 
     _loaded = false;
     // Live drag state. Kept off @track on purpose: it changes on every mousemove and
@@ -74,7 +89,92 @@ export default class DocGenCanvas extends LightningElement {
     _drag = null;
 
     get geo() {
-        return pageGeometry(this.pageSize, this.orientation);
+        return pageGeometry(this.pageSize, this.orientation, this.margins);
+    }
+
+    // ---- Page setup ------------------------------------------------------
+    get pageSizeOptions() {
+        return PAGE_SIZES;
+    }
+
+    get orientationOptions() {
+        return [
+            { label: 'Portrait', value: 'Portrait' },
+            { label: 'Landscape', value: 'Landscape' }
+        ];
+    }
+
+    get pageAreaLabel() {
+        return this.geo.w.toFixed(2) + 'in x ' + this.geo.h.toFixed(2) + 'in of usable page';
+    }
+
+    get marginTop() {
+        return this.margins.top;
+    }
+    get marginRight() {
+        return this.margins.right;
+    }
+    get marginBottom() {
+        return this.margins.bottom;
+    }
+    get marginLeft() {
+        return this.margins.left;
+    }
+
+    handlePageSizeChange(event) {
+        this.pageSize = event.detail.value;
+        this.reflowToPage();
+    }
+
+    handleOrientationChange(event) {
+        this.orientation = event.detail.value;
+        this.reflowToPage();
+    }
+
+    handleMarginChange(event) {
+        const key = event.currentTarget.dataset.key;
+        this.margins = normalizeMargins({ ...this.margins, [key]: event.target.value });
+        this.reflowToPage();
+    }
+
+    handleMarginPreset(event) {
+        const v = event.currentTarget.dataset.all;
+        this.margins = normalizeMargins({ top: v, right: v, bottom: v, left: v });
+        this.reflowToPage();
+    }
+
+    get showPageSetup() {
+        return this._showPageSetup === true;
+    }
+
+    get pageToolClass() {
+        return this.showPageSetup ? 'dg-tool dg-tool_active' : 'dg-tool';
+    }
+
+    handleTogglePageSetup() {
+        this._showPageSetup = !this._showPageSetup;
+    }
+
+    handleClosePageSetup() {
+        this._showPageSetup = false;
+    }
+
+    /**
+     * Shrinking the page must not silently push boxes off it. Every box is re-clamped
+     * to the new content area, so a layout authored on Letter and switched to A4 stays
+     * entirely on the page — moved, but never lost past the edge where the author
+     * cannot select it to move it back.
+     */
+    reflowToPage() {
+        const geo = this.geo;
+        this.doc = {
+            ...this.doc,
+            artboards: this.doc.artboards.map((b) => ({
+                ...b,
+                boxes: b.boxes.map((x) => clampBox(x, geo))
+            }))
+        };
+        this.statusText = 'Page set to ' + this.pageSize + ' ' + this.orientation.toLowerCase();
     }
 
     get boardStyle() {
@@ -152,6 +252,14 @@ export default class DocGenCanvas extends LightningElement {
         return css;
     }
 
+    get toolImageClass() {
+        return this.activeTool === 'image' ? 'dg-tool dg-tool_active' : 'dg-tool';
+    }
+
+    get toolShapeClass() {
+        return this.activeTool === 'shape' ? 'dg-tool dg-tool_active' : 'dg-tool';
+    }
+
     get toolTableClass() {
         return this.activeTool === 'table' ? 'dg-tool dg-tool_active' : 'dg-tool';
     }
@@ -217,12 +325,26 @@ export default class DocGenCanvas extends LightningElement {
     get selTableTotals() {
         return !!(((this.selectedBox || {}).table || {}).totals || {}).enabled;
     }
+    /**
+     * Extra rows, one input PER COLUMN.
+     *
+     * They were a single pipe-separated field, which meant the author had to know that
+     * `|` was a delimiter, count columns by hand, and could not leave one blank without
+     * counting the empty segments. The cells carry the column's label so it is obvious
+     * which one is being typed into.
+     */
     get selTableRows() {
         const t = (this.selectedBox || {}).table || {};
+        const cols = t.columns || [];
         return (t.rows || []).map((cells, i) => ({
             idx: i,
             num: i + 1,
-            text: cells.join(' | ')
+            cells: cols.map((c, j) => ({
+                key: i + '_' + j,
+                col: j,
+                label: c.label || 'Column ' + (j + 1),
+                value: cells[j] || ''
+            }))
         }));
     }
 
@@ -241,14 +363,20 @@ export default class DocGenCanvas extends LightningElement {
 
     handleRowChange(event) {
         const idx = parseInt(event.currentTarget.dataset.idx, 10);
+        const col = parseInt(event.currentTarget.dataset.col, 10);
         const box = this.selectedBox;
         if (!box || box.kind !== 'table') return;
-        // Pipe-separated so a whole row is editable in one field — a cell-per-input grid
-        // in a 260px panel is unusable, and rows here are short by nature.
-        const cells = String(event.target.value || '')
-            .split('|')
-            .map((v) => v.trim());
-        const rows = (box.table.rows || []).map((r, i) => (i === idx ? cells : r));
+        const width = (box.table.columns || []).length;
+        const rows = (box.table.rows || []).map((r, i) => {
+            if (i !== idx) return r;
+            // Pad to the column count first: a row saved when the table had two columns
+            // has two cells, and writing to index 3 on it would leave a hole that
+            // serializes as `undefined`.
+            const cells = [];
+            for (let j = 0; j < width; j += 1) cells.push(r[j] || '');
+            cells[col] = event.target.value;
+            return cells;
+        });
         this._patchTable({ rows });
     }
 
@@ -436,8 +564,12 @@ export default class DocGenCanvas extends LightningElement {
             });
             this.statusText = 'Column added: ' + label;
         } else {
-            const sep = box.text && !/\s$/.test(box.text) ? ' ' : '';
-            this.applyToBox(box.id, { text: (box.text || '') + sep + tag });
+            // Append to the RICH TEXT content. It used to append to box.text, which
+            // stopped being what the box renders when editing moved into the rich-text
+            // editor — so clicking a field appeared to do nothing at all.
+            const current = box.html != null ? box.html : box.text || '';
+            const sep = current && !/(\s|>)$/.test(current) ? ' ' : '';
+            this.applyToBox(box.id, { html: current + sep + tag });
             this.statusText = 'Inserted ' + tag;
         }
     }
@@ -802,6 +934,7 @@ export default class DocGenCanvas extends LightningElement {
         try {
             await activateVersion({ versionId: id });
             const html = await getVersionBody({ versionId: id });
+            this.readPageSetup(html);
             const parsed = deserialize(html);
             this.doc = parsed || blankDocument();
             this.selectedId = null;
@@ -822,6 +955,7 @@ export default class DocGenCanvas extends LightningElement {
             const html = this.activeVersionId
                 ? await getVersionBody({ versionId: this.activeVersionId })
                 : await getHtmlTemplateBody({ templateId: this.templateId });
+            this.readPageSetup(html);
             const parsed = deserialize(html);
             if (parsed) {
                 this.doc = parsed;
@@ -884,13 +1018,279 @@ export default class DocGenCanvas extends LightningElement {
         for (const el of this.template.querySelectorAll('.dg-cbox-body')) {
             const model = byId.get(el.dataset.id);
             if (!model) continue;
-            const want =
-                model.kind === 'table' ? tablePreviewHtml(model) : model.html != null ? model.html : model.text || '';
+            const want = this.previewHtmlFor(model);
             if (el.innerHTML !== want) {
                 // eslint-disable-next-line @lwc/lwc/no-inner-html
                 el.innerHTML = want;
             }
         }
+    }
+
+    /**
+     * Recovers page size, orientation and margins from the saved document's @page rule.
+     *
+     * The @page rule IS the record of the author's page setup — there is nowhere else
+     * it is stored, and the engine renders from it. Without this, reopening a canvas
+     * authored on A4 landscape with 1in margins showed it on Letter portrait at 0.5in
+     * and the first save wrote that wrong page back over the right one.
+     */
+    readPageSetup(html) {
+        const rule = /@page\s*\{([^}]*)\}/.exec(html || '');
+        if (!rule) {
+            return;
+        }
+        const size = /size:\s*([A-Za-z0-9]+)\s*(portrait|landscape)?/i.exec(rule[1]);
+        if (size) {
+            const named = ['Letter', 'A4', 'Legal'].find((n) => n.toLowerCase() === size[1].toLowerCase());
+            if (named) this.pageSize = named;
+            this.orientation = (size[2] || 'portrait').toLowerCase() === 'landscape' ? 'Landscape' : 'Portrait';
+        }
+        const marg = /margin:\s*([^;]+)/i.exec(rule[1]);
+        if (marg) {
+            const parts = marg[1]
+                .trim()
+                .split(/\s+/)
+                .map((v) => parseFloat(v))
+                .filter((v) => !isNaN(v));
+            // CSS shorthand: 1, 2 or 4 values. Anything else is not something we wrote.
+            if (parts.length === 1) {
+                this.margins = normalizeMargins({ top: parts[0], right: parts[0], bottom: parts[0], left: parts[0] });
+            } else if (parts.length === 2) {
+                this.margins = normalizeMargins({ top: parts[0], right: parts[1], bottom: parts[0], left: parts[1] });
+            } else if (parts.length === 4) {
+                this.margins = normalizeMargins({
+                    top: parts[0],
+                    right: parts[1],
+                    bottom: parts[2],
+                    left: parts[3]
+                });
+            }
+        }
+    }
+
+    // ---- Image box -------------------------------------------------------
+    get selectedIsImage() {
+        const b = this.selectedBox;
+        return !!b && b.kind === 'image';
+    }
+
+    get selImage() {
+        return (this.selectedBox || {}).image || {};
+    }
+
+    get selImageHasSource() {
+        const img = this.selImage;
+        return !!(img.src || img.tag);
+    }
+
+    /**
+     * A merge tag cannot be written literally in the markup — LWC compiles `{...}` as a
+     * binding expression and the deploy fails outright. Every example tag in this
+     * component comes from a getter for that reason.
+     */
+    get imageTagPlaceholder() {
+        return '{%Logo__c}';
+    }
+
+    get selImageKeepRatio() {
+        return this.selImage.keepRatio !== false;
+    }
+
+    get imageChoices() {
+        const current = this.selImage.src;
+        return (this.imageLibrary || []).map((f) => ({
+            ...f,
+            cls: f.url === current ? 'dg-imgcard dg-imgcard_on' : 'dg-imgcard'
+        }));
+    }
+
+    get hasImageChoices() {
+        return (this.imageLibrary || []).length > 0;
+    }
+
+    /**
+     * The library is every image already attached to this template, plus the org's
+     * asset files. Asset files are resolved to their ContentVersion server-side rather
+     * than linked as /file-asset/… — a relative /sfc/ URL is the ONE image form proven
+     * to render through Blob.toPdf, and an asset URL that renders in the browser but
+     * comes out blank in the PDF is exactly the trap this editor exists to avoid.
+     */
+    async loadImageLibrary() {
+        if (!this.templateId || this.imageLoading) return;
+        this.imageLoading = true;
+        try {
+            this.imageLibrary = await listCanvasImages({ templateId: this.templateId });
+        } catch (e) {
+            this.statusText = 'Could not load images: ' + this.errText(e);
+        } finally {
+            this.imageLoading = false;
+        }
+    }
+
+    handlePickImage(event) {
+        const url = event.currentTarget.dataset.url;
+        const name = event.currentTarget.dataset.name;
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'image') return;
+        this.applyToBox(box.id, { image: { ...box.image, src: url, tag: '', fileName: name } });
+        this.statusText = 'Image set';
+    }
+
+    handleImageTagChange(event) {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'image') return;
+        this.applyToBox(box.id, { image: { ...box.image, tag: (event.target.value || '').trim() } });
+    }
+
+    handleImageRatioToggle(event) {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'image') return;
+        this.applyToBox(box.id, { image: { ...box.image, keepRatio: event.target.checked } });
+    }
+
+    handleImageClear() {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'image') return;
+        this.applyToBox(box.id, { image: { ...box.image, src: '', tag: '', fileName: '' } });
+    }
+
+    /** Uploads a new image to the template, then selects it into the current box. */
+    async handleImageUpload(event) {
+        const file = (event.target.files || [])[0];
+        if (!file || !this.templateId) return;
+        const box = this.selectedBox;
+        this.imageLoading = true;
+        this.statusText = 'Uploading ' + file.name + '...';
+        try {
+            const base64 = await this.readAsBase64(file);
+            const saved = await saveHtmlTemplateImage({
+                templateId: this.templateId,
+                fileName: file.name,
+                base64Content: base64
+            });
+            await this.loadImageLibrary();
+            const url = saved && saved.url;
+            if (url && box && box.kind === 'image') {
+                this.applyToBox(box.id, { image: { ...box.image, src: url, tag: '', fileName: file.name } });
+            }
+            this.statusText = 'Image uploaded';
+        } catch (e) {
+            this.statusText = 'Upload failed: ' + this.errText(e);
+        } finally {
+            this.imageLoading = false;
+            // Clear the input so re-picking the SAME file fires change again.
+            event.target.value = null;
+        }
+    }
+
+    /** Apex errors arrive as e.body.message; JS errors as e.message. */
+    errText(e) {
+        return (e && e.body ? e.body.message : e && e.message) || 'Unknown error';
+    }
+
+    readAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result).split(',')[1]);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // ---- Shape box -------------------------------------------------------
+    get selectedIsShape() {
+        const b = this.selectedBox;
+        return !!b && b.kind === 'shape';
+    }
+
+    get selShape() {
+        return (this.selectedBox || {}).shape || {};
+    }
+
+    get shapeOptions() {
+        return SHAPE_CHOICES;
+    }
+
+    get selShapeIsRect() {
+        return (this.selShape.type || 'rect') === 'rect';
+    }
+
+    handleShapeChange(event) {
+        const key = event.currentTarget.dataset.key;
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'shape') return;
+        let value = event.detail && event.detail.value != null ? event.detail.value : event.target.value;
+        if (key === 'borderWidth') {
+            value = parseFloat(value);
+            if (isNaN(value)) return;
+        }
+        this.applyToBox(box.id, { shape: { ...box.shape, [key]: value } });
+    }
+
+    handleShapeFillNone() {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'shape') return;
+        this.applyToBox(box.id, { shape: { ...box.shape, fill: '' } });
+    }
+
+    /**
+     * What a box looks like ON THE CANVAS. Everything here mirrors what the serializer
+     * emits — the canvas is only worth having if the two agree.
+     */
+    previewHtmlFor(model) {
+        if (model.kind === 'table') {
+            return tablePreviewHtml(model);
+        }
+        if (model.kind === 'image') {
+            const img = model.image || {};
+            if (img.src) {
+                const fit = img.keepRatio === false ? 'fill' : 'contain';
+                return (
+                    '<img src="' +
+                    img.src +
+                    '" style="width:100%;height:100%;object-fit:' +
+                    fit +
+                    ';" alt="" draggable="false" />'
+                );
+            }
+            // A merge-tag image cannot be previewed — the picture depends on the record.
+            // Say so rather than showing an empty box the author reads as broken.
+            const label = img.tag ? img.tag : 'Pick an image';
+            return (
+                '<div style="width:100%;height:100%;border:1px dashed #a8b3c2;color:#5a6b7f;' +
+                'font:11px sans-serif;display:table-cell;text-align:center;vertical-align:middle;">' +
+                label +
+                '</div>'
+            );
+        }
+        if (model.kind === 'shape') {
+            const sh = model.shape || {};
+            if (sh.type === 'hline') {
+                return (
+                    '<div style="width:100%;height:0;border-top:' +
+                    Math.max(0.5, sh.borderWidth) +
+                    'pt solid ' +
+                    sh.borderColor +
+                    ';"></div>'
+                );
+            }
+            if (sh.type === 'vline') {
+                return (
+                    '<div style="height:100%;width:0;border-left:' +
+                    Math.max(0.5, sh.borderWidth) +
+                    'pt solid ' +
+                    sh.borderColor +
+                    ';"></div>'
+                );
+            }
+            return (
+                '<div style="width:100%;height:100%;' +
+                (sh.fill ? 'background:' + sh.fill + ';' : '') +
+                (sh.borderWidth > 0 ? 'border:' + sh.borderWidth + 'pt solid ' + sh.borderColor + ';' : '') +
+                '"></div>'
+            );
+        }
+        return model.html != null ? model.html : model.text || '';
     }
 
     handleToolSelect(event) {
@@ -899,7 +1299,8 @@ export default class DocGenCanvas extends LightningElement {
 
     /** Click the artboard with the Text tool armed to place a box where you clicked. */
     handleBoardClick(event) {
-        if (this.activeTool !== 'text' && this.activeTool !== 'table') {
+        const PLACING = ['text', 'table', 'image', 'shape'];
+        if (PLACING.indexOf(this.activeTool) === -1) {
             if (event.target.classList.contains('dg-board')) {
                 this.selectedId = null;
             }
@@ -912,17 +1313,29 @@ export default class DocGenCanvas extends LightningElement {
         const boardId = board.dataset.boardId;
         const target = this.doc.artboards.find((b) => b.id === boardId);
         if (!target) return;
-        const box = clampBox(
-            this.activeTool === 'table'
-                ? newTableBox(x, y, Math.min(6.5, this.geo.w - x - 0.2))
-                : newTextBox(x, y, 2.5, 0.4),
-            this.geo
-        );
+        const tool = this.activeTool;
+        let fresh;
+        if (tool === 'table') {
+            fresh = newTableBox(x, y, Math.min(6.5, this.geo.w - x - 0.2));
+        } else if (tool === 'image') {
+            fresh = newImageBox(x, y, 1.5, 1);
+        } else if (tool === 'shape') {
+            fresh = newShapeBox(x, y, 2, 1);
+        } else {
+            fresh = newTextBox(x, y, 2.5, 0.4);
+        }
+        const box = clampBox(fresh, this.geo);
         target.boxes = [...target.boxes, box];
         this.doc = { ...this.doc };
         this.selectedId = box.id;
         this.activeTool = 'select';
-        this.statusText = this.activeTool === 'table' ? 'Table placed' : 'Text box placed';
+        // Read the tool from `tool`, not from this.activeTool — that was just reset to
+        // 'select' above, so the status line always said "Text box placed".
+        const LABELS = { table: 'Table', image: 'Image', shape: 'Shape', text: 'Text box' };
+        this.statusText = (LABELS[tool] || 'Box') + ' placed';
+        if (tool === 'image') {
+            this.loadImageLibrary();
+        }
     }
 
     handleBoxMouseDown(event) {
@@ -1037,6 +1450,34 @@ export default class DocGenCanvas extends LightningElement {
      */
     get showBoxTypography() {
         return this.selectedIsTable;
+    }
+
+    /**
+     * Only formats the PDF engine actually renders.
+     *
+     * link and image are deliberately absent: a link is dead in a printed document and
+     * an inline image from this editor is a data URI, which Blob.toPdf rejects
+     * outright — it renders as a broken box. Offering a control that silently produces
+     * nothing is worse than not offering it, and images belong on the canvas as their
+     * own box where they can be positioned.
+     */
+    get richTextFormats() {
+        return [
+            'font',
+            'size',
+            'bold',
+            'italic',
+            'underline',
+            'strike',
+            'list',
+            'indent',
+            'align',
+            'color',
+            'background',
+            'header',
+            'clean',
+            'table'
+        ];
     }
 
     get canEditRichText() {
@@ -1164,15 +1605,29 @@ export default class DocGenCanvas extends LightningElement {
         this.isSaving = true;
         try {
             const html = serialize(this.doc, this.geo);
-            await saveAndPublishHtmlBody({
+            const res = await saveAndPublishHtmlBody({
                 templateId: this.templateId,
                 fileName: 'canvas.html',
-                htmlContent: html
+                htmlContent: html,
+                // A new version per save, so the picker can actually take you back.
+                newVersion: true
             });
-            this.statusText = 'Saved';
+            this.statusText = 'Saved as a new version';
             this._saveOk = true;
-            // Saving repoints the active version, so the list's timestamps are stale.
+            // Follow the version that was just created, by ID.
+            //
+            // Reloading the list and re-deriving "which one is active" would work only
+            // if the fresh row is visible and flagged by the time the query runs, and
+            // when it was not, the editor stayed pointed at the SUPERSEDED version —
+            // so the next reload showed the previous canvas and the save looked lost.
+            // The server just told us the id; use it.
+            if (res && res.versionId) {
+                this.activeVersionId = res.versionId;
+            }
             await this.loadVersions();
+            if (res && res.versionId) {
+                this.activeVersionId = res.versionId;
+            }
             this.dispatchEvent(new CustomEvent('saved', { detail: { html } }));
         } catch (e) {
             // Surfaced as a banner, not a status line: a save that silently did not

@@ -3306,6 +3306,73 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * Every image the Canvas editor can place: this template's own uploads first, then
+     * the org's Asset Files.
+     *
+     * Asset files are resolved to their ContentVersion and handed back as
+     * /sfc/servlet.shepherd/version/download/<cvId> rather than as /file-asset/<name>.
+     * That is deliberate. A relative /sfc/ URL is the one image form measured to render
+     * through Blob.toPdf — an absolute URL or a data URI comes out blank, and an asset
+     * URL that loads perfectly in the browser preview but prints empty is precisely the
+     * failure this editor exists to make impossible.
+     *
+     * Read-only and metadata-only: no VersionData, so listing a hundred images costs no
+     * heap.
+     */
+    @AuraEnabled
+    public static List<Map<String, Object>> listCanvasImages(Id templateId) {
+        List<Map<String, Object>> results = new List<Map<String, Object>>();
+        if (templateId != null) {
+            results.addAll(listHtmlTemplateImages(templateId));
+        }
+
+        DocGenFlsGuard.assertAccessible(
+            ContentVersion.sObjectType,
+            new Set<String>{ 'Id', 'Title', 'FileExtension', 'ContentDocumentId' }
+        );
+        Map<Id, String> assetTitleByDoc = new Map<Id, String>();
+        /* code-analyzer-suppress ApexFlsViolation */
+        for (ContentAsset ca : [
+            SELECT Id, MasterLabel, ContentDocumentId
+            FROM ContentAsset
+            WITH SYSTEM_MODE
+            ORDER BY MasterLabel
+            LIMIT 200
+        ]) {
+            if (ca.ContentDocumentId != null) {
+                assetTitleByDoc.put(ca.ContentDocumentId, ca.MasterLabel);
+            }
+        }
+        if (!assetTitleByDoc.isEmpty()) {
+            // Images only. An asset file can be a PDF or a stylesheet, and offering one
+            // as a picture would place a box that renders nothing.
+            Set<String> imageExts = new Set<String>{ 'png', 'jpg', 'jpeg', 'gif', 'bmp' };
+            /* code-analyzer-suppress ApexFlsViolation */
+            for (ContentVersion cv : [
+                SELECT Id, Title, FileExtension, ContentDocumentId
+                FROM ContentVersion
+                WHERE ContentDocumentId IN :assetTitleByDoc.keySet() AND IsLatest = TRUE
+                WITH SYSTEM_MODE
+                LIMIT 200
+            ]) {
+                if (cv.FileExtension == null || !imageExts.contains(cv.FileExtension.toLowerCase())) {
+                    continue;
+                }
+                String label = assetTitleByDoc.get(cv.ContentDocumentId);
+                results.add(
+                    new Map<String, Object>{
+                        'contentVersionId' => cv.Id,
+                        'fileName' => String.isBlank(label) ? cv.Title : label,
+                        'url' => '/sfc/servlet.shepherd/version/download/' + cv.Id,
+                        'isAsset' => true
+                    }
+                );
+            }
+        }
+        return results;
+    }
+
+    /**
      * HTML template upload — body part (v1.61+).
      *
      * Final call in the client-side zip-break-apart flow. The LWC has already
@@ -3510,17 +3577,58 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * output is simply wrong.
      */
     @AuraEnabled
-    public static Map<String, Object> saveAndPublishHtmlBody(Id templateId, String fileName, String htmlContent) {
+    // Single signature, no overload: @AuraEnabled methods cannot be overloaded, and a
+    // second one fails the deploy rather than shadowing quietly.
+    public static Map<String, Object> saveAndPublishHtmlBody(
+        Id templateId,
+        String fileName,
+        String htmlContent,
+        Boolean newVersion
+    ) {
         Map<String, Object> saved = saveHtmlTemplateBody(templateId, fileName, htmlContent);
         Id cvId = (Id) saved.get('contentVersionId');
 
-        DocGenFlsGuard.assertAccessible(
-            DocGen_Template_Version__c.sObjectType,
-            new Set<String>{ 'Template__c', 'Is_Active__c', 'Content_Version_Id__c' }
-        );
+        // Every authoring field, not just the body pointer. A new version has to be a
+        // COPY of the one it supersedes — see the insert below.
+        Set<String> versionFields = new Set<String>{
+            'Template__c',
+            'Is_Active__c',
+            'Content_Version_Id__c',
+            'Query_Config__c',
+            'Base_Object_API__c',
+            'Category__c',
+            'Description__c',
+            'Type__c',
+            'Output_Format__c',
+            'Document_Title_Format__c',
+            'Header_Html__c',
+            'Footer_Html__c',
+            'Page_Size__c',
+            'Page_Orientation__c',
+            'Page_Margins__c',
+            'Custom_Margins__c',
+            'Watermark_Image_CV_Id__c'
+        };
+        DocGenFlsGuard.assertAccessible(DocGen_Template_Version__c.sObjectType, versionFields);
         /* code-analyzer-suppress ApexFlsViolation */
         List<DocGen_Template_Version__c> active = [
-            SELECT Id, Content_Version_Id__c
+            SELECT
+                Id,
+                Content_Version_Id__c,
+                Query_Config__c,
+                Base_Object_API__c,
+                Category__c,
+                Description__c,
+                Type__c,
+                Output_Format__c,
+                Document_Title_Format__c,
+                Header_Html__c,
+                Footer_Html__c,
+                Page_Size__c,
+                Page_Orientation__c,
+                Page_Margins__c,
+                Custom_Margins__c,
+                Watermark_Image_CV_Id__c
             FROM DocGen_Template_Version__c
             WHERE Template__c = :templateId AND Is_Active__c = TRUE
             WITH SYSTEM_MODE
@@ -3537,6 +3645,68 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             WITH SYSTEM_MODE
             LIMIT 1
         ];
+
+        // A save creates a NEW version and makes it active, rather than repointing the
+        // current one. Repointing meant every save overwrote the only record of what
+        // the document used to be, so the version picker could never take you back to
+        // anything — which is the entire reason it exists. Versions are cheap; a lost
+        // layout is not.
+        if (newVersion) {
+            // Deactivate EVERY active version, not just the one read above.
+            //
+            // That read is LIMIT 1, so deactivating only it would leave any other
+            // active rows active and the template would end up with several. The
+            // renderer picks its active version with LIMIT 1 and NO ORDER BY
+            // (DocGenTemplateManager.getTemplateFileContent), so which body prints
+            // becomes arbitrary — a save appears to do nothing because the PDF is
+            // built from some older version. Sweeping them all also self-heals a
+            // template that already drifted into that state.
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Template__c', 'Is_Active__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template_Version__c> allActive = [
+                SELECT Id, Is_Active__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :templateId AND Is_Active__c = TRUE
+                WITH SYSTEM_MODE
+            ];
+            for (DocGen_Template_Version__c prior : allActive) {
+                prior.Is_Active__c = false;
+            }
+            if (!allActive.isEmpty()) {
+                DocGenFlsGuard.assertUpdateable(allActive, new Set<String>{ 'Is_Active__c' });
+                /* code-analyzer-suppress ApexFlsViolation */
+                Database.update(allActive, AccessLevel.SYSTEM_MODE);
+            }
+            // CLONE the version being superseded, then repoint the body.
+            //
+            // A version carries the whole authoring config — query, base object, page
+            // size, margins, header/footer, output format — and activateVersion pushes
+            // those fields BACK onto the template. So a new version built from scratch
+            // with only a body pointer does not merely lose its own settings: activating
+            // it wipes the template's query config and page setup. Cloning means a save
+            // changes exactly one thing, which is what a save should do.
+            DocGen_Template_Version__c fresh;
+            if (!active.isEmpty()) {
+                fresh = active[0].clone(false, true, false, false);
+            } else {
+                fresh = new DocGen_Template_Version__c(Template__c = templateId, Type__c = tpl.Type__c);
+            }
+            fresh.Template__c = templateId;
+            fresh.Content_Version_Id__c = cvId;
+            fresh.Is_Active__c = true;
+            if (String.isBlank(fresh.Type__c)) {
+                fresh.Type__c = tpl.Type__c;
+            }
+            DocGenFlsGuard.assertCreateable(fresh, versionFields);
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.insert(fresh, AccessLevel.SYSTEM_MODE);
+            saved.put('versionId', fresh.Id);
+            saved.put('versionCreated', true);
+            return saved;
+        }
 
         if (active.isEmpty()) {
             // No active version yet — a template created outside the wizard. Make one
