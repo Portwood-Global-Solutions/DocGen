@@ -13259,6 +13259,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     async _openDesignerSurface() {
         this.activeMainTab = 'design';
+        if (this.isCanvasTemplate) {
+            // The canvas owns its own load and serialize cycle, so NONE of the flow
+            // designer's setup applies. Bailing out before it rather than after also
+            // skips _loadBodyIntoEditor, which staged the canvas body into the HTML
+            // textarea — a second, divergent copy of a document the canvas is about to
+            // load itself, and the exact shape of the two-bodies bug this editor exists
+            // to avoid.
+            this._loadWizardAssets();
+            return;
+        }
         this.showHtmlBodyEditor = true;
         this.showBlockPanel = true;
         this.showTagPanel = true;
@@ -13269,12 +13279,6 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Not awaited — the toolbar button appears when the answer arrives, and
         // an org without Einstein just never shows it.
         this._refreshAgentforceAvailability();
-        if (this.isCanvasTemplate) {
-            // The canvas owns its own load/serialize cycle. Running the flow designer's
-            // visual-mode setup here would stage a pending write against
-            // .dg-visual-host, which this surface never renders.
-            return;
-        }
         let body = this._lastUploadedHtmlText;
         if (!body || !body.trim()) {
             // Blank template: seed a clean sheet so click-and-type just works.

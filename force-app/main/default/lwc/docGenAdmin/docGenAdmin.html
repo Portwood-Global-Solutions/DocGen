@@ -5211,6 +5211,22 @@
                                             </template>
                                         </template>
 
+                                        <template if:true={isCanvasTemplate}>
+                                            <div class="slds-box slds-var-m-top_medium">
+                                                <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                    This is a <b>Canvas</b> template. Its layout is authored on the
+                                                    canvas — boxes, tables, images, shapes and codes placed where they
+                                                    print.
+                                                </p>
+                                                <lightning-button
+                                                    variant="brand"
+                                                    label="Open Canvas Designer"
+                                                    icon-name="utility:brush"
+                                                    onclick={handleOpenDesignerFromModal}
+                                                    title="Full-screen canvas: drag boxes onto the page and see exactly what prints."
+                                                ></lightning-button>
+                                            </div>
+                                        </template>
                                         <template if:true={isEditTypeHtml}>
                                             <label class="slds-form-element__label">Upload New Version</label>
                                             <p class="slds-text-body_small slds-var-m-bottom_x-small">
