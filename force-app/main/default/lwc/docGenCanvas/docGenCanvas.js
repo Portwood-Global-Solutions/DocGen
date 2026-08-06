@@ -305,6 +305,139 @@ export default class DocGenCanvas extends LightningElement {
         }
     }
 
+    /**
+     * Every element on the page, as a clickable list.
+     *
+     * Stacked boxes are the case the canvas cannot serve on its own: once one box sits
+     * on top of another, the one underneath is unreachable by clicking, and a
+     * full-bleed background makes everything under it unreachable at once. The list is
+     * the way back to any element regardless of what is covering it.
+     *
+     * Ordered front-to-back — highest z first — because that is the order they are
+     * stacked on the page, and reading a layer list bottom-up is a puzzle.
+     */
+    get layerItems() {
+        const out = [];
+        for (const board of this.doc.artboards || []) {
+            for (const b of board.boxes || []) {
+                out.push({
+                    id: b.id,
+                    z: b.z || 0,
+                    y: b.y,
+                    label: this.layerLabel(b),
+                    kindLabel: this.layerKind(b),
+                    cls: b.id === this.selectedId ? 'dg-layer dg-layer_on' : 'dg-layer'
+                });
+            }
+        }
+        return out.sort((a, c) => c.z - a.z || a.y - c.y);
+    }
+
+    get hasLayers() {
+        return this.layerItems.length > 0;
+    }
+
+    layerKind(b) {
+        const k = b.kind || 'text';
+        return k.charAt(0).toUpperCase() + k.slice(1);
+    }
+
+    /** A label you can recognise the box by, not its id. */
+    layerLabel(b) {
+        if (b.kind === 'table') {
+            const rel = (b.table || {}).relationship;
+            return rel ? rel + ' table' : 'Table';
+        }
+        if (b.kind === 'image') {
+            const img = b.image || {};
+            return img.assetKey || img.tag || 'No image chosen';
+        }
+        if (b.kind === 'shape') {
+            const t = (b.shape || {}).type || 'rect';
+            return t === 'rect' ? 'Rectangle' : t === 'hline' ? 'Horizontal line' : 'Vertical line';
+        }
+        if (b.kind === 'code') {
+            const c = b.code || {};
+            return (c.type || 'qr').toUpperCase() + (c.field ? ' · ' + c.field : '');
+        }
+        // Strip the markup so the label is the words the author typed, not their tags.
+        const raw = (b.html != null ? b.html : b.text || '').replace(/<[^>]*>/g, ' ');
+        const text = raw.replace(/\s+/g, ' ').trim();
+        return text ? (text.length > 34 ? text.slice(0, 34) + '…' : text) : 'Empty text box';
+    }
+
+    handleLayerClick(event) {
+        this.selectedId = event.currentTarget.dataset.id;
+        this.activeTool = 'select';
+    }
+
+    get selCondition() {
+        const b = this.selectedBox;
+        return b ? b.condition || '' : '';
+    }
+
+    /** A literal example tag cannot live in the markup — LWC compiles {…} as a binding. */
+    get conditionPlaceholder() {
+        return 'Amount > 200';
+    }
+
+    handleConditionChange(event) {
+        const box = this.selectedBox;
+        if (!box) return;
+        // Stored WITHOUT the {#IF …} wrapper: the serializer adds it. Accepting a
+        // pasted whole tag and storing it raw would emit {#IF {#IF x}} on the next save.
+        const raw = (event.target.value || '')
+            .trim()
+            .replace(/^\{#IF\s*/i, '')
+            .replace(/\}$/, '');
+        this.applyToBox(box.id, { condition: raw });
+    }
+
+    get selZ() {
+        const b = this.selectedBox;
+        return b ? b.z || 0 : 0;
+    }
+
+    /**
+     * Moves the box one step through the stack rather than setting a raw number.
+     *
+     * Stepping past the neighbour's level (not just +/-1) is what makes the button do
+     * what its label says: with two boxes both at z=0, incrementing to 1 works, but
+     * against a box at z=5 a single step would change nothing visible and the control
+     * would look broken.
+     */
+    handleZStep(event) {
+        const dir = event.currentTarget.dataset.dir === 'up' ? 1 : -1;
+        const box = this.selectedBox;
+        if (!box) return;
+        const others = this.layerItems.filter((l) => l.id !== box.id).map((l) => l.z);
+        const cur = box.z || 0;
+        const candidates = others.filter((z) => (dir > 0 ? z >= cur : z <= cur));
+        const target = candidates.length
+            ? dir > 0
+                ? Math.max(...candidates) + 1
+                : Math.min(...candidates) - 1
+            : cur + dir;
+        this.applyToBox(box.id, { z: target });
+        this.statusText = dir > 0 ? 'Moved forward' : 'Moved back';
+    }
+
+    handleZFront() {
+        const box = this.selectedBox;
+        if (!box) return;
+        const zs = this.layerItems.filter((l) => l.id !== box.id).map((l) => l.z);
+        this.applyToBox(box.id, { z: zs.length ? Math.max(...zs) + 1 : 1 });
+        this.statusText = 'Brought to front';
+    }
+
+    handleZBack() {
+        const box = this.selectedBox;
+        if (!box) return;
+        const zs = this.layerItems.filter((l) => l.id !== box.id).map((l) => l.z);
+        this.applyToBox(box.id, { z: zs.length ? Math.min(...zs) - 1 : -1 });
+        this.statusText = 'Sent to back';
+    }
+
     get boardStyle() {
         return (
             'width:' +
@@ -340,7 +473,9 @@ export default class DocGenCanvas extends LightningElement {
                     inToPx(b.w, this.zoom) +
                     'px;min-height:' +
                     inToPx(b.h, this.zoom) +
-                    'px;' +
+                    'px;z-index:' +
+                    (b.z || 0) +
+                    ';' +
                     this.screenStyle(b),
                 cls: b.id === this.selectedId ? 'dg-cbox dg-cbox_selected' : 'dg-cbox',
                 isSelected: b.id === this.selectedId,
@@ -570,6 +705,10 @@ export default class DocGenCanvas extends LightningElement {
             num: i + 1,
             cells: cols.map((c, j) => ({
                 key: i + '_' + j,
+                // BOTH indices. The cell inputs carry data-idx and data-col, and
+                // without idx on the cell itself data-idx resolved to undefined, so
+                // every keystroke was written to row NaN and silently discarded.
+                idx: i,
                 col: j,
                 label: c.label || 'Column ' + (j + 1),
                 value: cells[j] || ''

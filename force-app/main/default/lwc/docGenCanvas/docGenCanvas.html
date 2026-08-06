@@ -624,6 +624,28 @@
                     </p>
                 </template>
 
+                <h4 class="dg-panel-sub">Show only when</h4>
+                <input
+                    class="dg-panel-input"
+                    type="text"
+                    value={selCondition}
+                    placeholder={conditionPlaceholder}
+                    onchange={handleConditionChange}
+                />
+                <p class="dg-panel-note">
+                    Leave blank to always show it. The whole box disappears when the test fails — the field is added to
+                    the query for you.
+                </p>
+
+                <h4 class="dg-panel-sub">Arrange</h4>
+                <div class="dg-row">
+                    <button class="dg-sbtn" data-dir="up" onclick={handleZStep} title="Bring forward">Forward</button>
+                    <button class="dg-sbtn" data-dir="down" onclick={handleZStep} title="Send backward">Back</button>
+                    <button class="dg-sbtn" onclick={handleZFront} title="Bring to front">Front</button>
+                    <button class="dg-sbtn" onclick={handleZBack} title="Send to back">Bottom</button>
+                </div>
+                <p class="dg-panel-note">Layer {selZ}. Higher sits on top.</p>
+
                 <button class="dg-panel-btn" onclick={handleModeToggle}>
                     <template lwc:if={selectedIsFlow}>Make it pinned</template>
                     <template lwc:else>Let it flow across pages</template>
@@ -920,6 +942,22 @@
                     </div>
                 </template>
             </div>
+        </div>
+
+        <!-- Layers. The way back to a box that something else is sitting on top of. -->
+        <div class="dg-layers">
+            <div class="dg-layers-head">Elements</div>
+            <template lwc:if={hasLayers}>
+                <template for:each={layerItems} for:item="l">
+                    <button key={l.id} class={l.cls} data-id={l.id} onclick={handleLayerClick} title={l.label}>
+                        <span class="dg-layer-kind">{l.kindLabel}</span>
+                        <span class="dg-layer-name">{l.label}</span>
+                    </button>
+                </template>
+            </template>
+            <template lwc:else>
+                <p class="dg-layers-empty">Nothing placed yet.</p>
+            </template>
         </div>
     </div>
 </template>

@@ -688,3 +688,69 @@ textarea.dg-cbox-text {
     padding: 10px 12px 4px;
     max-width: 420px;
 }
+
+/* ---- Layers ---------------------------------------------------------------
+   A third column, because once boxes overlap the artboard alone cannot reach the
+   one underneath — and a full-bleed background makes everything under it
+   unreachable at once. */
+.dg-layers {
+    width: 190px;
+    flex: none;
+    border-left: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    background: var(--slds-g-color-surface-1, #fff);
+    overflow-y: auto;
+    max-height: 78vh;
+    padding-bottom: 12px;
+}
+
+.dg-layers-head {
+    padding: 8px 10px;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+.dg-layer {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-bottom: 1px solid #f1f3f6;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.dg-layer:hover {
+    background: #f5f7fa;
+}
+
+.dg-layer_on {
+    background: #ede9fe;
+}
+
+.dg-layer-kind {
+    display: block;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #7c3aed;
+}
+
+.dg-layer-name {
+    display: block;
+    font-size: 0.74rem;
+    color: #1f2937;
+    /* One line — a long text box must not stretch the column. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dg-layers-empty {
+    padding: 10px;
+    font-size: 0.72rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}

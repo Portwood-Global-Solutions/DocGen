@@ -146,6 +146,14 @@ export const FONT_CHOICES = [
     { label: 'Monospace', value: 'monospace' }
 ];
 
+/**
+ * Stacking order. Measured to work in this engine (scripts/css-probe-canvas-features),
+ * unlike most CSS 3 — z-index is CSS 2.1 and Flying Saucer honours it on positioned
+ * boxes, which is what makes overlap controllable rather than a matter of authoring
+ * order.
+ */
+export const DEFAULT_Z = 0;
+
 export const DEFAULT_STYLE = {
     font: 'sans-serif',
     size: 11,
@@ -170,6 +178,8 @@ export function newTextBox(xIn, yIn, wIn, hIn) {
         // how a {#Loop} of 60 rows spills onto the next page instead of being
         // clipped at the artboard edge.
         mode: 'pinned',
+        z: DEFAULT_Z,
+        condition: '',
         x: round3(xIn),
         y: round3(yIn),
         w: round3(wIn),
@@ -224,6 +234,8 @@ export function newTableBox(xIn, yIn, wIn) {
         id: nextId('box'),
         kind: 'table',
         mode: 'flow',
+        z: DEFAULT_Z,
+        condition: '',
         style: { ...DEFAULT_STYLE, padding: 0 },
         table: {
             ...DEFAULT_TABLE_STYLE,
@@ -267,6 +279,8 @@ export function newImageBox(xIn, yIn, wIn, hIn) {
         id: nextId('box'),
         kind: 'image',
         mode: 'pinned',
+        z: DEFAULT_Z,
+        condition: '',
         style: { ...DEFAULT_STYLE, padding: 0 },
         image: {
             // A Portwood ASSET KEY, not a file URL. `{%asset:<key>}` resolves at
@@ -324,6 +338,8 @@ export function newShapeBox(xIn, yIn, wIn, hIn) {
         id: nextId('box'),
         kind: 'shape',
         mode: 'pinned',
+        z: DEFAULT_Z,
+        condition: '',
         style: { ...DEFAULT_STYLE, padding: 0 },
         shape: { ...DEFAULT_SHAPE },
         x: round3(xIn),
@@ -507,6 +523,8 @@ export function newCodeBox(xIn, yIn) {
         id: nextId('box'),
         kind: 'code',
         mode: 'pinned',
+        z: DEFAULT_Z,
+        condition: '',
         style: { ...DEFAULT_STYLE, padding: 0 },
         code: { ...DEFAULT_CODE },
         x: round3(xIn),
@@ -1196,7 +1214,11 @@ function baseAuthoringAttrs(box) {
         '"' +
         ' data-dg-mode="' +
         (box.mode === 'flow' ? 'flow' : 'pinned') +
-        '"'
+        '"' +
+        ' data-dg-z="' +
+        (box.z || 0) +
+        '"' +
+        (box.condition ? ' data-dg-if="' + esc(box.condition) + '"' : '')
     );
 }
 
@@ -1233,6 +1255,26 @@ function outerToContentHeight(box) {
     return round3(Math.max(0.02, box.h - chromePt / 72));
 }
 
+/**
+ * Wraps a box in {#IF …}…{/IF} when it carries a condition.
+ *
+ * The tags sit OUTSIDE the box's div, so a false condition removes the element
+ * entirely rather than leaving an empty bordered rectangle behind — which is what
+ * putting them inside would do, and is not what "show only when" means.
+ *
+ * The expression is escaped like any other text. That does not break it: the engine's
+ * evaluateIfExpression un-escapes &gt; / &lt; / &amp; before evaluating, because Word
+ * escapes exactly the same characters in its text runs. Leaving it raw would put an
+ * unescaped `<` into the markup and break the document.
+ */
+function wrapCondition(box, inner) {
+    const cond = String(box.condition || '').trim();
+    if (!cond) {
+        return inner;
+    }
+    return '{#IF ' + esc(cond) + '}' + inner + '{/IF}';
+}
+
 function boxToHtml(box, cursor) {
     let inner;
     if (box.kind === 'table') {
@@ -1247,13 +1289,38 @@ function boxToHtml(box, cursor) {
         inner = textToHtml(box);
     }
     if (box.mode === 'flow') {
-        return (
+        return wrapCondition(
+            box,
             '<div class="dg-flow"' +
+                authoringAttrs(box) +
+                ' style="margin: ' +
+                flowMarginTop(box, cursor || 0) +
+                'in 0 0 ' +
+                box.x +
+                'in; width: ' +
+                outerToContentWidth(box) +
+                'in; ' +
+                styleCss(box) +
+                '">' +
+                inner +
+                '</div>'
+        );
+    }
+    // Height is deliberately NOT emitted for a pinned box. Declaring it would cap the
+    // box and let merged content overflow past its own background and border; leaving
+    // it off lets the box grow to whatever the merge produces. The model still tracks
+    // h so the editor can show a real rectangle to drag.
+    const zCss = box.z ? ' z-index: ' + box.z + ';' : '';
+    return wrapCondition(
+        box,
+        '<div class="dg-pin"' +
             authoringAttrs(box) +
-            ' style="margin: ' +
-            flowMarginTop(box, cursor || 0) +
-            'in 0 0 ' +
+            ' style="' +
+            zCss.trim() +
+            ' left: ' +
             box.x +
+            'in; top: ' +
+            box.y +
             'in; width: ' +
             outerToContentWidth(box) +
             'in; ' +
@@ -1261,26 +1328,6 @@ function boxToHtml(box, cursor) {
             '">' +
             inner +
             '</div>'
-        );
-    }
-    // Height is deliberately NOT emitted for a pinned box. Declaring it would cap the
-    // box and let merged content overflow past its own background and border; leaving
-    // it off lets the box grow to whatever the merge produces. The model still tracks
-    // h so the editor can show a real rectangle to drag.
-    return (
-        '<div class="dg-pin"' +
-        authoringAttrs(box) +
-        ' style="left: ' +
-        box.x +
-        'in; top: ' +
-        box.y +
-        'in; width: ' +
-        outerToContentWidth(box) +
-        'in; ' +
-        styleCss(box) +
-        '">' +
-        inner +
-        '</div>'
     );
 }
 
@@ -1292,7 +1339,13 @@ export function serialize(doc, geo) {
             // does not matter and emitting them up front leaves the flow starting at
             // the top of the artboard. Flow boxes then follow IN Y ORDER, because
             // normal flow is document order and authoring order is not.
-            const pinned = (b.boxes || []).filter((x) => x.mode !== 'flow');
+            // Ascending z, so document order and paint order agree even where z ties —
+            // the later box in the markup wins a tie, which is what "bring to front"
+            // means when two boxes share a level.
+            const pinned = (b.boxes || [])
+                .filter((x) => x.mode !== 'flow')
+                .slice()
+                .sort((p, q) => (p.z || 0) - (q.z || 0));
             const flowing = (b.boxes || [])
                 .filter((x) => x.mode === 'flow')
                 .slice()
@@ -1467,6 +1520,9 @@ export function deserialize(html) {
                 const isFlow = el.classList.contains('dg-flow');
                 const box = newTextBox(0, 0, 2, 0.5);
                 box.mode = el.getAttribute('data-dg-mode') || (isFlow ? 'flow' : 'pinned');
+                const az = parseInt(el.getAttribute('data-dg-z'), 10);
+                box.z = isNaN(az) ? 0 : az;
+                box.condition = el.getAttribute('data-dg-if') || '';
                 // Prefer the AUTHORING attributes; fall back to reading the CSS only
                 // for documents saved before they existed.
                 const ax = parseFloat(el.getAttribute('data-dg-x'));
@@ -1601,7 +1657,15 @@ export function collectUsedFields(doc) {
                     }
                 }
             } else {
-                collectFromText(box.text, out, '');
+                collectFromText(box.html != null && box.html !== '' ? box.html : box.text, out, '');
+            }
+            // A condition names a field too. Without this, "show only when Amount > 200"
+            // silently evaluated against a field the query never selected — the box
+            // just never appeared, and nothing said why.
+            const cond = String(box.condition || '').trim();
+            const m = /^([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)/.exec(cond);
+            if (m && !NON_FIELD_TAGS.test(m[1])) {
+                out.base.add(m[1]);
             }
         }
     }
