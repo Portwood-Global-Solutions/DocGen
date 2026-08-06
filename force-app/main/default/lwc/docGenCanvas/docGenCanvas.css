@@ -645,6 +645,24 @@ textarea.dg-cbox-text {
     padding: 0;
 }
 
+/* Per-level markers, identical to the rules in canvasModel.buildCanvasCss. A nested
+   item numbered 1. on both surfaces read as a new list rather than a sub-point. */
+.dg-cbox-body ol ol {
+    list-style: lower-alpha outside;
+}
+
+.dg-cbox-body ol ol ol {
+    list-style: lower-roman outside;
+}
+
+.dg-cbox-body ul ul {
+    list-style: circle outside;
+}
+
+.dg-cbox-body ul ul ul {
+    list-style: square outside;
+}
+
 /* Matches the `p` rule in canvasModel.buildCanvasCss — 0.06in at 96dpi. */
 .dg-cbox-body p {
     margin: 0 0 5.76px 0;

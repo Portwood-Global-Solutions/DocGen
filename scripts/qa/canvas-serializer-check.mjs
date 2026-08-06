@@ -224,6 +224,11 @@ const checks = [
     ['border and padding come OUT of the emitted width', html.includes('width: 7.75in')],
     ['the authored outer width is still what round-trips', html.includes('data-dg-w="8"')],
 
+    // Both surfaces must state the SAME list contract, or a list looks one way while
+    // authoring and another in the PDF. Measured: 1. / 2. / a. / i. / 3.
+    ['nested lists get per-level markers', /ol ol \{ list-style: lower-alpha/.test(html)],
+    ['lists declare an explicit indent', /ol \{ list-style: decimal outside; margin: 0 0 0 1.5em/.test(html)],
+
     ['a custom size emits two lengths', /@page \{ size: 5.5in 8.5in;/.test(customHtml)],
     // Zero margins are what make the canvas and the page share an origin.
     ['margins default to zero', /margin: 0in 0in 0in 0in/.test(customHtml)],

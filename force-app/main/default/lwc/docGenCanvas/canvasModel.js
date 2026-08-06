@@ -750,6 +750,14 @@ export function buildCanvasCss(geo) {
         // came out numbered and loosely spaced in the PDF. One contract, both surfaces.
         'ol { list-style: decimal outside; margin: 0 0 0 1.5em; padding: 0; }\n' +
         'ul { list-style: disc outside; margin: 0 0 0 1.5em; padding: 0; }\n' +
+        // Per-level markers, matching what the rich-text editor draws. Without these
+        // every level numbered 1. 2. 3. again, so a nested item read as a new list
+        // rather than a sub-point. Measured against a real render: 1. / 2. / a. /
+        // i. / 3., with the indent accumulating per level.
+        'ol ol { list-style: lower-alpha outside; }\n' +
+        'ol ol ol { list-style: lower-roman outside; }\n' +
+        'ul ul { list-style: circle outside; }\n' +
+        'ul ul ul { list-style: square outside; }\n' +
         'li { display: list-item; margin: 0; padding: 0; }\n' +
         // The editor wraps each block in <p>. An engine paragraph margin then opens a
         // gap between list items that the canvas does not show.
