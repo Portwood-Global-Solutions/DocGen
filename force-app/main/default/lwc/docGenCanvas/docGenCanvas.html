@@ -83,6 +83,28 @@
                     </p>
                 </template>
 
+                <template lwc:if={canInsertLink}>
+                    <h4 class="dg-panel-sub">Link</h4>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={linkText}
+                        placeholder="Link text"
+                        onchange={handleLinkTextChange}
+                    />
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={linkUrl}
+                        placeholder="https://example.com"
+                        onchange={handleLinkUrlChange}
+                    />
+                    <p class="dg-panel-note">{linkUrlHint}</p>
+                    <button class="dg-panel-btn" onclick={handleInsertLink} disabled={linkInsertDisabled}>
+                        Add link
+                    </button>
+                </template>
+
                 <template lwc:if={hasPickableFields}>
                     <h4 class="dg-panel-sub">Fields</h4>
                     <p class="dg-panel-note">

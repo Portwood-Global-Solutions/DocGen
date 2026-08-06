@@ -2198,6 +2198,15 @@ export default class DocGenCanvas extends LightningElement {
         this.applyToBox(box.id, { image: { ...box.image, assetKey: '', src: '', tag: '', fileName: '' } });
     }
 
+    /** Escapes what would otherwise break out of the markup being built. */
+    escAttr(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
     /** Apex errors arrive as e.body.message; JS errors as e.message. */
     errText(e) {
         return (e && e.body ? e.body.message : e && e.message) || 'Unknown error';
@@ -2683,16 +2692,16 @@ export default class DocGenCanvas extends LightningElement {
             'background',
             'header',
             'clean',
-            'table',
-            // Links ARE clickable in the output — measured, not assumed. Blob.toPdf
-            // emits a real /Link annotation: an http(s) href becomes a /URI action and
-            // an in-document #anchor becomes a /GoTo jump. This button was removed
-            // earlier on the assumption that "a link is dead in print"; that was wrong
-            // and the probe says so.
+            'table'
+            // 'link' is deliberately absent, and links are still supported — see the
+            // Link control in the panel.
             //
-            // `mailto:` is the exception — it produces no annotation at all and renders
-            // as ordinary text. Still readable, just not clickable.
-            'link'
+            // The editor's own link button opens an absolutely-positioned overlay that
+            // this column clips: the panel scrolls, and a scrolling box clips on BOTH
+            // axes, so the overlay lost its left edge and its URL field could not be
+            // reached. Widening the column moved the problem without solving it. The
+            // panel control below cannot be clipped because it is ordinary content, so
+            // it works regardless of where an overlay would have opened.
         ];
     }
 
@@ -2745,6 +2754,70 @@ export default class DocGenCanvas extends LightningElement {
 
     handleShowSource() {
         this.sourceMode = true;
+    }
+
+    // ---- Link ------------------------------------------------------------
+    @track linkText = '';
+    @track linkUrl = '';
+
+    get canInsertLink() {
+        return !!this.selectedBox && this.canEditRichText;
+    }
+
+    get linkInsertDisabled() {
+        return !(this.linkText || '').trim() || !this.isSafeLinkUrl;
+    }
+
+    /** http, https and in-document anchors — the three the PDF turns into annotations. */
+    get isSafeLinkUrl() {
+        const v = (this.linkUrl || '').trim();
+        return v.startsWith('#') || /^https?:\/\//i.test(v);
+    }
+
+    get linkUrlHint() {
+        const v = (this.linkUrl || '').trim();
+        if (!v) {
+            return 'https://example.com, or #anchor to jump within the document.';
+        }
+        if (this.isSafeLinkUrl) {
+            return 'Clickable in the PDF.';
+        }
+        if (/^mailto:/i.test(v)) {
+            return 'mailto: renders as text — the PDF engine makes no link for it.';
+        }
+        return 'Only http, https and #anchors become clickable links.';
+    }
+
+    handleLinkTextChange(event) {
+        this.linkText = event.target.value;
+    }
+
+    handleLinkUrlChange(event) {
+        this.linkUrl = event.target.value;
+    }
+
+    /**
+     * Appends a link to the box's content.
+     *
+     * Appends rather than wrapping a selection because the selection lives inside the
+     * rich-text editor's shadow DOM and is not reachable from here. Adding the link and
+     * letting the author move it is a smaller compromise than a control that cannot be
+     * used at all, which is what the editor's own overlay amounted to in this column.
+     */
+    handleInsertLink() {
+        const box = this.selectedBox;
+        if (!box || this.linkInsertDisabled) {
+            return;
+        }
+        const url = this.linkUrl.trim();
+        const text = this.linkText.trim();
+        const current = box.html != null ? box.html : box.text || '';
+        const sep = current && !/(\s|>)$/.test(current) ? ' ' : '';
+        const anchor = '<a href="' + this.escAttr(url) + '">' + this.escAttr(text) + '</a>';
+        this.applyToBox(box.id, { html: sanitizeInline(current + sep + anchor) });
+        this.linkText = '';
+        this.linkUrl = '';
+        this.statusText = 'Link added';
     }
 
     handleSourceChange(event) {
