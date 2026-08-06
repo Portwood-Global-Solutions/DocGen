@@ -2342,7 +2342,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             {
                 mode: 'canvas',
                 title: 'Start from a Blank Canvas',
-                badge: null,
+                // Beta, and said out loud. Subscribers should know which parts of the
+                // product are still moving before they build on them.
+                badge: 'Beta',
                 icon: 'utility:layout',
                 desc: 'An empty artboard. Drop text, tables, images, shapes, codes and signature blocks exactly where you want them and they land there in the PDF, to the inch. Lists still flow onto as many pages as the data needs.'
             }
@@ -4953,7 +4955,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } else if (actionName === 'edit') {
             this.openEditModal(row, 'details');
         } else if (actionName === 'design') {
-            if (row[F.Type] === 'HTML') {
+            // Canvas counts. openDesignerForRow already routes it to the canvas surface
+            // rather than the legacy one — the gate here just never let it through, so
+            // the row action on a Canvas template answered "Designer is for HTML
+            // templates" about a template whose whole point is the designer.
+            if (row[F.Type] === 'HTML' || row[F.Type] === 'Canvas') {
                 this.openDesignerForRow(row);
             } else {
                 this.showToast(
