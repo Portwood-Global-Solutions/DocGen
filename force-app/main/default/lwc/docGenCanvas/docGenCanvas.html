@@ -26,6 +26,29 @@
                 <h3 class="dg-panel-title">Box</h3>
                 <p class="dg-panel-hint">Drag to move. Handles on the right and bottom edges resize.</p>
 
+                <template lwc:if={hasPickableFields}>
+                    <h4 class="dg-panel-sub">Fields</h4>
+                    <p class="dg-panel-note">
+                        From this template's Query Config. Click to
+                        <template lwc:if={selectedIsTable}>add a column.</template>
+                        <template lwc:else>insert the tag.</template>
+                    </p>
+                    <div class="dg-field-chips">
+                        <template for:each={pickableFields} for:item="f">
+                            <button
+                                key={f.key}
+                                class="dg-field-chip"
+                                data-tag={f.tag}
+                                data-label={f.label}
+                                onclick={handlePickField}
+                                title={f.tag}
+                            >
+                                {f.label}
+                            </button>
+                        </template>
+                    </div>
+                </template>
+
                 <lightning-combobox
                     label="Font"
                     variant="label-stacked"
@@ -123,16 +146,38 @@
 
                 <template lwc:if={selectedIsTable}>
                     <h4 class="dg-panel-sub">Table</h4>
-                    <div class="dg-prop-row">
-                        <label class="dg-prop-label">Repeat per</label>
-                        <input
-                            type="text"
-                            class="dg-prop-text"
+                    <template lwc:if={hasRelationshipChoices}>
+                        <lightning-combobox
+                            label="Repeat per"
+                            variant="label-stacked"
                             value={selTableRel}
-                            placeholder="e.g. Opportunities"
-                            onchange={handleTableRelChange}
-                        />
-                    </div>
+                            options={relationshipChoices}
+                            onchange={handleRelPick}
+                            field-level-help="Only relationships this template's Query Config actually returns are offered — a typed name that isn't queried renders an empty table with no error."
+                        ></lightning-combobox>
+                    </template>
+                    <template lwc:else>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Repeat per</label>
+                            <input
+                                type="text"
+                                class="dg-prop-text"
+                                value={selTableRel}
+                                placeholder="e.g. Opportunities"
+                                onchange={handleTableRelChange}
+                            />
+                        </div>
+                        <p class="dg-panel-note">
+                            This template's query returns no child relationships yet. Type one, then use
+                            <b>Update the template's query</b> on the Canvas panel to add it.
+                        </p>
+                    </template>
+                    <template lwc:if={relationshipMissingFromQuery}>
+                        <p class="dg-panel-warn">
+                            <b>{selTableRel}</b> isn't in this template's query, so it will render empty. Deselect the
+                            box and choose <b>Update the template's query</b> to add it.
+                        </p>
+                    </template>
                     <p class="dg-panel-note">
                         The child relationship from your Query Config. Set it and one row is emitted per record, growing
                         across pages. Leave it blank for a fixed table.
@@ -318,6 +363,19 @@
                     Pick the Text tool, then click the page to place a box. Boxes land in the PDF exactly where you put
                     them.
                 </p>
+
+                <h4 class="dg-panel-sub">Query</h4>
+                <p class="dg-panel-note">
+                    Built from the tags actually on the canvas, so a field can't render blank because nobody remembered
+                    to query it.
+                </p>
+                <div class="dg-query-preview">{generatedQuery}</div>
+                <template lwc:if={queryDiffers}>
+                    <button class="dg-panel-btn" onclick={handleApplyQuery}>Update the template's query</button>
+                </template>
+                <template lwc:else>
+                    <p class="dg-panel-note"><b>Query matches the canvas.</b></p>
+                </template>
             </template>
         </div>
 

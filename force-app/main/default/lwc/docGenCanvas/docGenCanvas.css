@@ -375,3 +375,50 @@ textarea.dg-cbox-text {
 .dg-cell-input {
     width: 150px;
 }
+
+/* Field chips — click to place, never type from memory. */
+.dg-field-chips {
+    margin-bottom: 10px;
+}
+
+.dg-field-chip {
+    display: inline-block;
+    margin: 0 3px 3px 0;
+    padding: 2px 7px;
+    border: var(--slds-g-sizing-border-1, 1px) solid rgba(124, 58, 237, 0.35);
+    background: rgba(124, 58, 237, 0.08);
+    border-radius: var(--slds-g-radius-border-4, 50px);
+    font-size: 0.7rem;
+    cursor: pointer;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.dg-field-chip:hover {
+    background: rgba(124, 58, 237, 0.18);
+}
+
+.dg-query-preview {
+    font-family: monospace;
+    font-size: 0.68rem;
+    background: var(--slds-g-color-surface-2, #f3f4f6);
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    padding: 6px;
+    margin-bottom: 8px;
+    word-break: break-word;
+    max-height: 120px;
+    overflow: auto;
+}
+
+/* A mismatch between the canvas and the query renders an empty table with no error —
+   so say it here rather than letting it be discovered at generate time. */
+.dg-panel-warn {
+    font-size: 0.75rem;
+    line-height: 1.35;
+    background: #fff4e5;
+    border: var(--slds-g-sizing-border-1, 1px) solid #f0b429;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    padding: 6px 8px;
+    margin: 0 0 10px 0;
+}

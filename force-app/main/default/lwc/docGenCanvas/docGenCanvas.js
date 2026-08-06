@@ -3,6 +3,9 @@ import getHtmlTemplateBody from '@salesforce/apex/DocGenController.getHtmlTempla
 import saveHtmlTemplateBody from '@salesforce/apex/DocGenController.saveHtmlTemplateBody';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import { extractQueryShape } from 'c/docGenAuthoringKit';
+import { updateRecord } from 'lightning/uiRecordApi';
+import ID_FIELD from '@salesforce/schema/DocGen_Template__c.Id';
+import QUERY_FIELD from '@salesforce/schema/DocGen_Template__c.Query_Config__c';
 import {
     blankDocument,
     newTextBox,
@@ -18,7 +21,8 @@ import {
     newTableBox,
     tablePreviewHtml,
     snapBox,
-    suggestTotals
+    suggestTotals,
+    buildQueryConfig
 } from './canvasModel';
 
 /**
@@ -41,6 +45,9 @@ export default class DocGenCanvas extends LightningElement {
     @api templateId;
     @api pageSize = 'Letter';
     @api orientation = 'Portrait';
+    @api queryConfig;
+    @api baseObject;
+    @api sampleRecordId;
 
     @track doc = blankDocument();
     @track selectedId = null;
@@ -295,6 +302,127 @@ export default class DocGenCanvas extends LightningElement {
 
     get totalsPlaceholder() {
         return '{SUM:Rel.Field}';
+    }
+
+    /** What the template's Query Config currently exposes, for the field picker. */
+    get querySpace() {
+        return extractQueryShape(this.queryConfig, this.baseObject);
+    }
+
+    get relationshipOptions() {
+        return (this.querySpace.children || []).map((c) => ({
+            label: c.relationshipName || c.alias,
+            value: c.relationshipName || c.alias
+        }));
+    }
+
+    /**
+     * Fields offered for the CURRENT selection: a table offers its relationship's
+     * fields, a text box offers the record's own and its parents'. Clicking one is the
+     * whole point — nobody should be typing {Name} from memory and finding out at
+     * render time whether they got it right.
+     */
+    get pickableFields() {
+        const shape = this.querySpace;
+        const box = this.selectedBox;
+        if (box && box.kind === 'table') {
+            const rel = (box.table || {}).relationship;
+            const child = (shape.children || []).find((c) => (c.relationshipName || c.alias) === rel);
+            return ((child && child.fields) || []).map((f) => ({ key: rel + f, label: f, tag: '{' + f + '}' }));
+        }
+        return [...(shape.baseFields || []), ...(shape.parentFields || [])].map((f) => ({
+            key: f,
+            label: f,
+            tag: '{' + f + '}'
+        }));
+    }
+
+    get hasPickableFields() {
+        return this.pickableFields.length > 0;
+    }
+
+    /**
+     * True when the table points at a relationship the Query Config does not contain.
+     *
+     * This used to fail in silence: the field list simply came back empty with no
+     * explanation, and the author was left to guess whether they had mistyped the
+     * relationship or the query was missing it. Both are fixable in one click — the
+     * dropdown only offers real relationships, and "Update the template's query" adds
+     * whatever the canvas actually uses.
+     */
+    get relationshipMissingFromQuery() {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') {
+            return false;
+        }
+        const rel = (box.table || {}).relationship;
+        if (!rel) {
+            return false;
+        }
+        return !(this.querySpace.children || []).some((c) => (c.relationshipName || c.alias) === rel);
+    }
+
+    get relationshipChoices() {
+        const opts = this.relationshipOptions;
+        return [{ label: '— none (fixed table) —', value: '' }, ...opts];
+    }
+
+    get hasRelationshipChoices() {
+        return this.relationshipOptions.length > 0;
+    }
+
+    handleRelPick(event) {
+        this._patchTable({ relationship: event.detail.value });
+    }
+
+    handlePickField(event) {
+        const tag = event.currentTarget.dataset.tag;
+        const label = event.currentTarget.dataset.label;
+        const box = this.selectedBox;
+        if (!box) {
+            return;
+        }
+        if (box.kind === 'table') {
+            this._patchTable({
+                columns: [...(box.table.columns || []), { label, tag, width: '' }]
+            });
+            this.statusText = 'Column added: ' + label;
+        } else {
+            const sep = box.text && !/\s$/.test(box.text) ? ' ' : '';
+            this.applyToBox(box.id, { text: (box.text || '') + sep + tag });
+            this.statusText = 'Inserted ' + tag;
+        }
+    }
+
+    get generatedQuery() {
+        return buildQueryConfig(this.doc);
+    }
+
+    get queryDiffers() {
+        return (this.queryConfig || '').trim() !== this.generatedQuery.trim();
+    }
+
+    /**
+     * Writes the derived Query Config back to the template.
+     *
+     * Explicitly a button, never automatic. A generated query that silently replaced a
+     * hand-tuned WHERE or ORDER BY would be a worse bug than the blank-tag problem it
+     * solves, so the author sees what it will become and chooses.
+     */
+    async handleApplyQuery() {
+        if (!this.templateId) {
+            return;
+        }
+        try {
+            const fields = {};
+            fields[ID_FIELD.fieldApiName] = this.templateId;
+            fields[QUERY_FIELD.fieldApiName] = this.generatedQuery;
+            await updateRecord({ fields });
+            this.statusText = 'Query updated from the canvas';
+            this.dispatchEvent(new CustomEvent('queryupdated', { detail: { query: this.generatedQuery } }));
+        } catch (e) {
+            this.statusText = 'Could not update the query: ' + (e.body ? e.body.message : e.message);
+        }
     }
 
     get fontOptions() {

@@ -729,3 +729,99 @@ export function deserialize(html) {
         })
     };
 }
+
+// ---------------------------------------------------------------------------
+// Query generation — the canvas tells the query what it needs
+// ---------------------------------------------------------------------------
+
+/** Tags that resolve without being queried, so they must never reach the SELECT. */
+const NON_FIELD_TAGS =
+    /^(Today|Now|PageNumber|TotalPages|RowNumber|RunningUser(\.[A-Za-z0-9_]+)?|SUM|COUNT|AVG|MIN|MAX|IF|ELSE)/i;
+
+function collectFromText(text, out, rel) {
+    for (const m of String(text || '').matchAll(/\{([#/^%]?)([A-Za-z0-9_.:=&'"\s-]+?)\}/g)) {
+        const prefix = m[1];
+        let body = m[2].trim();
+        if (prefix === '#' || prefix === '/' || prefix === '^' || prefix === '%') {
+            continue;
+        }
+        // Strip a format suffix: {Amount:currency:USD} is still the Amount field.
+        body = body.split(':')[0].trim();
+        if (!body || NON_FIELD_TAGS.test(body)) {
+            continue;
+        }
+        // Aggregates name their own relationship and are resolved from it, not selected.
+        if (body.indexOf('(') !== -1 || body.indexOf(' ') !== -1) {
+            continue;
+        }
+        if (rel) {
+            if (!out.children[rel]) out.children[rel] = new Set();
+            out.children[rel].add(body);
+        } else {
+            out.base.add(body);
+        }
+    }
+}
+
+/**
+ * Walks the document and reports every field it actually references, split into
+ * base/parent fields and per-relationship child fields.
+ *
+ * This is what lets the Query Config be DERIVED rather than maintained by hand. The
+ * commonest failure with this product is a tag that renders blank because its field
+ * was never queried — the template looks broken and the cause is invisible. Reading
+ * the requirement off the document removes the whole class.
+ */
+export function collectUsedFields(doc) {
+    const out = { base: new Set(), children: {} };
+    for (const board of doc.artboards || []) {
+        for (const box of board.boxes || []) {
+            if (box.kind === 'table') {
+                const t = box.table || {};
+                const rel = t.relationship || '';
+                for (const c of t.columns || []) {
+                    collectFromText(c.tag, out, rel);
+                }
+                for (const r of t.rows || []) {
+                    for (const cell of r) collectFromText(cell, out, rel);
+                }
+                for (const cell of (t.totals || {}).cells || []) {
+                    // Totals are aggregates over the relationship — the field they name
+                    // has to be queried even though the tag itself is not a plain field.
+                    const m = /\{(?:SUM|COUNT|AVG|MIN|MAX):([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)/i.exec(cell || '');
+                    if (m) {
+                        if (!out.children[m[1]]) out.children[m[1]] = new Set();
+                        out.children[m[1]].add(m[2]);
+                    }
+                }
+            } else {
+                collectFromText(box.text, out, '');
+            }
+        }
+    }
+    return out;
+}
+
+/**
+ * Builds a V1 flat Query Config from what the canvas uses.
+ *
+ * V1 (not the V3 node tree) on purpose: it is the format a human can read in the
+ * Query Configuration tab and correct, which matters because this is a SUGGESTION the
+ * author accepts, never a silent overwrite. A generated query that quietly replaced a
+ * hand-tuned WHERE clause would be a worse bug than the one it solves.
+ */
+export function buildQueryConfig(doc) {
+    const used = collectUsedFields(doc);
+    const base = [...used.base];
+    if (!base.length) {
+        base.push('Name');
+    }
+    const parts = [...base];
+    for (const rel of Object.keys(used.children)) {
+        const fields = [...used.children[rel]];
+        if (fields.length) {
+            parts.push('(SELECT ' + fields.join(', ') + ' FROM ' + rel + ')');
+        }
+    }
+    return parts.join(', ');
+}
