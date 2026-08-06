@@ -1,5 +1,51 @@
 # Changelog
 
+## v3.54.0 — Canvas designer (Beta)
+
+Released 2026-08-06 · `04tVx0000010Y4LIAU` · ancestor 3.53.0 · 1,905 tests, 78% coverage
+
+A new **`Canvas`** template type with a Canva-style artboard. Boxes are placed in
+inches and land there in the PDF; lists still flow across as many pages as the data
+needs. It renders through the HTML path (`DocGenService.isHtmlBacked`), so output is
+always PDF.
+
+### Added
+
+- **Canvas editor** (`lwc/docGenCanvas`) — a scene graph is the document and the DOM is
+  a disposable projection of it, which is what keeps it clear of the Lightning Web
+  Security bug class that broke the flow designer (v3.39/v3.41). Confirmed working in a
+  namespaced subscriber install.
+- **Elements**: text (rich text or raw HTML), tables, images, shapes, QR/barcodes and
+  signature placements. Per-box `{#IF}` conditions, z-order, an element list, undo/redo,
+  duplicate page, page setup with custom sizes.
+- **Tables**: a nested second list under each row (grandchildren), totals with their own
+  styling, per-column text on extra rows, and a widest-row column rule so a nested list
+  wider than its parent no longer leaves ragged rows.
+- **Derived queries** follow loop context, so a hand-written nested loop produces a
+  nested subquery rather than a flat SELECT that runs and renders blank.
+- **HTML importer** — re-describes an existing HTML body as boxes. Measured lossless
+  against all five shipped starters; three rendered to identical page count, page size
+  and words.
+
+### Fixed
+
+- Canvas templates took the DOCX path in **13 branches across 7 classes** — signature
+  send/finalize, the signing page, bulk generation, charts, the giant-query assembler.
+  A Canvas body is HTML, so it reached a ZIP reader ("Could not load Zip"). All now route
+  through `DocGenService.isHtmlBacked`.
+- Image size tokens without an `x` were silently ignored, so `{%asset:logo:144}` rendered
+  at intrinsic size — a logo 24 inches wide. The form is `144x` or `144x96`.
+- Border and padding pushed boxes off the right edge: Flying Saucer is CSS 2.1, `width`
+  is the content box and `box-sizing` is ignored (measured both ways).
+
+### Notes for template authors
+
+- **Symbols and CJK need `'Arial Unicode MS'`.** `Blob.toPdf` resolves the generic
+  families to the base-14 fonts, where ✓ ✔ ☑ ★ render as nothing at all. That font
+  embeds as a subset and draws them; the Symbols control inserts them with it attached.
+- **Serializer changes do not reach documents already saved.** A stored body keeps its
+  markup until something re-saves it.
+
 ## Unreleased — Multi-currency aggregates + SLDS lint cleanup
 
 ### Fixed — aggregates silently added across currencies (P0, silent corruption)
