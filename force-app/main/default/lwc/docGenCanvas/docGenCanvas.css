@@ -20,6 +20,7 @@
 .dg-rail,
 .dg-panel,
 .dg-stage,
+.dg-splitter,
 .dg-layers {
     display: table-cell;
     vertical-align: top;
@@ -76,6 +77,38 @@
     margin-top: 3px;
 }
 
+/* Drag handle between the panel and the canvas. A table-cell of its own so neither
+   neighbour's overflow can clip it. */
+.dg-splitter {
+    width: 6px;
+    cursor: col-resize;
+    background: var(--slds-g-color-surface-2, #f3f4f6);
+    border-right: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+.dg-splitter:hover {
+    background: #c7d2fe;
+}
+
+/* The editor's height is dragged rather than fixed — writing a paragraph in a 220px
+   box is the complaint this answers. */
+.dg-editor-wrap lightning-input-rich-text {
+    display: block;
+    min-height: var(--dg-editor-h, 220px);
+}
+
+.dg-editor-grip {
+    height: 8px;
+    margin: 2px 0 6px 0;
+    cursor: row-resize;
+    border-radius: 3px;
+    background: repeating-linear-gradient(90deg, #d1d5db, #d1d5db 3px, transparent 3px, transparent 7px);
+}
+
+.dg-editor-grip:hover {
+    background: repeating-linear-gradient(90deg, #93a3b8, #93a3b8 3px, transparent 3px, transparent 7px);
+}
+
 /* Wide enough to hold the rich-text editor's own overlays.
    The link tooltip is an absolutely-positioned panel roughly 300px across, and this
    column both clips (overflow-y: auto) and is narrower than that — so opening it put
@@ -83,6 +116,7 @@
    Nothing here can stop an ancestor clipping an overlay, so the column has to be big
    enough that the overlay never needs to escape it. */
 .dg-panel {
+    /* Starting width; the splitter overrides it inline. */
     width: 340px;
     background: var(--slds-g-color-surface-1, #fff);
     border-right: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
@@ -897,7 +931,3 @@ textarea.dg-cbox-text {
    Quill positions it absolutely against the editor; without a floor on the editor's
    own height the overlay can open below the visible area of the panel with nothing
    to scroll to. */
-.dg-panel lightning-input-rich-text {
-    display: block;
-    min-height: 220px;
-}

@@ -36,8 +36,8 @@
             </template>
         </div>
 
-        <!-- Panel: in-depth controls for whatever is selected. -->
-        <div class="dg-panel">
+        <!-- Panel: in-depth controls for whatever is selected. Draggable in X. -->
+        <div class="dg-panel" style={panelStyle}>
             <template lwc:if={hasSelection}>
                 <h3 class="dg-panel-title">Box</h3>
                 <p class="dg-panel-hint">Drag to move. Handles on the right and bottom edges resize.</p>
@@ -68,15 +68,22 @@
                     </p>
                 </template>
                 <template lwc:if={showRichEditor}>
-                    <lightning-input-rich-text
-                        label="Content"
-                        variant="label-stacked"
-                        value={richTextValue}
-                        formats={richTextFormats}
-                        onchange={handleRichTextChange}
-                        message-when-bad-input="Content could not be read"
-                        placeholder="Type here. Merge tags work anywhere — pick one from Fields below."
-                    ></lightning-input-rich-text>
+                    <div class="dg-editor-wrap" style={editorStyle}>
+                        <lightning-input-rich-text
+                            label="Content"
+                            variant="label-stacked"
+                            value={richEditorValue}
+                            formats={richTextFormats}
+                            onchange={handleRichTextChange}
+                            message-when-bad-input="Content could not be read"
+                            placeholder="Type here. Merge tags work anywhere — pick one from Fields below."
+                        ></lightning-input-rich-text>
+                    </div>
+                    <div
+                        class="dg-editor-grip"
+                        onmousedown={handleEditorResizeStart}
+                        title="Drag to make the editor taller"
+                    ></div>
                     <p class="dg-panel-note">
                         Formatting applies to whatever you select, and the box on the page shows exactly what will
                         print.
@@ -982,6 +989,10 @@
                 </p>
             </template>
         </div>
+
+        <!-- Drag to widen the panel. Its own cell so it cannot be clipped by either
+             neighbour's overflow. -->
+        <div class="dg-splitter" onmousedown={handlePanelResizeStart} title="Drag to resize the panel"></div>
 
         <!-- Stage -->
         <div class="dg-stage">

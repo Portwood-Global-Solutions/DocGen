@@ -540,6 +540,7 @@ export default class DocGenCanvas extends LightningElement {
             this.doc = doc;
             this.selectedId = null;
             this.importReport = report;
+            this.reseedEditor();
             this.statusText = 'Imported ' + file.name;
             // Assets may be referenced by the imported markup.
             this.loadImageLibrary().then(() => this.hydrateImageSources());
@@ -548,6 +549,54 @@ export default class DocGenCanvas extends LightningElement {
         } finally {
             input.value = null;
         }
+    }
+
+    // ---- Panel sizing ----------------------------------------------------
+    //
+    // Editing text in a fixed 340px strip is the complaint this answers. The column is
+    // draggable in X and the editor in Y, so the panel can be made a real writing
+    // surface when that is what you are doing and pushed back out of the way when it
+    // is not.
+    @track panelWidth = 340;
+    @track editorHeight = 220;
+
+    get panelStyle() {
+        return 'width:' + this.panelWidth + 'px;';
+    }
+
+    get editorStyle() {
+        return '--dg-editor-h:' + this.editorHeight + 'px;';
+    }
+
+    handlePanelResizeStart(event) {
+        event.preventDefault();
+        const startX = event.clientX;
+        const startW = this.panelWidth;
+        const move = (e) => {
+            // Floor keeps the controls usable; ceiling keeps a canvas on screen.
+            this.panelWidth = Math.max(300, Math.min(760, startW + (e.clientX - startX)));
+        };
+        const up = () => {
+            window.removeEventListener('mousemove', move, true);
+            window.removeEventListener('mouseup', up, true);
+        };
+        window.addEventListener('mousemove', move, true);
+        window.addEventListener('mouseup', up, true);
+    }
+
+    handleEditorResizeStart(event) {
+        event.preventDefault();
+        const startY = event.clientY;
+        const startH = this.editorHeight;
+        const move = (e) => {
+            this.editorHeight = Math.max(140, Math.min(900, startH + (e.clientY - startY)));
+        };
+        const up = () => {
+            window.removeEventListener('mousemove', move, true);
+            window.removeEventListener('mouseup', up, true);
+        };
+        window.addEventListener('mousemove', move, true);
+        window.addEventListener('mouseup', up, true);
     }
 
     // ---- Undo / redo -----------------------------------------------------
@@ -595,6 +644,12 @@ export default class DocGenCanvas extends LightningElement {
             customPage: { ...this.customPage },
             selectedId: this.selectedId
         };
+    }
+
+    /** Anything that replaces the document wholesale has to re-seed the editor. */
+    reseedEditor() {
+        this._syncedFor = null;
+        this.richSeed = this.richTextValue;
     }
 
     _restore(snap) {
@@ -1881,6 +1936,7 @@ export default class DocGenCanvas extends LightningElement {
                     }
                 }
                 this.importReport = imported.report;
+                this.reseedEditor();
                 this.statusText = 'Converted an existing HTML body into ' + imported.report.boxes + ' element(s)';
             } else {
                 this.doc = blankDocument();
@@ -1924,6 +1980,9 @@ export default class DocGenCanvas extends LightningElement {
         // hand-off explicit instead of relying on the diff to notice.
         if (this._syncedFor !== this.selectedId) {
             this._syncedFor = this.selectedId;
+            // Re-seed the editor for the newly selected box. Only here: doing it on
+            // every render would put the caret back to the start on every keystroke.
+            this.richSeed = this.richTextValue;
             const st = this.selectedStyle;
             const map = {
                 size: st.size,
@@ -2750,6 +2809,11 @@ export default class DocGenCanvas extends LightningElement {
 
     handleShowRich() {
         this.sourceMode = false;
+        // Re-seed: the selection has not changed, so the usual re-seed will not fire,
+        // and edits just made in the HTML view would otherwise be invisible here — the
+        // editor would show what the box held before the source edit and write that
+        // stale text back on the next keystroke.
+        this.richSeed = this.richTextValue;
     }
 
     handleShowSource() {
@@ -2899,11 +2963,32 @@ export default class DocGenCanvas extends LightningElement {
      *
      * Sanitised on the way in: the editor emits more than the PDF engine honours.
      */
+    /**
+     * The value the editor is SEEDED with — set when the selection changes, never while
+     * typing.
+     *
+     * Binding the model straight back into the editor is what threw the caret to the
+     * start on every keystroke: each character fired change, the model updated, the
+     * getter returned a new string, LWC pushed it into the component, and the editor
+     * rebuilt its contents from scratch — losing the cursor with them. It is the same
+     * reason the box bodies on the artboard are written manually and only when they
+     * differ.
+     *
+     * So the editor is left alone while it has focus. It is the source of truth for its
+     * own text; the model is the source of truth for everything else.
+     */
+    @track richSeed = '';
+
+    get richEditorValue() {
+        return this.richSeed;
+    }
+
     handleRichTextChange(event) {
         const box = this.selectedBox;
         if (!box) {
             return;
         }
+        // Deliberately does NOT touch richSeed — see above.
         this.applyToBox(box.id, { html: sanitizeInline(event.target.value) });
     }
 
