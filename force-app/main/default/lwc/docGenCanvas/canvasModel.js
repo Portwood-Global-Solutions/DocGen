@@ -134,55 +134,82 @@ function nextId(prefix) {
  * The ONLY font stacks Flying Saucer actually resolves, measured 2026-08-05 against a
  * real render (scripts/css-probe-fonts.apex, docs/css-probe-fonts.png).
  *
- * Every NAMED family — Helvetica, Arial, Georgia, Verdana, Tahoma, Impact, Times New
- * Roman, Courier New — silently falls back to the serif default. Only the generic
- * keywords resolve, plus bare `Courier`. Offering "Arial" in a picker would render
- * Times and quietly make the canvas stop being WYSIWYG, which is the one thing this
- * editor exists to guarantee.
+ * Most NAMED families — Arial, Georgia, Verdana, Tahoma, Impact, Times New Roman,
+ * Courier New, Symbol, ZapfDingbats — silently fall back to a base-14 face. Offering
+ * one would render something else and quietly make the canvas stop being WYSIWYG.
+ *
+ * `Arial Unicode MS` is the exception and is offered: it genuinely embeds, which is
+ * how a checkmark reaches the page at all. Re-measured 2026-08-06 — an earlier probe
+ * missed it by testing "Arial" and not this name, and concluded wrongly that symbols
+ * were impossible.
  */
+/** The one family with full Unicode coverage. Wrapped around any glyph the base
+ *  fonts cannot draw, so a symbol renders whatever font its box is set to. */
+export const UNICODE_FONT = "'Arial Unicode MS'";
+
 /**
- * Characters the PDF engine can actually print, and the ones it silently drops.
+ * Symbols, and the font each one needs.
  *
- * Measured against a rendered PDF (pdffonts + pdftotext): Blob.toPdf embeds exactly
- * three fonts — Helvetica, Times-Roman and Courier — all with WinAnsi encoding. Every
- * named family falls back to one of them, including Symbol and ZapfDingbats, so the
- * usual dingbat trick (font-family: ZapfDingbats and the digit 4 for a tick) prints a
- * literal "4".
+ * Measured against rendered PDFs. Blob.toPdf resolves the generic families to the
+ * base-14 fonts (Helvetica / Times-Roman / Courier, WinAnsi), where anything outside
+ * Latin-1 renders as NOTHING — not a box, not a substitute, absent. That is where
+ * checkmarks used to disappear.
  *
- * The consequence worth knowing: a checkmark cannot be typed. ✓ ✔ ☑ ☐ ✅ ✗ ● ■ ★ are
- * outside WinAnsi and render as NOTHING — not a box, not a substitute, just absent.
- * Use an image asset for a tick. These are the symbols that do survive.
+ * `Arial Unicode MS` is different: it embeds as a subsetted CID TrueType with
+ * Identity-H encoding and draws the lot — ✓ ✔ ☑ ☐ ✗ ● ■ ★ → √ ≤ ≥ ≈ ∞, CJK, Greek,
+ * Cyrillic, Hebrew — in regular, bold and italic. Naming it is the whole trick, and it
+ * is why `unicode: true` symbols below are inserted wrapped in a span that asks for it
+ * rather than relying on whatever the box is set to.
+ *
+ * The cost is real but bounded: embedding the subset takes a rendered page from ~1.5KB
+ * to ~70KB. Only pages that use it pay, and only for the glyphs they use.
  */
 export const SAFE_SYMBOLS = [
+    { label: '✓', value: '\u2713', name: 'Check', unicode: true },
+    { label: '✔', value: '\u2714', name: 'Heavy check', unicode: true },
+    { label: '☑', value: '\u2611', name: 'Checked box', unicode: true },
+    { label: '☐', value: '\u2610', name: 'Empty box', unicode: true },
+    { label: '✗', value: '\u2717', name: 'Cross', unicode: true },
+    { label: '●', value: '\u25cf', name: 'Filled circle', unicode: true },
+    { label: '■', value: '\u25a0', name: 'Filled square', unicode: true },
+    { label: '★', value: '\u2605', name: 'Star', unicode: true },
+    { label: '☆', value: '\u2606', name: 'Open star', unicode: true },
+    { label: '→', value: '\u2192', name: 'Arrow', unicode: true },
+    { label: '≤', value: '\u2264', name: 'Less or equal', unicode: true },
+    { label: '≥', value: '\u2265', name: 'Greater or equal', unicode: true },
     { label: '•', value: '\u2022', name: 'Bullet' },
     { label: '–', value: '\u2013', name: 'En dash' },
     { label: '—', value: '\u2014', name: 'Em dash' },
-    { label: '×', value: '\u00d7', name: 'Multiply / cross' },
+    { label: '×', value: '\u00d7', name: 'Multiply' },
     { label: '÷', value: '\u00f7', name: 'Divide' },
     { label: '±', value: '\u00b1', name: 'Plus-minus' },
     { label: '°', value: '\u00b0', name: 'Degree' },
     { label: '§', value: '\u00a7', name: 'Section' },
     { label: '¶', value: '\u00b6', name: 'Paragraph' },
     { label: '†', value: '\u2020', name: 'Dagger' },
-    { label: '‡', value: '\u2021', name: 'Double dagger' },
-    { label: '‰', value: '\u2030', name: 'Per mille' },
     { label: '™', value: '\u2122', name: 'Trademark' },
     { label: '©', value: '\u00a9', name: 'Copyright' },
     { label: '®', value: '\u00ae', name: 'Registered' },
-    { label: '¼', value: '\u00bc', name: 'One quarter' },
     { label: '½', value: '\u00bd', name: 'One half' },
-    { label: '¾', value: '\u00be', name: 'Three quarters' },
-    { label: '«', value: '\u00ab', name: 'Left quotes' },
-    { label: '»', value: '\u00bb', name: 'Right quotes' },
     { label: '€', value: '\u20ac', name: 'Euro' },
-    { label: '£', value: '\u00a3', name: 'Pound' },
-    { label: 'µ', value: '\u00b5', name: 'Micro' }
+    { label: '£', value: '\u00a3', name: 'Pound' }
 ];
+
+/** The markup to insert for a symbol — Unicode ones carry the font that draws them. */
+export function symbolMarkup(sym) {
+    if (!sym) {
+        return '';
+    }
+    return sym.unicode ? '<span style="font-family: ' + UNICODE_FONT + ';">' + sym.value + '</span>' : sym.value;
+}
 
 export const FONT_CHOICES = [
     { label: 'Sans-serif', value: 'sans-serif' },
     { label: 'Serif', value: 'serif' },
-    { label: 'Monospace', value: 'monospace' }
+    { label: 'Monospace', value: 'monospace' },
+    // The Unicode face. Measured to embed and draw symbols, CJK, Greek, Cyrillic and
+    // Hebrew in regular, bold and italic — everything the base-14 fonts cannot.
+    { label: 'Arial Unicode (symbols, CJK)', value: "'Arial Unicode MS'" }
 ];
 
 /**

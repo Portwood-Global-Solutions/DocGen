@@ -124,7 +124,7 @@
                             <button
                                 key={sym.key}
                                 class="dg-sym-chip"
-                                data-ch={sym.value}
+                                data-name={sym.name}
                                 onclick={handleInsertSymbol}
                                 title={sym.name}
                             >
@@ -133,8 +133,10 @@
                         </template>
                     </div>
                     <p class="dg-panel-note">
-                        These print. Checkmarks and boxes (&#10003; &#9745; &#9733;) do not — the PDF engine has no
-                        glyph for them and they come out blank, so use an image for a tick.
+                        Inserted with the font that draws them, so they print whatever this box is set to. Typing
+                        &#10003; straight into the text does <b>not</b> work — the standard PDF fonts have no glyph for
+                        it and it comes out blank. Pick <b>Arial Unicode</b> as the box font for symbols, CJK, Greek or
+                        Cyrillic throughout.
                     </p>
 
                     <h4 class="dg-panel-sub">Link</h4>

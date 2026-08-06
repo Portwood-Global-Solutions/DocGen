@@ -27,6 +27,7 @@ import {
     DEFAULT_STYLE,
     GRID_STYLES,
     SAFE_SYMBOLS,
+    symbolMarkup,
     newTableBox,
     tablePreviewHtml,
     snapBox,
@@ -2955,10 +2956,9 @@ export default class DocGenCanvas extends LightningElement {
 
     // ---- Symbols ---------------------------------------------------------
     //
-    // Offered because the alternative is silent loss: a checkmark pasted into a box
-    // renders as NOTHING in the PDF. Blob.toPdf embeds three fonts, all WinAnsi, so
-    // ✓ ✔ ☑ ★ ■ have no glyph and no substitute — they simply vanish, and the author
-    // finds out from a customer. These are the ones measured to survive.
+    // Offered because typing one directly is a trap: under the generic families a
+    // checkmark renders as NOTHING — no glyph, no substitute — and the author finds
+    // out from a customer. Inserted from here it carries the font that draws it.
     get safeSymbols() {
         return SAFE_SYMBOLS.map((sym) => ({ ...sym, key: sym.name }));
     }
@@ -2968,11 +2968,17 @@ export default class DocGenCanvas extends LightningElement {
         if (!box) {
             return;
         }
-        const ch = event.currentTarget.dataset.ch;
+        const name = event.currentTarget.dataset.name;
+        const sym = SAFE_SYMBOLS.find((x) => x.name === name);
+        if (!sym) {
+            return;
+        }
+        // symbolMarkup wraps the ones the base fonts cannot draw in the Unicode face,
+        // so a checkmark renders whatever the box's own font is set to.
         const current = box.html != null ? box.html : box.text || '';
-        this.applyToBox(box.id, { html: sanitizeInline(current + ch) });
+        this.applyToBox(box.id, { html: sanitizeInline(current + symbolMarkup(sym)) });
         this.reseedEditor();
-        this.statusText = 'Inserted ' + ch;
+        this.statusText = 'Inserted ' + sym.name;
     }
 
     handleSourceChange(event) {
