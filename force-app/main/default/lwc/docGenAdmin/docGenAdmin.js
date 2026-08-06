@@ -4495,7 +4495,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Until the wire resolves (and if it errors) keep the historical hardcoded
         // list so the wizard is never empty.
         const values = this._orgTypeValues && this._orgTypeValues.length ? this._orgTypeValues : fallback;
-        return values.map((v) => ({ label: v, value: v }));
+        // Canvas is omitted: this picker only appears on the upload path, and there is
+        // no file that makes a Canvas template. It is reached by choosing "Start from a
+        // Blank Canvas" instead.
+        return values.filter((v) => v !== 'Canvas').map((v) => ({ label: v, value: v }));
     }
 
     /**
@@ -4529,7 +4532,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (type === 'Excel') {
             return [{ label: 'Native (.xlsx)', value: 'Native' }];
         }
-        if (type === 'HTML' || type === 'PDF') {
+        // Canvas belongs here: it renders through the HTML path, which sets PDF
+        // unconditionally. Offering "Native (.docx)" was offering a format the engine
+        // will never produce for it.
+        if (type === 'HTML' || type === 'PDF' || type === 'Canvas') {
             return [{ label: 'PDF', value: 'PDF' }];
         }
         return [
@@ -4544,6 +4550,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (type === 'Excel') return ['.xlsx'];
         if (type === 'HTML') return ['.html', '.htm', '.zip'];
         if (type === 'PDF') return ['.pdf'];
+        // A Canvas body is authored, never uploaded. Falling through to .docx invited
+        // someone to drop a Word file onto a template that cannot hold one.
+        if (type === 'Canvas') return [];
         return ['.docx'];
     }
 
@@ -4613,7 +4622,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     get showEditCustomMargins() {
-        return this.showPageOrientation && this.editTemplatePageMargins === 'Custom';
+        // Tied to the page-layout block rather than to output format alone: with a
+        // Canvas template (or an HTML body that owns its @page) the rest of the block
+        // is hidden, and this input was left behind on its own, editing a value
+        // nothing reads.
+        return this.showEditPageLayoutFields && this.editTemplatePageMargins === 'Custom';
+    }
+
+    /**
+     * A Canvas template has no file to replace — its body is authored on the canvas and
+     * versioned by saving there. The upload widget was showing on every type, so a
+     * Canvas template offered "Upload New Version" against a .docx filter.
+     */
+    get showEditFileUploadForType() {
+        return this.showEditFileUpload && !this.isCanvasTemplate;
     }
 
     get isEditTypeHtml() {
@@ -13339,8 +13361,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * drift, and the one that skipped a cleanup step would be the one nobody noticed.
      * The canvas has already confirmed any unsaved changes before dispatching.
      */
+    /**
+     * Canvas "Templates" — back to the DESIGNER's own picker, not out to the list.
+     *
+     * Leaving the designer entirely was the wrong destination: the button sits in the
+     * designer's toolbar next to a template name, so it reads as "show me the other
+     * templates", and closing the whole surface to reach the record list made picking
+     * a second template a four-click round trip. Clearing the selection is enough —
+     * designerHasTemplate goes false and the tab renders its picker.
+     */
     handleCanvasBack() {
-        this.handleCloseDesigner();
+        if (this.showHtmlBodyVisual) {
+            this._exitVisualMode();
+        }
+        this.handleClosePdfPreview();
+        this.activePanel = null;
+        this.editTemplateId = null;
+        this.editTemplateType = null;
+        this.activeMainTab = 'design';
     }
 
     handleCloseDesigner() {

@@ -931,3 +931,20 @@ textarea.dg-cbox-text {
    Quill positions it absolutely against the editor; without a floor on the editor's
    own height the overlay can open below the visible area of the panel with nothing
    to scroll to. */
+
+/* Says BETA where the work happens, not only on the tab. Matches the flow designer's
+   chip so the two surfaces make the same promise. */
+.dg-beta-chip {
+    display: inline-block;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 0.62rem;
+    font-weight: var(--slds-g-font-weight-7, 700);
+    letter-spacing: 0.06em;
+    margin-right: 8px;
+    vertical-align: middle;
+    cursor: help;
+}
