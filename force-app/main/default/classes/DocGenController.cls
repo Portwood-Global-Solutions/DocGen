@@ -3447,6 +3447,125 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * Returns a specific version's stored body.
+     *
+     * The canvas reads this rather than the loose `docgen_html_body_*` CV, so the
+     * editor and the RENDERER are looking at the same bytes. Reading the loose body
+     * while generation read the version's is exactly how a template came to show five
+     * boxes on screen and render two, with nothing reporting a problem.
+     *
+     * Version-scoped so "go back to the version from Tuesday" can actually restore
+     * that canvas, rather than restoring whatever was saved most recently.
+     */
+    @AuraEnabled
+    public static String getVersionBody(Id versionId) {
+        if (versionId == null) {
+            throw new DocGenException('Version ID is required.');
+        }
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Content_Version_Id__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> vs = [
+            SELECT Content_Version_Id__c
+            FROM DocGen_Template_Version__c
+            WHERE Id = :versionId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (vs.isEmpty() || String.isBlank(vs[0].Content_Version_Id__c)) {
+            return null;
+        }
+        Id cvId = (Id) vs[0].Content_Version_Id__c;
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
+        // SYSTEM_MODE: template-internal CVs carry Visibility=InternalUsers links,
+        // which USER_MODE reads silently drop (#114).
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> cvs = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Id = :cvId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        return cvs.isEmpty() ? null : cvs[0].VersionData.toString();
+    }
+
+    /**
+     * Saves an HTML/Canvas body AND points the active version at it, so what was just
+     * saved is what will render.
+     *
+     * A template carries TWO bodies. `docgen_html_body_<templateId>` is what the
+     * editors read and write; the active DocGen_Template_Version__c's
+     * Content_Version_Id__c is what the RENDER path loads. saveHtmlTemplateBody only
+     * writes the first, which is correct for the flow designer — it has an explicit
+     * "Save as New Version" step that publishes.
+     *
+     * The canvas has no such step and should not need one: you arrange a page, you
+     * press Save, and the document you get must be the page you arranged. Without this
+     * the two bodies drift and generation quietly renders an older canvas — measured
+     * on a real template as 5 boxes stored versus 2 boxes rendered, with no error
+     * anywhere. That is the worst kind of bug: everything reports success and the
+     * output is simply wrong.
+     */
+    @AuraEnabled
+    public static Map<String, Object> saveAndPublishHtmlBody(Id templateId, String fileName, String htmlContent) {
+        Map<String, Object> saved = saveHtmlTemplateBody(templateId, fileName, htmlContent);
+        Id cvId = (Id) saved.get('contentVersionId');
+
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Template__c', 'Is_Active__c', 'Content_Version_Id__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> active = [
+            SELECT Id, Content_Version_Id__c
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+            ORDER BY CreatedDate DESC
+            LIMIT 1
+        ];
+
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        DocGen_Template__c tpl = [
+            SELECT Type__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+
+        if (active.isEmpty()) {
+            // No active version yet — a template created outside the wizard. Make one
+            // rather than saving into a void the renderer will never read.
+            DocGen_Template_Version__c v = new DocGen_Template_Version__c(
+                Template__c = templateId,
+                Content_Version_Id__c = cvId,
+                Is_Active__c = true,
+                Type__c = tpl.Type__c
+            );
+            DocGenFlsGuard.assertCreateable(
+                v,
+                new Set<String>{ 'Template__c', 'Content_Version_Id__c', 'Is_Active__c', 'Type__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.insert(v, AccessLevel.SYSTEM_MODE);
+            saved.put('versionCreated', true);
+        } else {
+            DocGen_Template_Version__c v = active[0];
+            v.Content_Version_Id__c = cvId;
+            DocGenFlsGuard.assertUpdateable(v, new Set<String>{ 'Content_Version_Id__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.update(v, AccessLevel.SYSTEM_MODE);
+            saved.put('versionUpdated', true);
+        }
+        return saved;
+    }
+
+    /**
      * HTML template body read-back for the admin editor (paste-back surface).
      *
      * Returns the most recent docgen_html_body_* ContentVersion attached to

@@ -404,6 +404,17 @@
                 <span class="dg-qb-zoom">{zoomPercent}</span>
                 <button class="dg-qb-btn" data-dir="in" onclick={handleZoom}>+</button>
                 <span class="dg-qb-sep"></span>
+                <template lwc:if={hasVersions}>
+                    <span class="dg-qb-sep"></span>
+                    <lightning-combobox
+                        class="dg-qb-version"
+                        variant="label-hidden"
+                        value={activeVersionId}
+                        options={versionOptions}
+                        onchange={handleVersionChange}
+                        title="Switch the active version — the canvas reloads from it"
+                    ></lightning-combobox>
+                </template>
                 <span class="dg-qb-sep"></span>
                 <button class="dg-qb-btn dg-qb-wide" onclick={handleEditTemplate} title="Open this template's settings">
                     Template

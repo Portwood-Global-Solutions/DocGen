@@ -488,3 +488,9 @@ textarea.dg-cbox-text {
     border-radius: var(--slds-g-radius-border-1, 4px);
     cursor: pointer;
 }
+
+.dg-qb-version {
+    display: inline-block;
+    width: 230px;
+    vertical-align: middle;
+}

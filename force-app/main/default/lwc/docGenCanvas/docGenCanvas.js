@@ -1,7 +1,10 @@
 import { LightningElement, api, track } from 'lwc';
 import getHtmlTemplateBody from '@salesforce/apex/DocGenController.getHtmlTemplateBody';
-import saveHtmlTemplateBody from '@salesforce/apex/DocGenController.saveHtmlTemplateBody';
+import saveAndPublishHtmlBody from '@salesforce/apex/DocGenController.saveAndPublishHtmlBody';
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
+import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVersions';
+import getVersionBody from '@salesforce/apex/DocGenController.getVersionBody';
+import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import { extractQueryShape } from 'c/docGenAuthoringKit';
 import { updateRecord } from 'lightning/uiRecordApi';
 import ID_FIELD from '@salesforce/schema/DocGen_Template__c.Id';
@@ -62,6 +65,8 @@ export default class DocGenCanvas extends LightningElement {
     @track isPreviewing = false;
     @track queryDraft = null;
     @track saveError = null;
+    @track versions = [];
+    @track activeVersionId = null;
 
     _loaded = false;
     // Live drag state. Kept off @track on purpose: it changes on every mousemove and
@@ -671,13 +676,77 @@ export default class DocGenCanvas extends LightningElement {
         await this.loadBody();
     }
 
+    /**
+     * Versions, newest first, with the active one marked.
+     *
+     * The canvas reads and writes the ACTIVE VERSION's body. Reading the loose
+     * docgen_html_body_* CV while generation read the version's is exactly how a
+     * template came to show five boxes on screen and render two, with nothing
+     * reporting a problem — so the editor now looks at the same bytes the renderer
+     * does, by construction rather than by convention.
+     */
+    async loadVersions() {
+        if (!this.templateId) {
+            return;
+        }
+        try {
+            const rows = (await getTemplateVersions({ templateId: this.templateId })) || [];
+            this.versions = rows.map((v) => {
+                const isActive = v.Is_Active__c === true || v.portwoodglobal__Is_Active__c === true;
+                const when = v.CreatedDate ? new Date(v.CreatedDate).toLocaleString() : '';
+                return {
+                    label: (isActive ? '★ ' : '') + (v.Name || 'Version') + (when ? ' · ' + when : ''),
+                    value: v.Id,
+                    isActive
+                };
+            });
+            const active = this.versions.find((v) => v.isActive);
+            this.activeVersionId = active ? active.value : (this.versions[0] || {}).value || null;
+        } catch (e) {
+            this.versions = [];
+        }
+    }
+
+    get versionOptions() {
+        return this.versions.map((v) => ({ label: v.label, value: v.value }));
+    }
+
+    get hasVersions() {
+        return this.versions.length > 0;
+    }
+
+    /**
+     * Switching version makes it active AND reloads the canvas from it, so the editor,
+     * the preview and the generated document all agree immediately. Activating without
+     * reloading would leave the canvas showing one version while everything downstream
+     * used another — the same divergence in a new costume.
+     */
+    async handleVersionChange(event) {
+        const id = event.detail.value;
+        this.activeVersionId = id;
+        try {
+            await activateVersion({ versionId: id });
+            const html = await getVersionBody({ versionId: id });
+            const parsed = deserialize(html);
+            this.doc = parsed || blankDocument();
+            this.selectedId = null;
+            this.statusText = parsed ? 'Loaded that version' : 'That version has no canvas content';
+            await this.loadVersions();
+        } catch (e) {
+            this.saveError = 'Could not switch version — ' + (e.body ? e.body.message : e.message);
+        }
+    }
+
     async loadBody() {
         if (this._loaded || !this.templateId) {
             return;
         }
         this._loaded = true;
+        await this.loadVersions();
         try {
-            const html = await getHtmlTemplateBody({ templateId: this.templateId });
+            const html = this.activeVersionId
+                ? await getVersionBody({ versionId: this.activeVersionId })
+                : await getHtmlTemplateBody({ templateId: this.templateId });
             const parsed = deserialize(html);
             if (parsed) {
                 this.doc = parsed;
@@ -1004,13 +1073,15 @@ export default class DocGenCanvas extends LightningElement {
         this.isSaving = true;
         try {
             const html = serialize(this.doc, this.geo);
-            await saveHtmlTemplateBody({
+            await saveAndPublishHtmlBody({
                 templateId: this.templateId,
                 fileName: 'canvas.html',
                 htmlContent: html
             });
             this.statusText = 'Saved';
             this._saveOk = true;
+            // Saving repoints the active version, so the list's timestamps are stale.
+            await this.loadVersions();
             this.dispatchEvent(new CustomEvent('saved', { detail: { html } }));
         } catch (e) {
             // Surfaced as a banner, not a status line: a save that silently did not
