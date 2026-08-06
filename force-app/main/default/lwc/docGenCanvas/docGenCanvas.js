@@ -8,6 +8,7 @@ import getAssets from '@salesforce/apex/DocGenController.getAssets';
 import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import { extractQueryShape } from 'c/docGenAuthoringKit';
 import { updateRecord } from 'lightning/uiRecordApi';
+import LightningConfirm from 'lightning/confirm';
 import ID_FIELD from '@salesforce/schema/DocGen_Template__c.Id';
 import QUERY_FIELD from '@salesforce/schema/DocGen_Template__c.Query_Config__c';
 import {
@@ -58,7 +59,26 @@ import {
  */
 export default class DocGenCanvas extends LightningElement {
     @api recordId;
-    @api templateId;
+
+    /**
+     * Reloads whenever the template changes.
+     *
+     * The canvas element STAYS MOUNTED when you open a different template — only this
+     * property changes — so connectedCallback never fires again. With the load gated by
+     * a one-shot flag, the editor went on showing the previous template's document, and
+     * saving from there would have written that layout onto the new template.
+     */
+    @api
+    get templateId() {
+        return this._templateId;
+    }
+    set templateId(value) {
+        if (value === this._templateId) {
+            return;
+        }
+        this._templateId = value;
+        this.resetForTemplate();
+    }
     @api pageSize = 'Letter';
     @api orientation = 'Portrait';
     @api queryConfig;
@@ -89,6 +109,10 @@ export default class DocGenCanvas extends LightningElement {
     @track _showPageSetup = false;
 
     _loaded = false;
+    _templateId = null;
+    _connected = false;
+    // The document as STORED, so unsaved-change detection compares like with like.
+    _savedHtml = null;
     // Live drag state. Kept off @track on purpose: it changes on every mousemove and
     // re-rendering the whole board 60 times a second would make dragging feel awful.
     _drag = null;
@@ -1010,7 +1034,80 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     async connectedCallback() {
+        this._connected = true;
         await this.loadBody();
+        await this.loadVersions();
+    }
+
+    disconnectedCallback() {
+        this._connected = false;
+        if (this.previewUrl) {
+            URL.revokeObjectURL(this.previewUrl);
+            this.previewUrl = null;
+        }
+    }
+
+    /**
+     * Everything that belongs to the OLD template, cleared.
+     *
+     * Named per-field rather than swapping in a fresh object because a missed field is
+     * the whole bug class: a stale version list points the picker at another template's
+     * versions, and a stale saved-html snapshot makes a fresh document look dirty.
+     */
+    resetForTemplate() {
+        this._loaded = false;
+        this._savedHtml = null;
+        this.doc = blankDocument();
+        this.selectedId = null;
+        this.activeTool = 'select';
+        this.zoom = 1;
+        this.guides = [];
+        this.versions = [];
+        this.activeVersionId = null;
+        this.imageLibrary = [];
+        this.queryDraft = null;
+        this.saveError = null;
+        this.statusText = '';
+        this.showData = false;
+        this._showPageSetup = false;
+        this.margins = { ...DEFAULT_MARGINS };
+        this.customPage = { ...DEFAULT_CUSTOM_PAGE };
+        if (this.previewUrl) {
+            URL.revokeObjectURL(this.previewUrl);
+            this.previewUrl = null;
+        }
+        if (this._connected) {
+            this.loadBody();
+            this.loadVersions();
+        }
+    }
+
+    /**
+     * True when the canvas differs from what is stored.
+     *
+     * Compared by serializing rather than by tracking a dirty flag through every
+     * mutation — a flag has to be set at each of the a dozen places that change the
+     * document, and the one that gets missed is the one that loses someone's work.
+     */
+    get hasUnsavedChanges() {
+        if (this._savedHtml == null) {
+            return this.boxCount > 0;
+        }
+        return serialize(this.doc, this.geo) !== this._savedHtml;
+    }
+
+    async handleBack() {
+        if (this.hasUnsavedChanges) {
+            const discard = await LightningConfirm.open({
+                message: 'This canvas has changes that have not been saved. Leave and discard them?',
+                label: 'Discard changes?',
+                theme: 'warning'
+            });
+            if (!discard) {
+                return;
+            }
+        }
+        this.dispatchEvent(new CustomEvent('back'));
     }
 
     /**
@@ -1068,6 +1165,7 @@ export default class DocGenCanvas extends LightningElement {
             const parsed = deserialize(html);
             this.doc = parsed || blankDocument();
             this.selectedId = null;
+            this._savedHtml = serialize(this.doc, this.geo);
             this.statusText = parsed ? 'Loaded that version' : 'That version has no canvas content';
             await this.loadVersions();
         } catch (e) {
@@ -1087,6 +1185,10 @@ export default class DocGenCanvas extends LightningElement {
                 : await getHtmlTemplateBody({ templateId: this.templateId });
             this.readPageSetup(html);
             const parsed = deserialize(html);
+            // Snapshot what is STORED, re-serialized from the parsed model rather than
+            // taken from the raw bytes: a round trip is not byte-identical (attribute
+            // order, whitespace), so comparing against the raw html would report every
+            // freshly opened template as unsaved.
             if (parsed) {
                 this.doc = parsed;
                 this.statusText = 'Loaded';
@@ -1097,6 +1199,7 @@ export default class DocGenCanvas extends LightningElement {
                 this.doc = blankDocument();
                 this.statusText = html ? 'Existing body is not canvas-shaped — starting a new artboard' : 'New canvas';
             }
+            this._savedHtml = serialize(this.doc, this.geo);
         } catch (e) {
             this.doc = blankDocument();
             this.statusText = 'Could not load the saved body: ' + (e.body ? e.body.message : e.message);
@@ -1845,6 +1948,7 @@ export default class DocGenCanvas extends LightningElement {
             });
             this.statusText = 'Saved as a new version';
             this._saveOk = true;
+            this._savedHtml = html;
             // Follow the version that was just created, by ID.
             //
             // Reloading the list and re-deriving "which one is active" would work only

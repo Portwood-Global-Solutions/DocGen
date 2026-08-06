@@ -13280,6 +13280,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.isEditModalOpen = true;
     }
 
+    /**
+     * Canvas "Templates" button. Routes through the SAME exit as the flow designer so
+     * there is one definition of what leaving the designer means — a second path would
+     * drift, and the one that skipped a cleanup step would be the one nobody noticed.
+     * The canvas has already confirmed any unsaved changes before dispatching.
+     */
+    handleCanvasBack() {
+        this.handleCloseDesigner();
+    }
+
     handleCloseDesigner() {
         if (this.showHtmlBodyVisual) {
             this._exitVisualMode();

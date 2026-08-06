@@ -1690,6 +1690,7 @@
                             sample-record-id={editTemplateTestRecordId}
                             onedittemplate={handleEditTemplateFromDesigner}
                             onqueryupdated={handleCanvasQueryUpdated}
+                            onback={handleCanvasBack}
                         ></c-doc-gen-canvas>
                     </template>
                     <template if:true={showFlowDesignerTab}>
@@ -2280,6 +2281,7 @@
                                         template-id={editTemplateId}
                                         page-size={editTemplatePageSize}
                                         orientation={editTemplatePageOrientation}
+                                        onback={handleCanvasBack}
                                     ></c-doc-gen-canvas>
                                 </template>
                                 <template if:true={showFlowDesigner}>
