@@ -1030,8 +1030,30 @@ function gridCss(t, where) {
         : 'border: 0; border-bottom: ' + w + 'pt solid ' + color + '; ' + pad;
 }
 
+/** How many columns the nested row contributes, or 0 when there is no nested list. */
+function subColCount(t) {
+    const rel = String(t.subRelationship || '').trim();
+    const subs = t.subColumns || [];
+    return rel && subs.length ? subs.length : 0;
+}
+
+/**
+ * The colspan attribute for a cell, or '' when it does not need one.
+ *
+ * Only the LAST cell of a short row stretches. Distributing the slack across every
+ * cell would move the columns the author lined up; extending the final one keeps the
+ * left edges where they were put, which is what the eye follows down a table.
+ */
+function spanAttr(index, rowLength, totalCols) {
+    if (index !== rowLength - 1) {
+        return '';
+    }
+    const span = Math.max(1, totalCols - rowLength + 1);
+    return span > 1 ? ' colspan="' + span + '"' : '';
+}
+
 /** One totals cell, styled from the table's own totals settings. */
-function totalsCell(t, tt, frame, value) {
+function totalsCell(t, tt, frame, value, span) {
     const fill = t.totalsFill ? ' background: ' + t.totalsFill + ';' : '';
     // A total is separated from the rows above it, which is what a reader looks for.
     const rule =
@@ -1050,7 +1072,7 @@ function totalsCell(t, tt, frame, value) {
         ';' +
         (tt.bold ? ' font-weight: bold;' : ' font-weight: normal;') +
         fill;
-    return '<td style="' + css + '">' + (value || '') + '</td>';
+    return '<td' + (span || '') + ' style="' + css + '">' + (value || '') + '</td>';
 }
 
 /**
@@ -1081,12 +1103,19 @@ function subLoopRow(t, parentColCount) {
         ';' +
         (stx.bold ? ' font-weight: bold;' : ' font-weight: normal;') +
         (t.subFill ? ' background: ' + t.subFill + ';' : '');
-    const span = Math.max(1, parentColCount - subs.length + 1);
     const cells = subs
         .map((c, i) => {
             const pad = i === 0 ? ' padding-left: ' + (t.cellPadding + indent) + 'pt;' : '';
-            const colspan = i === subs.length - 1 && span > 1 ? ' colspan="' + span + '"' : '';
-            return '<td' + colspan + ' style="' + base + pad + '">' + (c.tag || '') + '</td>';
+            return (
+                '<td' +
+                spanAttr(i, subs.length, parentColCount) +
+                ' style="' +
+                base +
+                pad +
+                '">' +
+                (c.tag || '') +
+                '</td>'
+            );
         })
         .join('');
     return '{#' + rel + '}<tr data-dg-row="subloop" data-dg-subrel="' + esc(rel) + '">' + cells + '</tr>{/' + rel + '}';
@@ -1116,26 +1145,46 @@ function tableToHtml(box) {
     const cellCss = frame + typo(rt);
     const headCss = gridCss(t, 'head') + typo(ht);
     const tt = { ...DEFAULT_TOTALS_TEXT, ...(t.totalsText || {}) };
+    // The table is as wide as its WIDEST row, and every shorter row's last cell
+    // stretches to reach that width.
+    //
+    // A nested list often has more columns than its parent — "Opportunity Name" above
+    // "Product · Quantity" is the ordinary case. Sizing the table to the parent alone
+    // left the extra nested cells to add columns of their own, and the parent's single
+    // cell then sat in the first narrow one with the rest of the row empty beside it.
+    // Handling only the opposite case (parent wider than nested) was half a rule.
+    const totalCols = Math.max(cols.length, subColCount(t));
     let out =
         '<table data-dg-grid="' +
         (t.gridStyle || 'rows') +
         '" style="border-collapse: collapse; width: 100%; -fs-table-paginate: paginate;">';
     if (t.showHeader) {
         out += '<thead style="display: table-header-group;"><tr>';
-        for (const c of cols) {
+        cols.forEach((c, i) => {
             const w = c.width ? ' width: ' + c.width + ';' : '';
-            out += '<th style="' + headCss + w + ' background: ' + t.headerFill + ';">' + esc(c.label) + '</th>';
-        }
+            out +=
+                '<th' +
+                spanAttr(i, cols.length, totalCols) +
+                ' style="' +
+                headCss +
+                w +
+                ' background: ' +
+                t.headerFill +
+                ';">' +
+                esc(c.label) +
+                '</th>';
+        });
         out += '</tr></thead>';
     }
-    const cell = (v) => '<td style="' + cellCss + '">' + (v || '') + '</td>';
+    const cell = (v, i) =>
+        '<td' + spanAttr(i, cols.length, totalCols) + ' style="' + cellCss + '">' + (v || '') + '</td>';
     // data-dg-row is why rows survive a round-trip. The first version INFERRED roles
     // ("the last row is totals if its first cell is bold"); any cell the browser
     // re-serialized differently broke the guess, so a totals row came back as a
     // literal row AND a fresh totals row was appended on the next save. Rows
     // multiplied every time the template was opened.
-    const loopRow = '<tr data-dg-row="loop">' + cols.map((c) => cell(c.tag)).join('') + '</tr>';
-    const subRow = subLoopRow(t, cols.length);
+    const loopRow = '<tr data-dg-row="loop">' + cols.map((c, i) => cell(c.tag, i)).join('') + '</tr>';
+    const subRow = subLoopRow(t, totalCols);
     out += '<tbody>';
     if (t.relationship) {
         // The sub loop lives INSIDE the parent loop, after the parent's row, so each
@@ -1147,11 +1196,14 @@ function tableToHtml(box) {
         out += loopRow;
     }
     for (const r of t.rows || []) {
-        out += '<tr data-dg-row="extra">' + cols.map((c, i) => cell(esc(r[i] || ''))).join('') + '</tr>';
+        out += '<tr data-dg-row="extra">' + cols.map((c, i) => cell(esc(r[i] || ''), i)).join('') + '</tr>';
     }
     if (t.totals && t.totals.enabled) {
         const tc = t.totals.cells || [];
-        out += '<tr data-dg-row="totals">' + cols.map((c, i) => totalsCell(t, tt, frame, tc[i])).join('') + '</tr>';
+        out +=
+            '<tr data-dg-row="totals">' +
+            cols.map((c, i) => totalsCell(t, tt, frame, tc[i], spanAttr(i, cols.length, totalCols))).join('') +
+            '</tr>';
     }
     out += '</tbody></table>';
     return out;
@@ -1182,13 +1234,28 @@ export function tablePreviewHtml(box) {
     const frame = gridCss(t, 'body');
     const cellCss = frame + typo(rt);
     const headCss = gridCss(t, 'head') + typo(ht);
+    // Declared before the header uses it. Same widest-row rule as the serializer, or
+    // the canvas would draw a table the PDF does not.
+    const subRelPv = (t.subRelationship || '').trim();
+    const subsPv = t.subColumns || [];
+    const pvTotal = Math.max(cols.length, subRelPv && subsPv.length ? subsPv.length : 0);
     let out = '<table style="border-collapse: collapse; width: 100%;">';
     if (t.showHeader) {
         out += '<thead><tr>';
-        for (const c of cols) {
+        cols.forEach((c, ci) => {
             const w = c.width ? ' width: ' + c.width + ';' : '';
-            out += '<th style="' + headCss + w + ' background: ' + t.headerFill + ';">' + esc(c.label) + '</th>';
-        }
+            out +=
+                '<th' +
+                spanAttr(ci, cols.length, pvTotal) +
+                ' style="' +
+                headCss +
+                w +
+                ' background: ' +
+                t.headerFill +
+                ';">' +
+                esc(c.label) +
+                '</th>';
+        });
         out += '</tr></thead>';
     }
     out += '<tbody>';
@@ -1199,9 +1266,23 @@ export function tablePreviewHtml(box) {
     const subs = t.subColumns || [];
     const stx = { ...DEFAULT_SUB_TEXT, ...(t.subText || {}) };
     const indent = t.subIndent == null ? 12 : t.subIndent;
-    const subSpan = Math.max(1, cols.length - subs.length + 1);
+
     for (let i = 0; i < sampleRows; i++) {
-        out += '<tr>' + cols.map((c) => '<td style="' + cellCss + '">' + esc(c.tag || '') + '</td>').join('') + '</tr>';
+        out +=
+            '<tr>' +
+            cols
+                .map(
+                    (c, i) =>
+                        '<td' +
+                        spanAttr(i, cols.length, pvTotal) +
+                        ' style="' +
+                        cellCss +
+                        '">' +
+                        esc(c.tag || '') +
+                        '</td>'
+                )
+                .join('') +
+            '</tr>';
         if (subRel && subs.length) {
             // Drawn under EVERY sample parent row, because that is where it prints —
             // showing it once at the bottom would misrepresent the nesting.
@@ -1221,8 +1302,16 @@ export function tablePreviewHtml(box) {
                 subs
                     .map((c, j) => {
                         const pad = j === 0 ? ' padding-left: ' + (t.cellPadding + indent) + 'pt;' : '';
-                        const cs = j === subs.length - 1 && subSpan > 1 ? ' colspan="' + subSpan + '"' : '';
-                        return '<td' + cs + ' style="' + scss + pad + '">' + esc(c.tag || '') + '</td>';
+                        return (
+                            '<td' +
+                            spanAttr(j, subs.length, pvTotal) +
+                            ' style="' +
+                            scss +
+                            pad +
+                            '">' +
+                            esc(c.tag || '') +
+                            '</td>'
+                        );
                     })
                     .join('') +
                 '</tr>';
@@ -1231,7 +1320,7 @@ export function tablePreviewHtml(box) {
     if (t.relationship) {
         out +=
             '<tr><td colspan="' +
-            Math.max(1, cols.length) +
+            Math.max(1, pvTotal) +
             '" style="' +
             cellCss +
             ' font-style: italic; color: #6b7280;">… one row per ' +

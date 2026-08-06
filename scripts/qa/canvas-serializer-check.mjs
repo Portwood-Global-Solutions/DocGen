@@ -139,6 +139,19 @@ nestTable.table.subColumns = [
 nestDoc.artboards[0].boxes.push(nestTable);
 const nestHtml = m.serialize(nestDoc, geo);
 
+// The reverse shape: ONE parent column above TWO nested ones.
+const widerDoc = m.blankDocument();
+const widerTable = m.newTableBox(0.5, 2, 7);
+widerTable.table.relationship = 'Opportunities';
+widerTable.table.columns = [{ label: 'Opportunity', tag: '{Name}', width: '' }];
+widerTable.table.subRelationship = 'OpportunityLineItems';
+widerTable.table.subColumns = [
+    { label: 'Product', tag: '{Product2.Name}', width: '' },
+    { label: 'Qty', tag: '{Quantity}', width: '' }
+];
+widerDoc.artboards[0].boxes.push(widerTable);
+const widerNestHtml = m.serialize(widerDoc, geo);
+
 // --- signature placements --------------------------------------------------
 // Its OWN document: adding boxes to the shared one after it was serialized broke the
 // box-count check, which compares that html against the doc it came from.
@@ -289,11 +302,25 @@ const checks = [
             nestHtml
         )
     ],
-    // Fewer sub columns than the table has: the last cell stretches, or the grid goes
-    // ragged wherever the counts differ.
+    // The table is as wide as its WIDEST row and every shorter row's last cell
+    // stretches — in BOTH directions. A nested list with MORE columns than its parent
+    // ("Opportunity Name" over "Product · Quantity") is the ordinary case, and handling
+    // only the parent-wider one left the parent's single cell in a narrow column with
+    // the rest of its row empty beside it.
+    ['a short nested row spans the remaining columns', nestHtml.includes('colspan="2"')],
+    ['a parent row stretches when the nested row is wider', widerNestHtml.includes('colspan="2"')],
     [
-        'a short nested row spans the remaining columns',
-        nestHtml.includes('colspan="3"') === false && nestHtml.includes('colspan="2"')
+        'every row ends up the same width',
+        (() => {
+            const body = widerNestHtml.slice(widerNestHtml.indexOf('<tbody>'), widerNestHtml.indexOf('</tbody>'));
+            const widths = [...body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map((r) =>
+                [...r[1].matchAll(/<td([^>]*)>/g)].reduce((a, c) => {
+                    const sp = /colspan="(\d+)"/.exec(c[1]);
+                    return a + (sp ? parseInt(sp[1], 10) : 1);
+                }, 0)
+            );
+            return widths.length > 1 && new Set(widths).size === 1;
+        })()
     ],
     ['the nested relationship round-trips as an attribute', nestHtml.includes('data-dg-subrel="OpportunityLineItems"')],
     [
@@ -310,7 +337,6 @@ const checks = [
     ['a multi-word signer role is underscored', sigHtml.includes('{@Signature_Account_Manager:2:Full}')],
     ['the inline flag rides after the type', sigHtml.includes('{@Signature_Customer:1:Date:inline}')],
     ['signature settings round-trip as attributes', sigHtml.includes('data-dg-sig-role="Account Manager"')],
-
 
     ['a custom size emits two lengths', /@page \{ size: 5.5in 8.5in;/.test(customHtml)],
     // Zero margins are what make the canvas and the page share an origin.

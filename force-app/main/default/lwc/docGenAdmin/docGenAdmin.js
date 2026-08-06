@@ -2337,7 +2337,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 title: 'Bring an Existing Template',
                 badge: null,
                 icon: 'utility:upload',
-                desc: 'Upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain. HTML can be imported onto a canvas from the editor; Word keeps its own format and converts to HTML for PDF output.'
+                desc: 'Upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain. Each keeps its own format — Word generates .docx, Excel .xlsx, PowerPoint .pptx. An HTML file can also be imported onto a canvas from the editor.'
             },
             {
                 mode: 'canvas',

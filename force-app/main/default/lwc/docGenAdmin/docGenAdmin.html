@@ -561,18 +561,17 @@
                                                         size="x-small"
                                                         class="slds-var-m-right_x-small"
                                                     ></lightning-icon>
-                                                    Word templates are converted to HTML for PDF output — complex
-                                                    layouts (text boxes, floating images, unusual tables) may not
-                                                    convert exactly. Keep Output Format&nbsp;<strong
-                                                        >Native (.docx)</strong
-                                                    >&nbsp;for full fidelity, upload
-                                                    an&nbsp;<strong>HTML</strong>&nbsp;file for a pixel-perfect PDF, or
-                                                    use&nbsp;<strong>Start from a Design</strong>&nbsp;/&nbsp;<strong
-                                                        >Generate with AI</strong
-                                                    >&nbsp;/&nbsp;<strong>Start From Scratch</strong>.
+                                                    A Word template stays a Word file. Choosing Output
+                                                    Format&nbsp;<strong>Native (.docx)</strong>&nbsp;generates the
+                                                    document with full fidelity.
+                                                    Choosing&nbsp;<strong>PDF</strong>&nbsp;converts it to HTML first,
+                                                    and complex layouts (text boxes, floating images, unusual tables)
+                                                    may not convert exactly. If you need a pixel-perfect PDF, build it
+                                                    on&nbsp;<strong>a Blank Canvas</strong>&nbsp;instead, where what you
+                                                    place is what prints.
                                                     <strong>Excel</strong
-                                                    >&nbsp;and&nbsp;<strong>PowerPoint</strong>&nbsp;templates always
-                                                    generate in their native format — no conversion involved.
+                                                    >&nbsp;and&nbsp;<strong>PowerPoint</strong>&nbsp;always generate in
+                                                    their native format — no conversion involved.
                                                 </p>
                                             </div>
                                         </template>
@@ -1687,9 +1686,10 @@
                             </template>
                             <template if:false={hasDesignerTemplates}>
                                 <p class="dg-designer-empty__hint">
-                                    You have no HTML templates yet. Build one from&nbsp;<strong>Create New</strong
-                                    >&nbsp;— or open a Word template under&nbsp;<strong>Your Templates</strong>&nbsp;and
-                                    switch it to HTML.
+                                    Nothing to design yet. Make one from&nbsp;<strong>Create New</strong
+                                    >&nbsp;&rarr;&nbsp;<strong>Start from a Blank Canvas</strong>. Word, Excel,
+                                    PowerPoint and PDF templates keep their own format and are edited as files rather
+                                    than designed here.
                                 </p>
                             </template>
                         </div>
