@@ -2682,6 +2682,59 @@ export default class DocGenCanvas extends LightningElement {
      * under every image and shape — a content field for objects that have no content,
      * where anything typed would be silently discarded by the serializer.
      */
+    // ---- Rich text / HTML source ------------------------------------------
+    //
+    // A text box holds real markup, and the rich-text toolbar can only reach part of
+    // it. Tables are the obvious case — the editor has no table button, but the
+    // serializer and the PDF engine both handle tables fine — so without a way to type
+    // markup directly, a whole class of layout is unreachable inside a box.
+    //
+    // The source view is the SAME html the rich-text view edits, sanitized on the way
+    // in, so the two cannot drift and neither can smuggle markup the engine will not
+    // render.
+    @track sourceMode = false;
+
+    get showSourceEditor() {
+        return this.canEditRichText && this.sourceMode;
+    }
+
+    get showRichEditor() {
+        return this.canEditRichText && !this.sourceMode;
+    }
+
+    get isSourceMode() {
+        return this.sourceMode;
+    }
+
+    get isRichMode() {
+        return !this.sourceMode;
+    }
+
+    get richModeClass() {
+        return this.sourceMode ? 'dg-sbtn' : 'dg-sbtn dg-sbtn_on';
+    }
+
+    get sourceModeClass() {
+        return this.sourceMode ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+
+    handleShowRich() {
+        this.sourceMode = false;
+    }
+
+    handleShowSource() {
+        this.sourceMode = true;
+    }
+
+    handleSourceChange(event) {
+        const box = this.selectedBox;
+        if (!box) return;
+        // Sanitized like any other authored markup: a paste from a web page must not
+        // put an absolutely-positioned div inside an artboard whose whole layout
+        // contract is position.
+        this.applyToBox(box.id, { html: sanitizeInline(event.target.value) });
+    }
+
     get canEditRichText() {
         const box = this.selectedBox;
         return !!box && (box.kind === 'text' || !box.kind);

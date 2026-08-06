@@ -43,6 +43,29 @@
                 <p class="dg-panel-hint">Drag to move. Handles on the right and bottom edges resize.</p>
 
                 <template lwc:if={canEditRichText}>
+                    <div class="dg-row dg-srctoggle">
+                        <button class={richModeClass} onclick={handleShowRich} title="Formatting toolbar">
+                            Rich text
+                        </button>
+                        <button class={sourceModeClass} onclick={handleShowSource} title="Edit the markup directly">
+                            HTML
+                        </button>
+                    </div>
+                </template>
+                <template lwc:if={showSourceEditor}>
+                    <textarea
+                        class="dg-source-edit"
+                        spellcheck="false"
+                        aria-label="Box HTML"
+                        value={richTextValue}
+                        onchange={handleSourceChange}
+                    ></textarea>
+                    <p class="dg-panel-note">
+                        The box's own markup. Tables, spans and headings are all allowed — anything the PDF engine
+                        cannot render is stripped when you leave the field.
+                    </p>
+                </template>
+                <template lwc:if={showRichEditor}>
                     <lightning-input-rich-text
                         label="Content"
                         variant="label-stacked"

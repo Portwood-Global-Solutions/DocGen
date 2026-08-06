@@ -4959,7 +4959,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this.showToast(
                     'Designer is for HTML templates',
                     row[F.Type] === 'Word'
-                        ? 'Open Edit → Document & History → View Converted HTML, and use "Switch to HTML Template" to bring this Word template into the designer.'
+                        ? 'Open Edit → Document & History → View Converted HTML to see exactly what the PDF engine renders from this Word file.'
                         : 'This template type is file-based — use Edit to manage its document.',
                     'info'
                 );

@@ -5181,30 +5181,12 @@
                                                                     title="Rendered preview of the converted HTML"
                                                                 ></div>
                                                             </template>
-                                                            <div class="slds-var-m-top_x-small">
-                                                                <lightning-button
-                                                                    variant="brand"
-                                                                    label="Switch to HTML Template"
-                                                                    icon-name="utility:change_record_type"
-                                                                    onclick={handleSwitchToHtmlTemplate}
-                                                                    disabled={isSwitchingToHtml}
-                                                                ></lightning-button>
-                                                                <template if:true={isSwitchingToHtml}>
-                                                                    <lightning-spinner
-                                                                        alternative-text="Converting"
-                                                                        size="small"
-                                                                        class="slds-var-m-left_small"
-                                                                    ></lightning-spinner>
-                                                                </template>
-                                                                <span
-                                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-left_small"
-                                                                >
-                                                                    Fine-tuned this HTML? Converting makes it the
-                                                                    template's real body (Type becomes HTML) so your
-                                                                    edits stick. Until then this view is regenerated
-                                                                    from the Word file on every upload.
-                                                                </span>
-                                                            </div>
+                                                            <!-- "Switch to HTML Template" removed. A Word template
+                                                                 stays a Word template: converting changed its Type
+                                                                 and threw away .docx output for good, in exchange for
+                                                                 a translation that was never going to be exact. This
+                                                                 view stays useful as a way to SEE what the engine
+                                                                 renders when diagnosing a Word layout. -->
                                                         </div>
                                                     </template>
                                                 </div>

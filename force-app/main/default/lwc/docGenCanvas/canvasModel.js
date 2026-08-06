@@ -1309,9 +1309,32 @@ const SAFE_STYLE = [
     // Margin is how a document spaces its own paragraphs. Stripping it flattened every
     // imported block against its neighbour and changed where text wrapped.
     'margin',
+    'margin-top',
+    'margin-right',
+    'margin-bottom',
+    'margin-left',
     'width',
+    'height',
     'border',
+    // PER-SIDE borders, spelled out. The matcher requires a colon straight after the
+    // property name, so `border` never matched `border-bottom:` — and a rule under a
+    // row is exactly how a well-set table is drawn. Every imported table lost its
+    // horizontal rules and came back as a borderless block, and a table pasted into a
+    // box's HTML view lost them the same way.
+    'border-top',
+    'border-right',
+    'border-bottom',
+    'border-left',
+    'border-color',
+    'border-width',
+    'border-style',
+    'border-collapse',
+    'background',
     'padding',
+    'padding-top',
+    'padding-right',
+    'padding-bottom',
+    'padding-left',
     'vertical-align'
 ];
 
