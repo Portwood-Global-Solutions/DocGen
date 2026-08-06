@@ -26,6 +26,21 @@
                 <h3 class="dg-panel-title">Box</h3>
                 <p class="dg-panel-hint">Drag to move. Handles on the right and bottom edges resize.</p>
 
+                <template lwc:if={canEditRichText}>
+                    <lightning-input-rich-text
+                        label="Content"
+                        variant="label-stacked"
+                        value={richTextValue}
+                        onchange={handleRichTextChange}
+                        message-when-bad-input="Content could not be read"
+                        placeholder="Type here. Merge tags work anywhere — pick one from Fields below."
+                    ></lightning-input-rich-text>
+                    <p class="dg-panel-note">
+                        Formatting applies to whatever you select, and the box on the page shows exactly what will
+                        print.
+                    </p>
+                </template>
+
                 <template lwc:if={hasPickableFields}>
                     <h4 class="dg-panel-sub">Fields</h4>
                     <p class="dg-panel-note">
@@ -389,42 +404,6 @@
                 <span class="dg-qb-zoom">{zoomPercent}</span>
                 <button class="dg-qb-btn" data-dir="in" onclick={handleZoom}>+</button>
                 <span class="dg-qb-sep"></span>
-                <button
-                    class="dg-sbtn"
-                    data-mark="bold"
-                    onmousedown={handleMarkMouseDown}
-                    onclick={handleMark}
-                    title="Bold the selection"
-                >
-                    <b>B</b>
-                </button>
-                <button
-                    class="dg-sbtn"
-                    data-mark="italic"
-                    onmousedown={handleMarkMouseDown}
-                    onclick={handleMark}
-                    title="Italicise the selection"
-                >
-                    <i>I</i>
-                </button>
-                <button
-                    class="dg-sbtn"
-                    data-mark="underline"
-                    onmousedown={handleMarkMouseDown}
-                    onclick={handleMark}
-                    title="Underline the selection"
-                >
-                    <u>U</u>
-                </button>
-                <button
-                    class="dg-sbtn"
-                    data-mark="strike"
-                    onmousedown={handleMarkMouseDown}
-                    onclick={handleMark}
-                    title="Strike through the selection"
-                >
-                    <s>S</s>
-                </button>
                 <span class="dg-qb-sep"></span>
                 <button class="dg-qb-btn dg-qb-wide" onclick={handleEditTemplate} title="Open this template's settings">
                     Template
@@ -473,19 +452,7 @@
                                     style={box.style}
                                     onmousedown={handleBoxMouseDown}
                                 >
-                                    <template lwc:if={box.editable}>
-                                        <textarea
-                                            class="dg-cbox-body dg-cbox-text"
-                                            data-id={box.id}
-                                            oninput={handleBoxInput}
-                                            onkeydown={handleBoxKeydown}
-                                            onfocus={handleBoxFocus}
-                                            spellcheck="false"
-                                        ></textarea>
-                                    </template>
-                                    <template lwc:else>
-                                        <div class="dg-cbox-body dg-cbox-table" data-id={box.id} lwc:dom="manual"></div>
-                                    </template>
+                                    <div class="dg-cbox-body" data-id={box.id} lwc:dom="manual"></div>
                                     <template lwc:if={box.isSelected}>
                                         <span class="dg-cbox-readout">{box.readout} · {box.modeLabel}</span>
                                         <span class="dg-h dg-h_e" data-handle="e"></span>

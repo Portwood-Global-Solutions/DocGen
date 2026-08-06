@@ -23,7 +23,7 @@ import {
     snapBox,
     suggestTotals,
     buildQueryConfig,
-    INLINE_MARKS
+    sanitizeInline
 } from './canvasModel';
 
 /**
@@ -111,10 +111,9 @@ export default class DocGenCanvas extends LightningElement {
                     this.screenStyle(b),
                 cls: b.id === this.selectedId ? 'dg-cbox dg-cbox_selected' : 'dg-cbox',
                 isSelected: b.id === this.selectedId,
-                // Tables are edited through the panel, not by typing into cells — the
-                // cells hold merge tags, and free-typing into them would desynchronise
-                // the column model from what actually serializes.
-                editable: b.kind !== 'table',
+                // NOTHING is edited on the artboard now — text through the panel's
+                // rich-text editor, tables through the column editor. The artboard is a
+                // faithful preview you arrange, which is what makes it trustworthy.
                 readout: b.x.toFixed(2) + 'in, ' + b.y.toFixed(2) + 'in · ' + b.w.toFixed(2) + 'in',
                 modeLabel: b.mode === 'flow' ? 'Flows' : 'Pinned'
             }))
@@ -728,24 +727,16 @@ export default class DocGenCanvas extends LightningElement {
         for (const board of this.doc.artboards) {
             for (const b of board.boxes) byId.set(b.id, b);
         }
-        // Tables render from the SAME code that serializes them, so the artboard
-        // cannot drift from the PDF.
-        for (const el of this.template.querySelectorAll('.dg-cbox-table')) {
+        // Every box renders read-only from the SAME code that serializes it, so the
+        // artboard cannot drift from the PDF.
+        for (const el of this.template.querySelectorAll('.dg-cbox-body')) {
             const model = byId.get(el.dataset.id);
-            if (!model || model.kind !== 'table') continue;
-            const want = tablePreviewHtml(model);
+            if (!model) continue;
+            const want =
+                model.kind === 'table' ? tablePreviewHtml(model) : model.html != null ? model.html : model.text || '';
             if (el.innerHTML !== want) {
                 // eslint-disable-next-line @lwc/lwc/no-inner-html
                 el.innerHTML = want;
-            }
-        }
-        // Text lives in a real <textarea>. Never write into the one being typed in —
-        // assigning value moves the caret to the end on every keystroke.
-        for (const el of this.template.querySelectorAll('.dg-cbox-text')) {
-            const model = byId.get(el.dataset.id);
-            if (!model) continue;
-            if (this.template.activeElement !== el && el.value !== (model.text || '')) {
-                el.value = model.text || '';
             }
         }
     }
@@ -867,105 +858,49 @@ export default class DocGenCanvas extends LightningElement {
      * single box — the browser's contenteditable restructuring cannot escape it, so
      * it cannot corrupt the document the way reading back a whole canvas can.
      */
+    // The selection-mark toolbar that used to live here is gone with the textarea.
+    // Formatting is now the rich-text editor's job, which does it against a real
+    // selection instead of by wrapping the text in markers the author could see.
+
+    /** Content for the panel editor — the selected box's markup. */
+    get richTextValue() {
+        const box = this.selectedBox;
+        if (!box || box.kind === 'table') {
+            return '';
+        }
+        return box.html != null ? box.html : box.text || '';
+    }
+
+    get canEditRichText() {
+        const box = this.selectedBox;
+        return !!box && box.kind !== 'table';
+    }
+
     /**
-     * Wraps (or unwraps) the textarea selection in an inline mark.
+     * The box's content is authored HERE, not on the artboard.
      *
-     * selectionStart/selectionEnd are plain integers on a textarea, so this needs no
-     * range surgery and no contenteditable — which is the whole point. A
-     * contenteditable box would hand Lightning's "/" hotkey the chance to steal focus
-     * mid-typing again, and that was measured, not feared.
+     * Moving editing into the panel removes three problems at once.
+     * lightning-input-rich-text is a real Salesforce input, so Lightning's "/" hotkey
+     * leaves it alone — no document-capture interceptor, no focus recovery, neither of
+     * which I could make work reliably on the artboard. The artboard can then render
+     * the formatted result read-only, so what you see is finally what prints. And the
+     * value is read off a supported base component instead of scraped out of a
+     * contenteditable, which is the exact thing LWS keeps distorting in docGenAdmin.
      *
-     * preventDefault on MOUSEDOWN is what keeps the selection alive: clicking a button
-     * would otherwise blur the textarea and collapse it before the handler ran.
+     * Sanitised on the way in: the editor emits more than the PDF engine honours.
      */
-    handleMark(event) {
-        const name = event.currentTarget.dataset.mark;
-        const mark = INLINE_MARKS.find((m) => m.name === name);
-        const el = this._activeTextarea;
-        if (!mark || !el) {
-            this.statusText = 'Select some text in a box first';
+    handleRichTextChange(event) {
+        const box = this.selectedBox;
+        if (!box) {
             return;
         }
-        const value = el.value || '';
-        const start = el.selectionStart;
-        const end = el.selectionEnd;
-        if (start === end) {
-            this.statusText = 'Select the words to format';
-            return;
-        }
-        const selected = value.slice(start, end);
-        const before = value.slice(0, start);
-        const after = value.slice(end);
-
-        let next;
-        let caretStart;
-        let caretEnd;
-        const alreadyWrapped =
-            selected.startsWith(mark.open) &&
-            selected.endsWith(mark.close) &&
-            selected.length > mark.open.length + mark.close.length;
-        const wrappedOutside = before.endsWith(mark.open) && after.startsWith(mark.close);
-
-        if (alreadyWrapped) {
-            const inner = selected.slice(mark.open.length, selected.length - mark.close.length);
-            next = before + inner + after;
-            caretStart = start;
-            caretEnd = start + inner.length;
-        } else if (wrappedOutside) {
-            // Toggling off when the marks sit just outside the selection.
-            next = before.slice(0, before.length - mark.open.length) + selected + after.slice(mark.close.length);
-            caretStart = start - mark.open.length;
-            caretEnd = caretStart + selected.length;
-        } else {
-            next = before + mark.open + selected + mark.close + after;
-            caretStart = start + mark.open.length;
-            caretEnd = caretStart + selected.length;
-        }
-
-        el.value = next;
-        this.applyToBox(el.dataset.id, { text: next });
-        // Put the selection back so the author can stack marks without re-selecting.
-        // eslint-disable-next-line @lwc/lwc/no-async-operation
-        setTimeout(() => {
-            el.focus();
-            el.setSelectionRange(caretStart, caretEnd);
-        }, 0);
+        this.applyToBox(box.id, { html: sanitizeInline(event.target.value) });
     }
 
-    /**
-     * Remembers the last focused textarea and its selection.
-     *
-     * Read on the toolbar click rather than asking for activeElement then: even with
-     * preventDefault on mousedown, this is the value that is unambiguously the box the
-     * author was editing.
-     */
-    handleBoxFocus(event) {
-        this._activeTextarea = event.currentTarget;
-    }
-
-    handleMarkMouseDown(event) {
-        event.preventDefault();
-    }
-
-    handleBoxInput(event) {
-        const id = event.currentTarget.dataset.id;
-        this.applyToBox(id, { text: event.currentTarget.value });
-    }
-
-    /**
-     * Keeps keystrokes inside the box.
-     *
-     * Lightning binds single-key global shortcuts ("/" for search, others) on window
-     * capture. A <textarea> is already exempt from those, which is the main reason text
-     * editing here is a textarea and not a contenteditable — the flow designer, which
-     * uses contenteditable, has to detect focus being STOLEN to the search box and
-     * steal it back afterwards, because LWS never delivers the window-capture listener
-     * that would let it be prevented. Stopping propagation as well costs nothing and
-     * covers any component above us that binds its own document-level keys.
-     */
-    handleBoxKeydown(event) {
-        event.stopPropagation();
-    }
+    // The "/" workaround that used to live here is gone. Nothing is typed on the
+    // artboard any more; text is authored in the panel's rich-text editor, which
+    // Lightning already exempts from its global hotkeys, so the problem that needed an
+    // interceptor and a focus recovery simply does not arise on this surface.
 
     handleModeToggle() {
         const box = this.selectedBox;

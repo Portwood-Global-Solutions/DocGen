@@ -491,6 +491,112 @@ export function tablePreviewHtml(box) {
 }
 
 /**
+ * The markup a box may carry, and the only markup the PDF engine reliably renders.
+ *
+ * lightning-input-rich-text emits whatever its toolbar produced, which is more than
+ * Flying Saucer honours and occasionally things it chokes on. Reducing it here means
+ * the canvas and the PDF agree, and that a paste from a web page cannot inject an
+ * absolutely-positioned div into an artboard whose whole layout contract is position.
+ *
+ * TABLE tags are allowed: authoring a table inside the text box is the point of moving
+ * editing into the panel, and tables render correctly (measured — nested tables and
+ * per-cell borders both work).
+ */
+const SAFE_TAGS = new Set([
+    'B',
+    'STRONG',
+    'I',
+    'EM',
+    'U',
+    'S',
+    'STRIKE',
+    'BR',
+    'SPAN',
+    'P',
+    'DIV',
+    'UL',
+    'OL',
+    'LI',
+    'TABLE',
+    'THEAD',
+    'TBODY',
+    'TR',
+    'TD',
+    'TH',
+    'H1',
+    'H2',
+    'H3',
+    'H4',
+    'H5',
+    'H6'
+]);
+
+/** Only properties measured to work. rgba and opacity are dropped on purpose: rgba
+ *  renders NOTHING in this engine and opacity is ignored, so both are traps. */
+const SAFE_STYLE = [
+    'color',
+    'background-color',
+    'font-weight',
+    'font-style',
+    'text-decoration',
+    'font-size',
+    'font-family',
+    'text-align',
+    'width',
+    'border',
+    'padding',
+    'vertical-align'
+];
+
+function dropUnsafeStyle(value) {
+    // A colour the engine cannot resolve is worse than no colour: rgba() makes the
+    // whole background disappear rather than degrading.
+    return /rgba?\(|hsla?\(|var\(|calc\(/i.test(value || '');
+}
+
+export function sanitizeInline(html) {
+    const tpl = document.createElement('template');
+    // eslint-disable-next-line @lwc/lwc/no-inner-html
+    tpl.innerHTML = String(html == null ? '' : html);
+    const walk = (node) => {
+        for (const child of [...node.childNodes]) {
+            if (child.nodeType === 3) {
+                continue;
+            }
+            if (child.nodeType !== 1) {
+                child.remove();
+                continue;
+            }
+            if (!SAFE_TAGS.has(child.tagName)) {
+                // Unwrap, never delete — the TEXT the author wrote is the point.
+                while (child.firstChild) node.insertBefore(child.firstChild, child);
+                child.remove();
+                continue;
+            }
+            const keep = [];
+            const style = child.getAttribute('style');
+            if (style) {
+                for (const prop of SAFE_STYLE) {
+                    const m = new RegExp('(?:^|;)\\s*' + prop + '\\s*:\\s*([^;]+)').exec(style);
+                    if (m && !dropUnsafeStyle(m[1])) {
+                        keep.push(prop + ': ' + m[1].trim());
+                    }
+                }
+            }
+            const colspan = child.getAttribute('colspan');
+            const rowspan = child.getAttribute('rowspan');
+            for (const attr of [...child.attributes]) child.removeAttribute(attr.name);
+            if (keep.length) child.setAttribute('style', keep.join('; '));
+            if (colspan) child.setAttribute('colspan', colspan);
+            if (rowspan) child.setAttribute('rowspan', rowspan);
+            walk(child);
+        }
+    };
+    walk(tpl.content);
+    return tpl.innerHTML;
+}
+
+/**
  * Inline formatting marks, applied to a SELECTION inside the plain-text box.
  *
  * Marks in the text rather than HTML in a contenteditable, deliberately. A
