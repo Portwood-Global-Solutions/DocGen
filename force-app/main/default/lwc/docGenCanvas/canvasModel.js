@@ -352,7 +352,13 @@ function imageToHtml(box) {
     const img = box.image || {};
     const wPx = inToCssPx(box.w);
     const hPx = inToCssPx(box.h);
-    const sizeToken = img.keepRatio ? String(wPx) : wPx + 'x' + hPx;
+    // The size token MUST contain an 'x'.
+    //
+    // DocGenService.parseImageTagSpec bails out and applies no size at all when the
+    // token has no 'x' — so `{%asset:logo:144}` is silently ignored and the image
+    // renders at its intrinsic size, however carefully the box was sized on the canvas.
+    // `144x` means "144 wide, height follows"; `144x96` is exact.
+    const sizeToken = img.keepRatio ? wPx + 'x' : wPx + 'x' + hPx;
     const assetKey = String(img.assetKey || '').trim();
     if (assetKey) {
         // The engine expands this to a full <img> through the same pipeline every other

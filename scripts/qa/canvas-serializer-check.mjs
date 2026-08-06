@@ -179,7 +179,11 @@ const checks = [
     // An asset is referenced by KEY. Baking the ContentVersion Id in would pin the
     // document to whichever version was current the day it was authored, and replacing
     // the asset would silently not reach it.
-    ['a Portwood asset emits {%asset:key}, never a baked CV id', html.includes('{%asset:company-logo:144}')],
+    // The size token must carry an 'x'. parseImageTagSpec applies NO size when it does
+    // not, so a bare number is silently ignored and the image renders at its intrinsic
+    // size no matter how the box was sized on the canvas.
+    ['a Portwood asset emits {%asset:key} with the box size', html.includes('{%asset:company-logo:144x}')],
+    ['every image size token carries an x', !/\{%(?:asset:[a-z0-9_-]+|[A-Za-z0-9_.]+):\d+\}/.test(html)],
     ['no asset image is serialized as a raw shepherd URL', !/<img[^>]*company-logo/.test(html)],
 
     // --- Shapes ------------------------------------------------------------
