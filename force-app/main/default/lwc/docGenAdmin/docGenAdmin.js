@@ -13255,6 +13255,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._enterVisualMode(body);
     }
 
+    /**
+     * The canvas saved a new Query Config. Mirror it locally so the field picker
+     * reflects it immediately — without this the author saves a query and the chips
+     * keep offering the old fields until the whole tab is reloaded.
+     */
+    handleCanvasQueryUpdated(event) {
+        this.editTemplateQuery = (event.detail && event.detail.query) || this.editTemplateQuery;
+    }
+
     /** Designer → this template's full edit modal, no list-hunting. */
     handleEditTemplateFromDesigner() {
         if (this.showHtmlBodyVisual) {

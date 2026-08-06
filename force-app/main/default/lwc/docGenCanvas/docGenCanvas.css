@@ -422,3 +422,43 @@ textarea.dg-cbox-text {
     padding: 6px 8px;
     margin: 0 0 10px 0;
 }
+
+.dg-qb-wide {
+    width: auto;
+    padding: 0 10px;
+    font-size: 0.78rem;
+}
+
+/* The query is editable HERE because the canvas is where you discover it is wrong. */
+.dg-query-edit {
+    width: 100%;
+    min-height: 68px;
+    font-family: monospace;
+    font-size: 0.68rem;
+    padding: 6px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    margin-bottom: 6px;
+}
+
+.dg-preview-wrap {
+    padding: 10px;
+    background: var(--slds-g-color-surface-1, #fff);
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+.dg-preview-bar {
+    font-size: 0.75rem;
+    margin-bottom: 6px;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-preview-bar button {
+    float: right;
+}
+
+.dg-preview-frame {
+    width: 100%;
+    height: 60vh;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}

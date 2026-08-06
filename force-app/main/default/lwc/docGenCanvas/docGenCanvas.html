@@ -369,13 +369,10 @@
                     Built from the tags actually on the canvas, so a field can't render blank because nobody remembered
                     to query it.
                 </p>
+                <textarea class="dg-query-edit" value={queryText} oninput={handleQueryEdit}></textarea>
+                <button class="dg-panel-btn" onclick={handleUseGenerated}>Use what the canvas needs</button>
                 <div class="dg-query-preview">{generatedQuery}</div>
-                <template lwc:if={queryDiffers}>
-                    <button class="dg-panel-btn" onclick={handleApplyQuery}>Update the template's query</button>
-                </template>
-                <template lwc:else>
-                    <p class="dg-panel-note"><b>Query matches the canvas.</b></p>
-                </template>
+                <button class="dg-panel-btn" onclick={handleSaveQuery}>Save query</button>
             </template>
         </div>
 
@@ -423,6 +420,18 @@
                     <s>S</s>
                 </button>
                 <span class="dg-qb-sep"></span>
+                <button class="dg-qb-btn dg-qb-wide" onclick={handleEditTemplate} title="Open this template's settings">
+                    Template
+                </button>
+                <button
+                    class="dg-qb-btn dg-qb-wide"
+                    onclick={handlePreview}
+                    disabled={isPreviewing}
+                    title="Save, then generate a real PDF from the sample record"
+                >
+                    <template lwc:if={isPreviewing}>Generating…</template>
+                    <template lwc:else>Preview</template>
+                </button>
                 <button class="dg-qb-save" onclick={handleSave} disabled={isSaving}>
                     <template lwc:if={isSaving}>Saving…</template>
                     <template lwc:else>Save</template>

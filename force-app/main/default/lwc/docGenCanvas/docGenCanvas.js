@@ -58,6 +58,9 @@ export default class DocGenCanvas extends LightningElement {
     @track statusText = '';
     // Alignment guides for the box being dragged. Cleared on mouseup.
     @track guides = [];
+    @track previewUrl = null;
+    @track isPreviewing = false;
+    @track queryDraft = null;
 
     _loaded = false;
     // Live drag state. Kept off @track on purpose: it changes on every mousemove and
@@ -393,6 +396,109 @@ export default class DocGenCanvas extends LightningElement {
             this.applyToBox(box.id, { text: (box.text || '') + sep + tag });
             this.statusText = 'Inserted ' + tag;
         }
+    }
+
+    /**
+     * Preview saves FIRST, then generates.
+     *
+     * Previewing an unsaved canvas would show the last saved state and quietly imply
+     * the edits were fine — the worst possible outcome for a button whose entire job
+     * is telling you the truth about what will print.
+     */
+    async handlePreview() {
+        if (!this.templateId) {
+            return;
+        }
+        if (!this.sampleRecordId) {
+            this.statusText = 'Set a Sample Record on the template to preview with real data';
+            return;
+        }
+        this.isPreviewing = true;
+        this.statusText = 'Saving, then generating…';
+        // Open the tab NOW, synchronously inside the click, and point it at the PDF
+        // once it exists. Opening after the await is what trips popup blockers — the
+        // flow designer works around that by making you click Preview twice, and one
+        // click is better. about:blank is explicitly allowed by LWS.
+        const win = window.open('', '_blank');
+        try {
+            await this.handleSave();
+            const res = await generatePdf({
+                templateId: this.templateId,
+                recordId: this.sampleRecordId,
+                saveToRecord: false,
+                chartCvMap: null
+            });
+            if (!res || !res.base64) {
+                this.statusText = 'Preview did not return a document';
+                if (win) win.close();
+                return;
+            }
+            const bytes = atob(res.base64);
+            const arr = new Uint8Array(bytes.length);
+            for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+            if (this.previewUrl) {
+                URL.revokeObjectURL(this.previewUrl);
+            }
+            // A blob URL in an <iframe src> is blocked outright by Lightning Web
+            // Security — "HTMLIFrameElement.src supports http://, https:// schemes,
+            // relative urls and about:blank". window.open with the same URL is fine,
+            // which is why the preview is a tab rather than a panel.
+            this.previewUrl = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+            if (win) {
+                win.location = this.previewUrl;
+            }
+            this.statusText = 'Preview of ' + (res.title || 'document') + ' opened in a new tab';
+        } catch (e) {
+            this.statusText = 'Preview failed: ' + (e.body ? e.body.message : e.message);
+            if (win) win.close();
+        } finally {
+            this.isPreviewing = false;
+        }
+    }
+
+    handleClosePreview() {
+        if (this.previewUrl) {
+            URL.revokeObjectURL(this.previewUrl);
+        }
+        this.previewUrl = null;
+    }
+
+    get hasPreview() {
+        return !!this.previewUrl;
+    }
+
+    /** Editing the query in place — the canvas is where you find out it is wrong. */
+    get queryText() {
+        return this.queryDraft == null ? this.queryConfig || '' : this.queryDraft;
+    }
+
+    handleQueryEdit(event) {
+        this.queryDraft = event.target.value;
+    }
+
+    handleUseGenerated() {
+        this.queryDraft = this.generatedQuery;
+    }
+
+    async handleSaveQuery() {
+        if (!this.templateId) {
+            return;
+        }
+        try {
+            const fields = {};
+            fields[ID_FIELD.fieldApiName] = this.templateId;
+            fields[QUERY_FIELD.fieldApiName] = this.queryText;
+            await updateRecord({ fields });
+            this.statusText = 'Query saved';
+            this.dispatchEvent(new CustomEvent('queryupdated', { detail: { query: this.queryText } }));
+        } catch (e) {
+            this.statusText = 'Could not save the query: ' + (e.body ? e.body.message : e.message);
+        }
+    }
+
+    /** Hands off to the host, which owns the template's full edit surface. */
+    handleEditTemplate() {
+        this.dispatchEvent(new CustomEvent('edittemplate', { bubbles: true, composed: true }));
     }
 
     get generatedQuery() {
