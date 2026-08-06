@@ -512,11 +512,19 @@
                         <button class="dg-sbtn" onclick={handleCloseData}>Done</button>
                         <button class="dg-sbtn" onclick={handleUseGenerated}>Use what the canvas needs</button>
                     </div>
-                    <c-doc-gen-tree-builder
-                        selected-object={baseObject}
-                        query-config={queryText}
-                        onconfigchange={handleBuilderConfigChange}
-                    ></c-doc-gen-tree-builder>
+                    <template lwc:if={hasBaseObject}>
+                        <c-doc-gen-tree-builder
+                            selected-object={baseObject}
+                            query-config={queryText}
+                            onconfigchange={handleBuilderConfigChange}
+                        ></c-doc-gen-tree-builder>
+                    </template>
+                    <template lwc:else>
+                        <p class="dg-panel-warn">
+                            This template has no <b>Base Object</b> yet, so there are no fields to pick. Set one under
+                            <b>Template</b> in the toolbar, then come back.
+                        </p>
+                    </template>
                 </div>
             </template>
 

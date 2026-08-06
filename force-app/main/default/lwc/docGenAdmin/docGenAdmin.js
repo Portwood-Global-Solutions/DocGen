@@ -442,7 +442,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     editTemplateName;
     editTemplateCategory;
     @track editTemplateType;
-    editTemplateObject;
+    // @track so children re-render when it arrives. The canvas mounts before the
+    // template record finishes loading, and without this the Data picker was handed
+    // undefined for the base object and rendered nothing at all.
+    @track editTemplateObject;
     @track editTemplateOutputFormat;
     @track editTemplatePageOrientation = 'Portrait';
     @track editTemplatePageSize = 'Letter';

@@ -15,9 +15,16 @@
     vertical-align: top;
 }
 
+/* Light rail, dark text.
+   It was a dark rail with light text via var(--slds-g-color-surface-container-2,
+   #1f2937) — but that hook resolves to a LIGHT surface, so the background flipped
+   while the text stayed pale and the labels became unreadable. Background and
+   foreground now come from a matched pair, so a hook resolving differently can never
+   leave one readable and the other not. */
 .dg-rail {
     width: 72px;
-    background: var(--slds-g-color-surface-container-2, #1f2937);
+    background: var(--slds-g-color-surface-2, #f3f4f6);
+    border-right: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
     padding: var(--slds-g-spacing-2, 8px) 0;
 }
 
@@ -26,7 +33,7 @@
     width: 100%;
     border: none;
     background: transparent;
-    color: #e5e7eb;
+    color: var(--slds-g-color-on-surface-1, #1f2937);
     padding: 10px var(--slds-g-spacing-1, 4px);
     cursor: pointer;
     text-align: center;
@@ -34,12 +41,13 @@
 }
 
 .dg-tool:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--slds-g-color-surface-3, #e5e7eb);
 }
 
 .dg-tool_active {
-    background: rgba(124, 58, 237, 0.35);
-    color: #fff;
+    background: #ede9fe;
+    color: #5b21b6;
+    font-weight: var(--slds-g-font-weight-7, 700);
 }
 
 .dg-rail-label {
