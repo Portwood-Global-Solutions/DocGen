@@ -1325,6 +1325,9 @@ export function sanitizeInline(html) {
         }
     };
     walk(tpl.content);
+    // READ of this function's own just-sanitized output, off a detached <template>.
+    // Nothing is written to a live document here.
+    // eslint-disable-next-line @lwc/lwc/no-inner-html
     return tpl.innerHTML;
 }
 
@@ -1703,6 +1706,8 @@ function readTable(wrapper, tableEl) {
     // the <table>. So on the way back in, tbody.innerHTML no longer contains the
     // marker and the binding read as blank: open a table template, save, and the
     // {#Rel} was silently gone. The wrapper still holds it wherever the parser moved it.
+    // READ, to find the {#Rel} marker the parser may have moved. No write.
+    // eslint-disable-next-line @lwc/lwc/no-inner-html
     const m = /\{#([A-Za-z0-9_]+)\}/.exec((wrapper && wrapper.innerHTML) || '');
     t.relationship = m ? m[1] : '';
     const count = Math.max(ths.length, tds.length);
@@ -1711,6 +1716,9 @@ function readTable(wrapper, tableEl) {
         const td = tds[i];
         t.columns.push({
             label: th ? (th.textContent || '').trim() : 'Column ' + (i + 1),
+            // READ: a column's tag may carry inline formatting, so textContent would
+            // lose it.
+            // eslint-disable-next-line @lwc/lwc/no-inner-html
             tag: td ? (td.innerHTML || '').trim() : '',
             width: th ? readCss(th.getAttribute('style'), 'width') || '' : ''
         });
@@ -1789,6 +1797,10 @@ export function deserialize(html) {
         return null;
     }
     const tpl = document.createElement('template');
+    // Parsing a stored document into a DETACHED <template>, whose content is inert —
+    // scripts do not run and resources do not load. This is the parse step that feeds
+    // sanitizeInline, not a render into the live page.
+    // eslint-disable-next-line @lwc/lwc/no-inner-html
     tpl.innerHTML = html;
     const boards = [...tpl.content.querySelectorAll('.dg-artboard')];
     if (!boards.length) {
@@ -1867,7 +1879,11 @@ export function deserialize(html) {
                     // Keep BOTH: the markup is what renders, the flattened text is what
                     // a plain-text edit would start from. Keeping only the text lost
                     // every author's formatting on reload.
+                    // READS off the detached parse tree above, and the first is fed
+                    // straight into the sanitizer.
+                    // eslint-disable-next-line @lwc/lwc/no-inner-html
                     box.html = sanitizeInline(el.innerHTML);
+                    // eslint-disable-next-line @lwc/lwc/no-inner-html
                     box.text = htmlToText(el.innerHTML);
                 }
                 return box;

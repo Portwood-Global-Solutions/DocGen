@@ -1832,6 +1832,9 @@ export default class DocGenCanvas extends LightningElement {
             const model = byId.get(el.dataset.id);
             if (!model) continue;
             const want = this.previewHtmlFor(model);
+            // The comparison is a READ; the write below is this component's own
+            // sanitized preview markup, never author input straight from the page.
+            // eslint-disable-next-line @lwc/lwc/no-inner-html
             if (el.innerHTML !== want) {
                 // eslint-disable-next-line @lwc/lwc/no-inner-html
                 el.innerHTML = want;
