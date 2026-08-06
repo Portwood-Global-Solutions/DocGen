@@ -123,7 +123,7 @@ export default class DocGenCanvas extends LightningElement {
     @track customPage = { ...DEFAULT_CUSTOM_PAGE };
     @track imageLibrary = [];
     @track imageLoading = false;
-    _assetsRequested = false;
+    _assetsPromise = null;
     @track _showPageSetup = false;
 
     _loaded = false;
@@ -1464,7 +1464,6 @@ export default class DocGenCanvas extends LightningElement {
         this.versions = [];
         this.activeVersionId = null;
         this.imageLibrary = [];
-        this._assetsRequested = false;
         this.queryDraft = null;
         this.saveError = null;
         this.statusText = '';
@@ -1608,10 +1607,17 @@ export default class DocGenCanvas extends LightningElement {
                 this.statusText = html ? 'Existing body is not canvas-shaped — starting a new artboard' : 'New canvas';
             }
             this._savedHtml = serialize(this.doc, this.geo);
-            // Not awaited: the layout is already correct and the pictures fill in when
-            // the asset list arrives. Awaiting would hold the whole canvas blank on a
-            // slow query for something purely cosmetic.
-            this.hydrateImageSources();
+            // The asset list is loaded for EVERY template, not only when a box is found
+            // that needs one. Conditioning it on the document's contents meant the
+            // picker was empty until something happened to trigger a load, and which
+            // something varied — a box that already had a preview URL, or a template
+            // with no image box yet, both left it unloaded and looking broken. It is
+            // one cheap metadata query; making it unconditional removes the whole class
+            // of "why didn't it load this time".
+            //
+            // Not awaited: the layout is already correct, and pictures filling in a
+            // moment later beats holding the canvas blank on a slow query.
+            this.loadImageLibrary().then(() => this.hydrateImageSources());
         } catch (e) {
             this.doc = blankDocument();
             this.statusText = 'Could not load the saved body: ' + (e.body ? e.body.message : e.message);
@@ -1653,12 +1659,6 @@ export default class DocGenCanvas extends LightningElement {
                     el.value = want;
                 }
             }
-        }
-        // Selecting an image box needs the asset grid populated. Requested once per
-        // load rather than on every render — this runs after every keystroke.
-        if (this.selectedIsImage && !this._assetsRequested && !(this.imageLibrary || []).length) {
-            this._assetsRequested = true;
-            this.loadImageLibrary();
         }
         const byId = new Map();
         for (const board of this.doc.artboards) {
@@ -1781,21 +1781,32 @@ export default class DocGenCanvas extends LightningElement {
      * being authored.
      */
     async loadImageLibrary() {
-        if (this.imageLoading) return;
-        this.imageLoading = true;
-        try {
-            const rows = (await getAssets()) || [];
-            this.imageLibrary = rows.filter((a) => a.isActive && a.latestVersionCvId);
-        } catch (e) {
-            this.statusText = 'Could not load assets: ' + this.errText(e);
-        } finally {
-            this.imageLoading = false;
+        // Return the IN-FLIGHT promise rather than bailing out.
+        //
+        // Bailing meant a second caller resolved immediately with the list still
+        // empty, and whatever it was going to do with the assets it did with nothing —
+        // which is how a box's picture could stay blank while a load it was waiting on
+        // was already running.
+        if (this._assetsPromise) {
+            return this._assetsPromise;
         }
+        this.imageLoading = true;
+        this._assetsPromise = (async () => {
+            try {
+                const rows = (await getAssets()) || [];
+                this.imageLibrary = rows.filter((a) => a.isActive && a.latestVersionCvId);
+            } catch (e) {
+                this.statusText = 'Could not load assets: ' + this.errText(e);
+            } finally {
+                this.imageLoading = false;
+                this._assetsPromise = null;
+            }
+        })();
+        return this._assetsPromise;
     }
 
     handleRefreshAssets() {
         this.imageLibrary = [];
-        this._assetsRequested = true;
         this.loadImageLibrary().then(() => this.hydrateImageSources());
     }
 
@@ -1828,6 +1839,9 @@ export default class DocGenCanvas extends LightningElement {
         }
         if (!(this.imageLibrary || []).length) {
             await this.loadImageLibrary();
+        }
+        if (!(this.imageLibrary || []).length) {
+            return;
         }
         const byKey = new Map();
         for (const a of this.imageLibrary || []) {
