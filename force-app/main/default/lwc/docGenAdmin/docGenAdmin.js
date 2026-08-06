@@ -406,7 +406,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _newApiNameEdited = false;
     newTemplateCategory = '';
     // HTML-first: the wizard's default authoring path (starter) creates HTML templates.
-    @track newTemplateType = 'HTML';
+    @track newTemplateType = 'Canvas';
     @track newTemplateOutputFormat = 'PDF';
     @track newTemplatePageOrientation = 'Portrait';
     @track newTemplatePageSize = 'Letter';
@@ -417,7 +417,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     newTemplateQuery = '';
     // HTML-first authoring path. 'starter' (recommended) and 'ai' both create
     // HTML templates; 'file' exposes the classic Type picker for uploads.
-    @track newAuthoringMode = 'file';
+    // Canvas is where a new template starts. The wizard used to open on "I have an
+    // existing file", which put uploading ahead of authoring and made the editor
+    // something you had to go looking for.
+    @track newAuthoringMode = 'canvas';
     @track newStarterKey = 'report';
     // One-click create: auto-built query + optional company logo asset
     @track isAutoCreating = false;
@@ -2329,7 +2332,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 title: 'Start from a Design',
                 badge: 'Recommended',
                 icon: 'utility:brush',
-                desc: 'Pick a professional starter layout — your fields are dropped in automatically and the template renders on the first click. Creates an HTML template, the most reliable path to pixel-perfect PDFs.'
+                desc: 'Pick a professional starter layout — your fields are dropped in automatically and the template renders on the first click. Opens on the canvas, ready to rearrange.'
             },
             {
                 mode: 'ai',
@@ -2343,13 +2346,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                     ? "We assemble a prompt with your fields and Portwood's tag syntax. Generate it right here with Agentforce, or copy the prompt into Claude, ChatGPT, or Copilot and paste the HTML back. Either way you land in the designer."
                     : "We assemble a ready-to-paste prompt with your fields and Portwood's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor."
             },
-            {
-                mode: 'scratch',
-                title: 'Start From Scratch',
-                badge: null,
-                icon: 'utility:edit',
-                desc: 'A blank page in the visual designer. Click anywhere and type, drag in blocks and merge tags, or hit ` for the insert menu — build the document your way.'
-            },
+            // "Start From Scratch" (the blank flow designer) is deliberately absent.
+            // A blank canvas is the same offer with a better editor, and pointing new
+            // authors at the legacy designer only creates templates that will need
+            // migrating. The mode still exists — an existing template can still open it
+            // — it is just no longer somewhere the wizard sends anyone.
             {
                 mode: 'file',
                 title: 'I Have an Existing File',
@@ -2392,7 +2393,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // differ. It still RENDERS through the HTML path (DocGenService.isHtmlBacked).
             this.newTemplateType = 'Canvas';
             this.newTemplateOutputFormat = 'PDF';
-        } else if (mode === 'starter' || mode === 'ai' || mode === 'scratch') {
+        } else if (mode === 'starter') {
+            // Starters are converted to canvas documents on the way in, so the author
+            // lands in the editor they will keep using rather than in an HTML body they
+            // would have to migrate later.
+            this.newTemplateType = 'Canvas';
+            this.newTemplateOutputFormat = 'PDF';
+        } else if (mode === 'ai' || mode === 'scratch') {
             this.newTemplateType = 'HTML';
             this.newTemplateOutputFormat = 'PDF';
         } else {

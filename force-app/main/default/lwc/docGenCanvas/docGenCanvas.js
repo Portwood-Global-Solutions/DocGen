@@ -1849,12 +1849,33 @@ export default class DocGenCanvas extends LightningElement {
             if (parsed) {
                 this.doc = parsed;
                 this.statusText = 'Loaded';
+            } else if (html && html.trim()) {
+                // A stored body that is not canvas-shaped is CONVERTED, not discarded.
+                //
+                // Showing a blank artboard over a real body was the dangerous option —
+                // the first save would have replaced the document with nothing. It is
+                // also how a starter arrives: the wizard writes the chosen design as
+                // ordinary HTML and the canvas turns it into boxes on first open, so
+                // there is one conversion path to keep correct rather than two.
+                //
+                // Non-destructive by construction: saving writes a NEW version, so the
+                // original body stays exactly where it was and the version picker can
+                // go back to it.
+                const imported = htmlToCanvas(html);
+                this.doc = imported.doc;
+                if (imported.page) {
+                    this.canvasPageSize = imported.page.size;
+                    this.canvasOrientation = imported.page.orientation;
+                    this.margins = { ...imported.page.margins };
+                    if (imported.page.custom) {
+                        this.customPage = normalizeCustom(imported.page.custom);
+                    }
+                }
+                this.importReport = imported.report;
+                this.statusText = 'Converted an existing HTML body into ' + imported.report.boxes + ' element(s)';
             } else {
-                // Distinguishing "nothing stored yet" from "stored but not canvas-shaped"
-                // matters: silently showing a blank artboard over a real body is how the
-                // first save wipes it.
                 this.doc = blankDocument();
-                this.statusText = html ? 'Existing body is not canvas-shaped — starting a new artboard' : 'New canvas';
+                this.statusText = 'New canvas';
             }
             this._savedHtml = serialize(this.doc, this.geo);
             // The asset list is loaded for EVERY template, not only when a box is found

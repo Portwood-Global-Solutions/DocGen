@@ -5248,12 +5248,16 @@
                                                 disabled={isUploadingHtml}
                                             >
                                             </lightning-button>
+                                            <!-- Legacy, and no longer the brand action. New work goes on
+                                                 the canvas; this stays for the HTML templates that already
+                                                 exist, because their render path is supported forever even
+                                                 though this editor is not where anyone should start. -->
                                             <lightning-button
-                                                variant="brand"
-                                                label="Open Designer"
+                                                variant="neutral"
+                                                label="Legacy designer"
                                                 icon-name="utility:brush"
                                                 onclick={handleOpenDesignerFromModal}
-                                                title="Full-screen visual designer: edit the rendered page, drag in blocks, tags, and images."
+                                                title="The older visual designer. New templates are better built on a Canvas."
                                                 class="slds-var-m-left_x-small"
                                             >
                                             </lightning-button>
