@@ -11,6 +11,7 @@ import { updateRecord } from 'lightning/uiRecordApi';
 import LightningConfirm from 'lightning/confirm';
 import ID_FIELD from '@salesforce/schema/DocGen_Template__c.Id';
 import QUERY_FIELD from '@salesforce/schema/DocGen_Template__c.Query_Config__c';
+import TEST_RECORD_FIELD from '@salesforce/schema/DocGen_Template__c.Test_Record_Id__c';
 import {
     blankDocument,
     newTextBox,
@@ -246,6 +247,62 @@ export default class DocGenCanvas extends LightningElement {
             }))
         };
         this.statusText = 'Page set to ' + this.canvasPageSize + ' ' + this.canvasOrientation.toLowerCase();
+    }
+
+    /**
+     * The paper around the artboard.
+     *
+     * The artboard IS the printable area — margins are subtracted from it — so a box
+     * can never sit in a margin. What was missing was any sign of the paper: with a
+     * 1in margin the author saw a 6.5in canvas and no indication that the sheet is
+     * 8.5in, or how much of it the margins were eating.
+     */
+    get paperStyle() {
+        const m = this.margins;
+        const z = this.zoom;
+        return (
+            'padding:' +
+            inToPx(m.top, z) +
+            'px ' +
+            inToPx(m.right, z) +
+            'px ' +
+            inToPx(m.bottom, z) +
+            'px ' +
+            inToPx(m.left, z) +
+            'px;'
+        );
+    }
+
+    /**
+     * The record Preview renders from.
+     *
+     * Held separately from the @api input rather than written back onto it: a parent
+     * re-render would overwrite the choice, which is the same trap the page-setup
+     * fields fell into.
+     */
+    @track _sampleOverride = null;
+
+    get effectiveSampleRecordId() {
+        return this._sampleOverride || this.sampleRecordId;
+    }
+
+    async handleSampleRecordChange(event) {
+        const id = event.detail ? event.detail.recordId : null;
+        this._sampleOverride = id;
+        if (!id || !this.templateId) {
+            return;
+        }
+        try {
+            // Persist, so the next session previews against the same record instead of
+            // silently falling back to whatever the template was created with.
+            const fields = {};
+            fields[ID_FIELD.fieldApiName] = this.templateId;
+            fields[TEST_RECORD_FIELD.fieldApiName] = id;
+            await updateRecord({ fields });
+            this.statusText = 'Preview record saved on the template';
+        } catch (e) {
+            this.statusText = 'Using that record for preview (not saved: ' + this.errText(e) + ')';
+        }
     }
 
     get boardStyle() {
@@ -766,8 +823,9 @@ export default class DocGenCanvas extends LightningElement {
         if (!this.templateId) {
             return;
         }
-        if (!this.sampleRecordId) {
-            this.statusText = 'Set a Sample Record on the template to preview with real data';
+        if (!this.effectiveSampleRecordId) {
+            this.statusText = 'Pick a record to preview with — Data in the left rail';
+            this.showData = true;
             return;
         }
         this.isPreviewing = true;
@@ -789,7 +847,7 @@ export default class DocGenCanvas extends LightningElement {
             }
             const res = await generatePdf({
                 templateId: this.templateId,
-                recordId: this.sampleRecordId,
+                recordId: this.effectiveSampleRecordId,
                 saveToRecord: false,
                 chartCvMap: null
             });
@@ -1085,6 +1143,7 @@ export default class DocGenCanvas extends LightningElement {
         this.statusText = '';
         this.showData = false;
         this._showPageSetup = false;
+        this._sampleOverride = null;
         this.margins = { ...DEFAULT_MARGINS };
         this.customPage = { ...DEFAULT_CUSTOM_PAGE };
         // A new canvas starts Letter / portrait / no margins. An existing one has these

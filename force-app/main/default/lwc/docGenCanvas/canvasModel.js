@@ -400,7 +400,10 @@ function shapeToHtml(box) {
     const sh = { ...DEFAULT_SHAPE, ...(box.shape || {}) };
     if (sh.type === 'hline' || sh.type === 'vline') {
         const side = sh.type === 'hline' ? 'border-top' : 'border-left';
-        const size = sh.type === 'hline' ? 'width: 100%; height: 0;' : 'height: ' + box.h + 'in; width: 0;';
+        const size =
+            sh.type === 'hline'
+                ? 'width: ' + outerToContentWidth(box) + 'in; height: 0;'
+                : 'height: ' + box.h + 'in; width: 0;';
         return (
             '<div data-dg-shape="' +
             sh.type +
@@ -415,9 +418,16 @@ function shapeToHtml(box) {
             '; font-size: 0; line-height: 0;"></div>'
         );
     }
-    let css = 'width: 100%; height: ' + box.h + 'in; font-size: 0; line-height: 0;';
+    // The shape's OWN border is outside its width too, so `width: 100%` made a
+    // rectangle wider than the box that holds it by twice its line weight — a 6pt
+    // outline on a box dragged near the edge ran a sixth of an inch past where the
+    // canvas drew it. Subtract it, the same way the wrapper subtracts its own chrome.
+    const bw = sh.borderWidth > 0 ? sh.borderWidth : 0;
+    const w = round3(Math.max(0.02, outerToContentWidth(box) - (2 * bw) / 72));
+    const h = round3(Math.max(0.02, outerToContentHeight(box) - (2 * bw) / 72));
+    let css = 'width: ' + w + 'in; height: ' + h + 'in; font-size: 0; line-height: 0;';
     if (sh.fill) css += ' background: ' + sh.fill + ';';
-    if (sh.borderWidth > 0) css += ' border: ' + sh.borderWidth + 'pt solid ' + sh.borderColor + ';';
+    if (bw > 0) css += ' border: ' + bw + 'pt solid ' + sh.borderColor + ';';
     return '<div data-dg-shape="rect" style="' + css + '"></div>';
 }
 
@@ -732,7 +742,18 @@ export function buildCanvasCss(geo) {
         '.dg-flow { position: relative; }\n' +
         'table { border-collapse: collapse; width: 100%; -fs-table-paginate: paginate; }\n' +
         'thead { display: table-header-group; }\n' +
-        'td, th { border: 0.5pt solid #999; padding: 2pt 4pt; }\n'
+        'td, th { border: 0.5pt solid #999; padding: 2pt 4pt; }\n' +
+        // Lists, stated explicitly and IDENTICALLY to the canvas rules in
+        // docGenCanvas.css. Left to their defaults the two disagreed: the browser
+        // suppresses markers under SLDS's reset while the engine applies its own
+        // indent and spacing, so a list looked like plain lines while authoring and
+        // came out numbered and loosely spaced in the PDF. One contract, both surfaces.
+        'ol { list-style: decimal outside; margin: 0 0 0 1.5em; padding: 0; }\n' +
+        'ul { list-style: disc outside; margin: 0 0 0 1.5em; padding: 0; }\n' +
+        'li { display: list-item; margin: 0; padding: 0; }\n' +
+        // The editor wraps each block in <p>. An engine paragraph margin then opens a
+        // gap between list items that the canvas does not show.
+        'p { margin: 0 0 0.06in 0; }\n'
     );
 }
 
@@ -1195,6 +1216,13 @@ function outerToContentWidth(box) {
     // would otherwise ask for a negative width, which the engine treats as auto and
     // lets run the full width of the page — the very failure being fixed.
     return round3(Math.max(0.05, box.w - chromePt / 72));
+}
+
+/** Height counterpart to outerToContentWidth, for the children that declare one. */
+function outerToContentHeight(box) {
+    const st = { ...DEFAULT_STYLE, ...(box.style || {}) };
+    const chromePt = 2 * ((st.borderWidth > 0 ? st.borderWidth : 0) + (st.padding || 0));
+    return round3(Math.max(0.02, box.h - chromePt / 72));
 }
 
 function boxToHtml(box, cursor) {

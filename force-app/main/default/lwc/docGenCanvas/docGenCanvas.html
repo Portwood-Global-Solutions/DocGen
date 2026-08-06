@@ -838,6 +838,21 @@
                         <button class="dg-sbtn" onclick={handleUseGenerated}>Use what the canvas needs</button>
                     </div>
                     <template lwc:if={hasBaseObject}>
+                        <div class="dg-sample-pick">
+                            <lightning-record-picker
+                                label="Preview with this record"
+                                placeholder="Search records…"
+                                object-api-name={baseObject}
+                                value={effectiveSampleRecordId}
+                                onchange={handleSampleRecordChange}
+                            ></lightning-record-picker>
+                            <p class="dg-panel-note">
+                                Preview renders a real PDF from this record. Changing it here saves it on the template
+                                as the sample record.
+                            </p>
+                        </div>
+                    </template>
+                    <template lwc:if={hasBaseObject}>
                         <c-doc-gen-tree-builder
                             selected-object={baseObject}
                             query-config={queryText}
@@ -869,27 +884,38 @@
                                 </button>
                             </template>
                         </div>
-                        <div class="dg-board" data-board-id={board.id} style={boardStyle} onclick={handleBoardClick}>
-                            <template for:each={renderedGuides} for:item="g">
-                                <div key={g.key} class="dg-guide" style={g.style}></div>
-                            </template>
-                            <template for:each={board.boxes} for:item="box">
-                                <div
-                                    key={box.id}
-                                    class={box.cls}
-                                    data-id={box.id}
-                                    style={box.style}
-                                    onmousedown={handleBoxMouseDown}
-                                >
-                                    <div class="dg-cbox-body" data-id={box.id} lwc:dom="manual"></div>
-                                    <template lwc:if={box.isSelected}>
-                                        <span class="dg-cbox-readout">{box.readout} · {box.modeLabel}</span>
-                                        <span class="dg-h dg-h_e" data-handle="e"></span>
-                                        <span class="dg-h dg-h_s" data-handle="s"></span>
-                                        <span class="dg-h dg-h_se" data-handle="se"></span>
-                                    </template>
-                                </div>
-                            </template>
+                        <!-- The PAPER, with the margin area shaded around the artboard. The
+                             artboard is the printable area, so a box cannot land in a margin
+                             by construction — but without seeing the paper an author has no
+                             idea how much room is left outside what they are arranging. -->
+                        <div class="dg-paper" style={paperStyle}>
+                            <div
+                                class="dg-board"
+                                data-board-id={board.id}
+                                style={boardStyle}
+                                onclick={handleBoardClick}
+                            >
+                                <template for:each={renderedGuides} for:item="g">
+                                    <div key={g.key} class="dg-guide" style={g.style}></div>
+                                </template>
+                                <template for:each={board.boxes} for:item="box">
+                                    <div
+                                        key={box.id}
+                                        class={box.cls}
+                                        data-id={box.id}
+                                        style={box.style}
+                                        onmousedown={handleBoxMouseDown}
+                                    >
+                                        <div class="dg-cbox-body" data-id={box.id} lwc:dom="manual"></div>
+                                        <template lwc:if={box.isSelected}>
+                                            <span class="dg-cbox-readout">{box.readout} · {box.modeLabel}</span>
+                                            <span class="dg-h dg-h_e" data-handle="e"></span>
+                                            <span class="dg-h dg-h_s" data-handle="s"></span>
+                                            <span class="dg-h dg-h_se" data-handle="se"></span>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
                     </div>
                 </template>

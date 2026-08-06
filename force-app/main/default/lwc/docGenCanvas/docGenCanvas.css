@@ -622,3 +622,51 @@ textarea.dg-cbox-text {
     /* Never let the flex row shrink the glyph into an ellipse. */
     flex: none;
 }
+
+/* SLDS normalizes `ul, ol { list-style: none }` across the whole page, so a numbered
+   or bulleted list authored in the rich-text editor showed on the canvas as plain
+   lines while the PDF rendered proper markers — the editor quietly disagreeing with
+   the output again. Restored inside the box body only, so nothing else is affected. */
+.dg-cbox-body ol {
+    list-style: decimal outside;
+    margin: 0 0 0 1.5em;
+    padding: 0;
+}
+
+.dg-cbox-body ul {
+    list-style: disc outside;
+    margin: 0 0 0 1.5em;
+    padding: 0;
+}
+
+.dg-cbox-body li {
+    display: list-item;
+    margin: 0;
+    padding: 0;
+}
+
+/* Matches the `p` rule in canvasModel.buildCanvasCss — 0.06in at 96dpi. */
+.dg-cbox-body p {
+    margin: 0 0 5.76px 0;
+}
+
+/* The sheet of paper. The artboard sits inside it, inset by the margins, so the
+   printable area and the paper are both visible and the difference between them is
+   obvious at a glance. */
+.dg-paper {
+    background: #fff;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.22);
+    display: inline-block;
+    /* The margin area, marked without shouting. */
+    background-image: linear-gradient(#fafbfc, #fafbfc);
+}
+
+.dg-paper .dg-board {
+    box-shadow: none;
+    outline: 1px dashed #b6c2d1;
+}
+
+.dg-sample-pick {
+    padding: 10px 12px 4px;
+    max-width: 420px;
+}
