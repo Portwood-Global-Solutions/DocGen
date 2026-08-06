@@ -107,6 +107,22 @@ const customHtml = m.serialize(doc, customGeo);
 
 const html = m.serialize(doc, geo);
 
+// --- derived query: loops inside text boxes -------------------------------
+// A hand-written loop in a text box is the only way to express a grandchild list, and
+// the derived query has to follow that nesting. Getting it wrong produced a flat
+// SELECT that RUNS and returns a row while every child tag renders blank.
+const qDoc = m.blankDocument();
+const qBox = m.newTextBox(0.5, 2, 7, 1);
+qBox.mode = 'flow';
+qBox.html =
+    '<p>{AccountNumber}{#Opportunities}{Name} {Amount}' +
+    '{#OpportunityLineItems}{Name} {Quantity}{/OpportunityLineItems}{/Opportunities}</p>';
+qDoc.artboards[0].boxes.push(qBox);
+const condBox = m.newTextBox(0, 0, 2, 0.4);
+condBox.html = '{#IF Amount > 100}{Rating}{/IF}';
+qDoc.artboards[0].boxes.push(condBox);
+const derived = m.buildQueryConfig(qDoc);
+
 const checks = [
     // 2.5in authored is the OUTER width. The default 2pt padding sits inside it, so the
     // emitted content width is 2.5 - 2x2pt = 2.444in and the box still measures 2.5in
@@ -228,6 +244,14 @@ const checks = [
     // authoring and another in the PDF. Measured: 1. / 2. / a. / i. / 3.
     ['nested lists get per-level markers', /ol ol \{ list-style: lower-alpha/.test(html)],
     ['lists declare an explicit indent', /ol \{ list-style: decimal outside; margin: 0 0 0 1.5em/.test(html)],
+
+    [
+        'a nested loop derives a NESTED subquery',
+        derived.includes('(SELECT Name, Amount, (SELECT Name, Quantity FROM OpportunityLineItems) FROM Opportunities)')
+    ],
+    // {#IF …} opens a block, not a child collection. Treating it as one filed the
+    // fields inside under a relationship that does not exist.
+    ['a conditional does not become a relationship', derived.includes('Rating') && !derived.includes('FROM IF')],
 
     ['a custom size emits two lengths', /@page \{ size: 5.5in 8.5in;/.test(customHtml)],
     // Zero margins are what make the canvas and the page share an origin.

@@ -1665,11 +1665,42 @@ export function deserialize(html) {
 const NON_FIELD_TAGS =
     /^(Today|Now|PageNumber|TotalPages|RowNumber|RunningUser(\.[A-Za-z0-9_]+)?|SUM|COUNT|AVG|MIN|MAX|IF|ELSE)/i;
 
+/**
+ * Walks text for merge tags, TRACKING loop context.
+ *
+ * A text box can hold hand-written loops, including one inside another — which is the
+ * only way to express a grandchild list (opportunities, then each opportunity's line
+ * items) since the table tool binds a single relationship. Reading its fields without
+ * following `{#Rel}` … `{/Rel}` put every one of them on the base object, so the
+ * derived query came out as a flat SELECT with no subqueries at all: it compiles, it
+ * returns a row, and every child tag renders blank. A query that is wrong in a way
+ * that still runs is worse than one that errors.
+ *
+ * `rel` seeds the stack for callers that already know the context (a table's own
+ * relationship, whose loop tags are not in the text).
+ */
 function collectFromText(text, out, rel) {
+    const stack = rel ? [rel] : [];
     for (const m of String(text || '').matchAll(/\{([#/^%]?)([A-Za-z0-9_.:=&'"\s-]+?)\}/g)) {
         const prefix = m[1];
         let body = m[2].trim();
-        if (prefix === '#' || prefix === '/' || prefix === '^' || prefix === '%') {
+        if (prefix === '#') {
+            // {#IF …} and {#ChartBucket:…} open blocks, not child collections — pushing
+            // them would file the fields inside under a relationship that does not exist.
+            const head = body.split(/[\s:]/)[0];
+            if (!/^(IF|ChartBucket)$/i.test(head)) {
+                stack.push(head);
+            }
+            continue;
+        }
+        if (prefix === '/') {
+            const head = body.split(/[\s:]/)[0];
+            if (!/^(IF|ChartBucket)$/i.test(head)) {
+                stack.pop();
+            }
+            continue;
+        }
+        if (prefix === '^' || prefix === '%') {
             continue;
         }
         // Strip a format suffix: {Amount:currency:USD} is still the Amount field.
@@ -1681,9 +1712,10 @@ function collectFromText(text, out, rel) {
         if (body.indexOf('(') !== -1 || body.indexOf(' ') !== -1) {
             continue;
         }
-        if (rel) {
-            if (!out.children[rel]) out.children[rel] = new Set();
-            out.children[rel].add(body);
+        const path = stack.join('.');
+        if (path) {
+            if (!out.children[path]) out.children[path] = new Set();
+            out.children[path].add(body);
         } else {
             out.base.add(body);
         }
@@ -1751,12 +1783,33 @@ export function buildQueryConfig(doc) {
     if (!base.length) {
         base.push('Name');
     }
-    const parts = [...base];
-    for (const rel of Object.keys(used.children)) {
-        const fields = [...used.children[rel]];
-        if (fields.length) {
-            parts.push('(SELECT ' + fields.join(', ') + ' FROM ' + rel + ')');
+    // Relationship paths arrive dotted ("Opportunities.OpportunityLineItems"), because
+    // a loop can sit inside a loop. Build them into a tree so the deeper level becomes a
+    // NESTED subquery — SOQL expresses a grandchild that way, and emitting the two
+    // levels side by side would query line items straight off the account, which is not
+    // a relationship that exists.
+    const tree = {};
+    for (const path of Object.keys(used.children)) {
+        const segs = path.split('.');
+        let node = tree;
+        for (const seg of segs) {
+            if (!node[seg]) node[seg] = { fields: new Set(), children: {} };
+            node = seg === segs[segs.length - 1] ? node[seg] : node[seg].children;
         }
+        for (const f of used.children[path]) node.fields.add(f);
+    }
+    const renderNode = (name, node) => {
+        const inner = Object.keys(node.children).map((k) => renderNode(k, node.children[k]));
+        const fields = [...node.fields, ...inner];
+        if (!fields.length) {
+            return '';
+        }
+        return '(SELECT ' + fields.join(', ') + ' FROM ' + name + ')';
+    };
+    const parts = [...base];
+    for (const rel of Object.keys(tree)) {
+        const sub = renderNode(rel, tree[rel]);
+        if (sub) parts.push(sub);
     }
     return parts.join(', ');
 }
