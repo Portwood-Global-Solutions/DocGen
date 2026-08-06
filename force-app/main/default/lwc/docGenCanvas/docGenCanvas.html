@@ -448,7 +448,19 @@
             <div class="dg-scroll">
                 <template for:each={renderedBoards} for:item="board">
                     <div key={board.id} class="dg-board-wrap">
-                        <div class="dg-board-label">Page {board.index}</div>
+                        <div class="dg-board-label">
+                            Page {board.index}
+                            <template lwc:if={board.canDelete}>
+                                <button
+                                    class="dg-page-del"
+                                    data-board-id={board.id}
+                                    onclick={handleDeleteArtboard}
+                                    title="Delete this page"
+                                >
+                                    Delete page
+                                </button>
+                            </template>
+                        </div>
                         <div class="dg-board" data-board-id={board.id} style={boardStyle} onclick={handleBoardClick}>
                             <template for:each={renderedGuides} for:item="g">
                                 <div key={g.key} class="dg-guide" style={g.style}></div>

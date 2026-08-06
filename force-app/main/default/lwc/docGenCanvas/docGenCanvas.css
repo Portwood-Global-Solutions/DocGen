@@ -476,3 +476,14 @@ textarea.dg-cbox-text {
 .dg-save-error button {
     float: right;
 }
+
+.dg-page-del {
+    float: right;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    background: var(--slds-g-color-surface-1, #fff);
+    color: var(--slds-g-color-error-base-30, #991b1b);
+    font-size: 0.68rem;
+    padding: 1px 7px;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    cursor: pointer;
+}

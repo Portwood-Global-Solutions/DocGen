@@ -87,9 +87,11 @@ export default class DocGenCanvas extends LightningElement {
      * writes back a pixel value, so zoom can never drift the document.
      */
     get renderedBoards() {
+        const canDelete = (this.doc.artboards || []).length > 1;
         return this.doc.artboards.map((board, idx) => ({
             id: board.id,
             index: idx + 1,
+            canDelete,
             boxes: board.boxes.map((b) => ({
                 ...b,
                 // The on-screen box carries the SAME styling the serializer will emit.
@@ -973,6 +975,39 @@ export default class DocGenCanvas extends LightningElement {
             box.mode === 'flow'
                 ? 'Pinned — lands exactly here, does not repeat on continuation pages'
                 : 'Flows — content can grow and spill onto following pages';
+    }
+
+    /**
+     * Removes a page and everything on it.
+     *
+     * Refuses to remove the last one: a document with no artboard has nowhere to put a
+     * box, and the canvas would render an empty void with no way back except reload.
+     * Confirmed when the page has content, because this is the only destructive action
+     * in the editor and there is no undo yet.
+     */
+    handleDeleteArtboard(event) {
+        const id = event.currentTarget.dataset.boardId;
+        const boards = this.doc.artboards || [];
+        if (boards.length <= 1) {
+            this.statusText = 'A document needs at least one page';
+            return;
+        }
+        const board = boards.find((b) => b.id === id);
+        const count = board ? (board.boxes || []).length : 0;
+        if (count > 0) {
+            // eslint-disable-next-line no-alert
+            const ok = window.confirm(
+                'Delete this page and the ' + count + (count === 1 ? ' box' : ' boxes') + ' on it?'
+            );
+            if (!ok) {
+                return;
+            }
+        }
+        this.doc = { ...this.doc, artboards: boards.filter((b) => b.id !== id) };
+        if (board && (board.boxes || []).some((b) => b.id === this.selectedId)) {
+            this.selectedId = null;
+        }
+        this.statusText = 'Page deleted';
     }
 
     handleAddArtboard() {
