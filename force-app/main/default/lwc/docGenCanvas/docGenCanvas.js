@@ -528,6 +528,48 @@ export default class DocGenCanvas extends LightningElement {
         return this.queryDraft == null ? this.queryConfig || '' : this.queryDraft;
     }
 
+    @track showData = false;
+
+    /**
+     * The DATA panel — docGenTreeBuilder, the component docGenAdmin actually renders.
+     * Not docGenQueryBuilder: that one is the older standalone build speaking the V1
+     * flat format, and wiring it was how the first attempt broke.
+     */
+    handleToggleData() {
+        this.showData = !this.showData;
+    }
+
+    async handleCloseData() {
+        this.showData = false;
+        if (this.queryDraft != null && this.queryDraft !== (this.queryConfig || '')) {
+            await this.handleSaveQuery();
+        }
+    }
+
+    /**
+     * The builder re-emits on its own round-trips, so only a REAL change is kept —
+     * otherwise opening the panel and closing it would rewrite the stored query with
+     * the builder's regeneration of it, a silent edit nobody asked for.
+     */
+    handleBuilderConfigChange(event) {
+        const cfg = event.detail && event.detail.queryConfig;
+        if (cfg != null && cfg !== (this.queryConfig || '')) {
+            this.queryDraft = cfg;
+        }
+    }
+
+    get dataToolClass() {
+        return this.showData ? 'dg-tool dg-tool_active' : 'dg-tool';
+    }
+
+    /**
+     * The tree builder needs a base object to build anything — without one it renders
+     * an empty shell, which reads as "the Data button is broken".
+     */
+    get hasBaseObject() {
+        return !!this.baseObject;
+    }
+
     handleUseGenerated() {
         this.queryDraft = this.generatedQuery;
     }

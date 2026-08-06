@@ -718,11 +718,45 @@ function flowMarginTop(box, cursor) {
     return round3(Math.max(0, box.y - cursor));
 }
 
+/**
+ * The AUTHORING coordinates, carried as data attributes.
+ *
+ * The CSS is a rendering instruction, not a record of what the author did — and for a
+ * flow box the two genuinely differ: its margin is the GAP from the previous flow box,
+ * not its position on the page. Reading that margin back as the box's y collapsed
+ * flow boxes toward the top on every reload, and because height was never stored
+ * either, the next save recomputed the gaps from wrong heights and the drift
+ * compounded.
+ *
+ * Storing x/y/w/h/mode explicitly makes the round trip exact no matter how the CSS is
+ * derived, which also means the layout maths can change later without corrupting
+ * documents saved under the old rules. Flying Saucer ignores unknown attributes.
+ */
+function authoringAttrs(box) {
+    return (
+        ' data-dg-x="' +
+        box.x +
+        '" data-dg-y="' +
+        box.y +
+        '"' +
+        ' data-dg-w="' +
+        box.w +
+        '" data-dg-h="' +
+        box.h +
+        '"' +
+        ' data-dg-mode="' +
+        (box.mode === 'flow' ? 'flow' : 'pinned') +
+        '"'
+    );
+}
+
 function boxToHtml(box, cursor) {
     const inner = box.kind === 'table' ? tableToHtml(box) : textToHtml(box);
     if (box.mode === 'flow') {
         return (
-            '<div class="dg-flow" style="margin: ' +
+            '<div class="dg-flow"' +
+            authoringAttrs(box) +
+            ' style="margin: ' +
             flowMarginTop(box, cursor || 0) +
             'in 0 0 ' +
             box.x +
@@ -740,7 +774,9 @@ function boxToHtml(box, cursor) {
     // it off lets the box grow to whatever the merge produces. The model still tracks
     // h so the editor can show a real rectangle to drag.
     return (
-        '<div class="dg-pin" style="left: ' +
+        '<div class="dg-pin"' +
+        authoringAttrs(box) +
+        ' style="left: ' +
         box.x +
         'in; top: ' +
         box.y +
@@ -928,16 +964,29 @@ export function deserialize(html) {
                 const style = el.getAttribute('style') || '';
                 const isFlow = el.classList.contains('dg-flow');
                 const box = newTextBox(0, 0, 2, 0.5);
-                box.mode = isFlow ? 'flow' : 'pinned';
-                box.w = readInches(style, 'width') || 2;
-                if (isFlow) {
-                    // margin: <top>in 0 0 <left>in
+                box.mode = el.getAttribute('data-dg-mode') || (isFlow ? 'flow' : 'pinned');
+                // Prefer the AUTHORING attributes; fall back to reading the CSS only
+                // for documents saved before they existed.
+                const ax = parseFloat(el.getAttribute('data-dg-x'));
+                const ay = parseFloat(el.getAttribute('data-dg-y'));
+                const aw = parseFloat(el.getAttribute('data-dg-w'));
+                const ah = parseFloat(el.getAttribute('data-dg-h'));
+                const hasAuthored = !isNaN(ax) && !isNaN(ay);
+                box.w = !isNaN(aw) ? aw : readInches(style, 'width') || 2;
+                if (hasAuthored) {
+                    box.x = ax;
+                    box.y = ay;
+                } else if (isFlow) {
+                    // Legacy: the margin was written as an absolute y back then.
                     const m = /margin:\s*(-?[0-9.]+)in\s+0\s+0\s+(-?[0-9.]+)in/.exec(style);
                     box.y = m ? parseFloat(m[1]) : 0;
                     box.x = m ? parseFloat(m[2]) : 0;
                 } else {
                     box.x = readInches(style, 'left') || 0;
                     box.y = readInches(style, 'top') || 0;
+                }
+                if (!isNaN(ah)) {
+                    box.h = ah;
                 }
                 // Height is never serialized (see boxToHtml) — recover a sensible
                 // editing rectangle instead of collapsing the box to nothing.

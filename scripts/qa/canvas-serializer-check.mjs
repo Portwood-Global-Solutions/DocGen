@@ -99,7 +99,17 @@ const checks = [
     // instead of that far down the page, and the error compounded per box. Getting
     // this right is what makes a growing table push what is under it down.
     ['flow boxes stack by gap, not by absolute y', !/class="dg-flow"[^>]*margin: 7.5in/.test(html)],
-    ['pinned boxes are emitted before flow ones', html.indexOf('dg-pin') < html.indexOf('dg-flow')]
+    ['pinned boxes are emitted before flow ones', html.indexOf('dg-pin') < html.indexOf('dg-flow')],
+    // The CSS is a rendering instruction, not a record of what the author did — a flow
+    // box's margin is the GAP from the previous one, not its position. Reading the
+    // margin back as y collapsed flow boxes toward the top on every reload, and with
+    // height unstored the next save recomputed gaps from wrong heights and compounded.
+    ['authoring coordinates are stored explicitly', /data-dg-x="0.5" data-dg-y="7.5"/.test(html)],
+    [
+        'every box records its mode',
+        (html.match(/data-dg-mode="/g) || []).length === doc.artboards.reduce((n, b) => n + b.boxes.length, 0)
+    ],
+    ['height is stored, not just implied', /data-dg-h="/.test(html)]
 ];
 
 let bad = 0;
