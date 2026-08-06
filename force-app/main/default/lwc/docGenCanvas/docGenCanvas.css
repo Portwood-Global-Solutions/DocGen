@@ -1,8 +1,17 @@
 /* Canva-shaped shell: icon rail, then a panel, then the stage. */
+/* ONE height for the whole editor.
+   The shell, the panel, the element list and the scrolling stage were on four
+   different values (78vh / 72vh / 78vh / 68vh), so the side menus ran on past the
+   bottom of the canvas area and the page needed its own scroll while there was still
+   room beside it. They all derive from --dg-h now, and it tracks the window rather
+   than being a fixed fraction of it, so a taller screen gives the canvas the space
+   instead of leaving a grey band. */
 .dg-canvas-shell {
+    --dg-shell-h: calc(100vh - 170px);
     display: table;
     width: 100%;
-    height: 78vh;
+    height: var(--dg-shell-h);
+    min-height: 560px;
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
     background: var(--slds-g-color-surface-2, #f3f4f6);
     table-layout: fixed;
@@ -72,6 +81,11 @@
     background: var(--slds-g-color-surface-1, #fff);
     border-right: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
     padding: 14px;
+    /* Scrolls on its own rather than stretching the shell. The table row takes the
+       height of its tallest cell, so a long properties panel dragged the whole editor
+       taller and pushed the canvas down the page. */
+    max-height: var(--dg-shell-h);
+    overflow-y: auto;
 }
 
 .dg-panel-title {
@@ -158,7 +172,9 @@
 .dg-scroll {
     padding: 20px;
     overflow: auto;
-    height: 68vh;
+    /* The shell height less the quickbar row. */
+    height: calc(var(--dg-shell-h) - 48px);
+    min-height: 420px;
 }
 
 .dg-board-wrap {
@@ -520,7 +536,7 @@ textarea.dg-cbox-text {
     padding: 10px;
     background: var(--slds-g-color-surface-1, #fff);
     border-bottom: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
-    max-height: 72vh;
+    max-height: var(--dg-shell-h);
     overflow: auto;
 }
 
@@ -704,7 +720,7 @@ textarea.dg-cbox-text {
     border-left: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
     background: var(--slds-g-color-surface-1, #fff);
     overflow-y: auto;
-    max-height: 78vh;
+    max-height: var(--dg-shell-h);
     padding-bottom: 12px;
 }
 
