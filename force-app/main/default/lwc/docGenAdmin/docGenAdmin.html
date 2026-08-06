@@ -621,6 +621,20 @@
                                             ></lightning-input>
                                         </template>
                                     </template>
+                                    <template if:true={showCanvasPageNote}>
+                                        <div class="slds-box slds-theme_shade slds-var-m-top_medium" role="status">
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:info"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                Page size, orientation and margins are set on the canvas itself, under
+                                                <b>Page</b> in the toolbar. A new canvas starts Letter, portrait, with
+                                                no margins — so what you place is exactly where it prints.
+                                            </p>
+                                        </div>
+                                    </template>
                                     <template if:true={showHtmlPageRuleNote}>
                                         <div class="slds-box slds-theme_shade slds-var-m-top_medium" role="status">
                                             <p class="slds-text-body_small">
@@ -3631,6 +3645,20 @@
                                         ></lightning-combobox>
                                     </div>
                                     <div class="slds-col slds-size_1-of-2">
+                                        <template if:true={showEditCanvasPageBanner}>
+                                            <div class="slds-box slds-theme_shade" role="status" aria-live="polite">
+                                                <p class="slds-text-body_small">
+                                                    <lightning-icon
+                                                        icon-name="utility:info"
+                                                        size="x-small"
+                                                        class="slds-var-m-right_x-small"
+                                                    ></lightning-icon>
+                                                    Page setup for a Canvas template lives on the canvas, under
+                                                    <b>Page</b> in the Designer toolbar — size, orientation and margins
+                                                    together, with the artboard resizing to match.
+                                                </p>
+                                            </div>
+                                        </template>
                                         <template if:true={showEditHtmlOwnsPageBanner}>
                                             <div class="slds-box slds-theme_shade" role="status" aria-live="polite">
                                                 <p class="slds-text-body_small">

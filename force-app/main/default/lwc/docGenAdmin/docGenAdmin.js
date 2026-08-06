@@ -4588,8 +4588,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // Portrait/Letter/Default and makes users feel they're a required choice).
     // After the template is created and the body is uploaded, the edit modal
     // re-evaluates and shows them only if the uploaded HTML lacks @page.
+    /**
+     * Page layout belongs to the DOCUMENT for HTML and Canvas, not to the record.
+     *
+     * Both render through an @page CSS rule the body carries, and the engine defers to
+     * a source @page — so these fields are read by nothing on those types. Collecting
+     * them anyway asks for a decision that is then silently discarded, which is how
+     * someone picks A4 in the wizard and spends the afternoon wondering why the PDF is
+     * Letter. Canvas additionally owns page setup in its own editor.
+     */
     get showNewPageLayoutFields() {
-        return this.showPageOrientation && this.newTemplateType !== 'HTML';
+        return this.showPageOrientation && this.newTemplateType !== 'HTML' && this.newTemplateType !== 'Canvas';
+    }
+
+    /** Explains where page setup went for a Canvas template, rather than leaving a gap. */
+    get showCanvasPageNote() {
+        return this.newTemplateType === 'Canvas';
     }
 
     get isCreatingHtmlPdf() {
@@ -4598,7 +4612,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     /** Show Custom Margins text field only when "Custom" preset is selected. */
     get showNewCustomMargins() {
-        return this.showPageOrientation && this.newTemplatePageMargins === 'Custom';
+        return this.showNewPageLayoutFields && this.newTemplatePageMargins === 'Custom';
     }
 
     get showEditCustomMargins() {
@@ -4616,12 +4630,25 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // v1.90 — page-layout fields are dead inputs when the HTML body owns @page.
     // The engine ignores them and they only confuse authors, so hide them and
     // show an explanatory banner in their place.
+    /**
+     * A Canvas body ALWAYS carries its own @page rule — the canvas serializes one on
+     * every save — so these fields are read by nothing. The editHtmlBodyOwnsPageRule
+     * flag does not cover it: that is only raised when a body is uploaded or pasted in
+     * this session, not when an existing template is opened, so a Canvas template
+     * showed live-looking Page Size / Orientation / Margins controls that changed
+     * nothing about the document.
+     */
     get showEditPageLayoutFields() {
-        return this.showPageOrientation && !this.editHtmlBodyOwnsPageRule;
+        return this.showPageOrientation && !this.editHtmlBodyOwnsPageRule && !this.isCanvasTemplate;
     }
 
     get showEditHtmlOwnsPageBanner() {
         return this.isEditTypeHtml && this.editHtmlBodyOwnsPageRule;
+    }
+
+    /** Says where page setup actually lives for a Canvas template. */
+    get showEditCanvasPageBanner() {
+        return this.isCanvasTemplate;
     }
 
     // --- Create Logic ---
