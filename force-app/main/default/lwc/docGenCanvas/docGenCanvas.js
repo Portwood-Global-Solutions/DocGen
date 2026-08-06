@@ -1940,6 +1940,18 @@ export default class DocGenCanvas extends LightningElement {
                 }
             }
         }
+        // A <textarea> takes its content from its TEXT CHILD, not from a value
+        // attribute — `value={x}` in the markup renders an empty box with a stray
+        // attribute on it, which is why switching to the HTML view showed nothing.
+        // Written here, and only when it actually differs and is not being typed into,
+        // so the caret cannot be thrown to the start mid-edit.
+        const src = this.template.querySelector('.dg-source-edit');
+        if (src) {
+            const want = this.richTextValue || '';
+            if (src !== this.template.activeElement && src.value !== want) {
+                src.value = want;
+            }
+        }
         const byId = new Map();
         for (const board of this.doc.artboards) {
             for (const b of board.boxes) byId.set(b.id, b);

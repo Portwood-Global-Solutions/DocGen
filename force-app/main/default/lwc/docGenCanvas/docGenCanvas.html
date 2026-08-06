@@ -53,11 +53,12 @@
                     </div>
                 </template>
                 <template lwc:if={showSourceEditor}>
+                    <!-- No value= binding: a textarea's content is its text child, so the
+                         attribute renders an empty box. Populated in renderedCallback. -->
                     <textarea
                         class="dg-source-edit"
                         spellcheck="false"
                         aria-label="Box HTML"
-                        value={richTextValue}
                         onchange={handleSourceChange}
                     ></textarea>
                     <p class="dg-panel-note">
