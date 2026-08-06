@@ -61,8 +61,9 @@
                         onchange={handleSourceChange}
                     ></textarea>
                     <p class="dg-panel-note">
-                        The box's own markup. Tables, spans and headings are all allowed — anything the PDF engine
-                        cannot render is stripped when you leave the field.
+                        The box's own markup. Tables, headings and links are all allowed — anything the PDF engine
+                        cannot render is stripped when you leave the field. A link is
+                        <b>&lt;a href="https://…"&gt;text&lt;/a&gt;</b> and comes out clickable in the PDF.
                     </p>
                 </template>
                 <template lwc:if={showRichEditor}>

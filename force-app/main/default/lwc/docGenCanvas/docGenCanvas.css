@@ -76,8 +76,14 @@
     margin-top: 3px;
 }
 
+/* Wide enough to hold the rich-text editor's own overlays.
+   The link tooltip is an absolutely-positioned panel roughly 300px across, and this
+   column both clips (overflow-y: auto) and is narrower than that — so opening it put
+   its URL field half outside the panel and there was no way to finish typing a link.
+   Nothing here can stop an ancestor clipping an overlay, so the column has to be big
+   enough that the overlay never needs to escape it. */
 .dg-panel {
-    width: 260px;
+    width: 340px;
     background: var(--slds-g-color-surface-1, #fff);
     border-right: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
     padding: 14px;
@@ -86,6 +92,8 @@
        taller and pushed the canvas down the page. */
     max-height: var(--dg-shell-h);
     overflow-y: auto;
+    /* Overlays inside are positioned relative to this column. */
+    position: relative;
 }
 
 .dg-panel-title {
@@ -883,4 +891,13 @@ textarea.dg-cbox-text {
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
     border-radius: var(--slds-g-radius-border-1, 4px);
     resize: vertical;
+}
+
+/* The rich-text editor's link overlay must be reachable inside a scrolling column.
+   Quill positions it absolutely against the editor; without a floor on the editor's
+   own height the overlay can open below the visible area of the panel with nothing
+   to scroll to. */
+.dg-panel lightning-input-rich-text {
+    display: block;
+    min-height: 220px;
 }
