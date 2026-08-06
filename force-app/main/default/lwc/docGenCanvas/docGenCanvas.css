@@ -948,3 +948,20 @@ textarea.dg-cbox-text {
     vertical-align: middle;
     cursor: help;
 }
+
+.dg-sym-chip {
+    background: var(--slds-g-color-surface-1, #fff);
+    border: 1px solid var(--slds-g-color-border-1, #d1d5db);
+    border-radius: 4px;
+    min-width: 28px;
+    padding: 3px 6px;
+    margin: 0 4px 4px 0;
+    font-size: 0.9rem;
+    line-height: 1.1;
+    cursor: pointer;
+}
+
+.dg-sym-chip:hover {
+    background: #ede9fe;
+    border-color: #7c3aed;
+}

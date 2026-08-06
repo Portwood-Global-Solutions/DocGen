@@ -140,6 +140,45 @@ function nextId(prefix) {
  * Times and quietly make the canvas stop being WYSIWYG, which is the one thing this
  * editor exists to guarantee.
  */
+/**
+ * Characters the PDF engine can actually print, and the ones it silently drops.
+ *
+ * Measured against a rendered PDF (pdffonts + pdftotext): Blob.toPdf embeds exactly
+ * three fonts — Helvetica, Times-Roman and Courier — all with WinAnsi encoding. Every
+ * named family falls back to one of them, including Symbol and ZapfDingbats, so the
+ * usual dingbat trick (font-family: ZapfDingbats and the digit 4 for a tick) prints a
+ * literal "4".
+ *
+ * The consequence worth knowing: a checkmark cannot be typed. ✓ ✔ ☑ ☐ ✅ ✗ ● ■ ★ are
+ * outside WinAnsi and render as NOTHING — not a box, not a substitute, just absent.
+ * Use an image asset for a tick. These are the symbols that do survive.
+ */
+export const SAFE_SYMBOLS = [
+    { label: '•', value: '\u2022', name: 'Bullet' },
+    { label: '–', value: '\u2013', name: 'En dash' },
+    { label: '—', value: '\u2014', name: 'Em dash' },
+    { label: '×', value: '\u00d7', name: 'Multiply / cross' },
+    { label: '÷', value: '\u00f7', name: 'Divide' },
+    { label: '±', value: '\u00b1', name: 'Plus-minus' },
+    { label: '°', value: '\u00b0', name: 'Degree' },
+    { label: '§', value: '\u00a7', name: 'Section' },
+    { label: '¶', value: '\u00b6', name: 'Paragraph' },
+    { label: '†', value: '\u2020', name: 'Dagger' },
+    { label: '‡', value: '\u2021', name: 'Double dagger' },
+    { label: '‰', value: '\u2030', name: 'Per mille' },
+    { label: '™', value: '\u2122', name: 'Trademark' },
+    { label: '©', value: '\u00a9', name: 'Copyright' },
+    { label: '®', value: '\u00ae', name: 'Registered' },
+    { label: '¼', value: '\u00bc', name: 'One quarter' },
+    { label: '½', value: '\u00bd', name: 'One half' },
+    { label: '¾', value: '\u00be', name: 'Three quarters' },
+    { label: '«', value: '\u00ab', name: 'Left quotes' },
+    { label: '»', value: '\u00bb', name: 'Right quotes' },
+    { label: '€', value: '\u20ac', name: 'Euro' },
+    { label: '£', value: '\u00a3', name: 'Pound' },
+    { label: 'µ', value: '\u00b5', name: 'Micro' }
+];
+
 export const FONT_CHOICES = [
     { label: 'Sans-serif', value: 'sans-serif' },
     { label: 'Serif', value: 'serif' },
@@ -1083,7 +1122,7 @@ function totalsCell(t, tt, frame, value, span) {
  * The last cell takes a colspan to fill the remainder so the grid stays square; without
  * it the table develops a ragged right edge wherever the counts differ.
  */
-function subLoopRow(t, parentColCount) {
+function subLoopRow(t, parentColCount, boxFont) {
     const rel = String(t.subRelationship || '').trim();
     const subs = t.subColumns || [];
     if (!rel || !subs.length) {
@@ -1094,7 +1133,9 @@ function subLoopRow(t, parentColCount) {
     const indent = t.subIndent == null ? 12 : t.subIndent;
     const base =
         frame +
-        ' font-size: ' +
+        ' font-family: ' +
+        (stx.font || boxFont || DEFAULT_STYLE.font) +
+        '; font-size: ' +
         stx.size +
         'pt; color: ' +
         stx.color +
@@ -1130,9 +1171,12 @@ function tableToHtml(box) {
     // Typography goes onto the CELLS, not left to inherit. Flying Saucer gives tables
     // their own defaults, so a cell inheriting nothing renders at the engine's font no
     // matter what the box says — and the canvas would stop matching the PDF.
+    // Each band may name its OWN family, falling back to the box's. A heading in a
+    // different face from its data is an ordinary thing to want, and the font was the
+    // one typographic property these sections could not set.
     const typo = (x) =>
         ' font-family: ' +
-        st.font +
+        (x.font || st.font) +
         '; font-size: ' +
         x.size +
         'pt; color: ' +
@@ -1184,7 +1228,7 @@ function tableToHtml(box) {
     // literal row AND a fresh totals row was appended on the next save. Rows
     // multiplied every time the template was opened.
     const loopRow = '<tr data-dg-row="loop">' + cols.map((c, i) => cell(c.tag, i)).join('') + '</tr>';
-    const subRow = subLoopRow(t, totalCols);
+    const subRow = subLoopRow(t, totalCols, st.font);
     out += '<tbody>';
     if (t.relationship) {
         // The sub loop lives INSIDE the parent loop, after the parent's row, so each
@@ -1220,9 +1264,12 @@ export function tablePreviewHtml(box) {
     const st = { ...DEFAULT_STYLE, ...(box.style || {}) };
     const ht = { ...DEFAULT_HEADER_TEXT, ...(t.headerText || {}) };
     const rt = { ...DEFAULT_ROW_TEXT, ...(t.rowText || {}) };
+    // Each band may name its OWN family, falling back to the box's. A heading in a
+    // different face from its data is an ordinary thing to want, and the font was the
+    // one typographic property these sections could not set.
     const typo = (x) =>
         ' font-family: ' +
-        st.font +
+        (x.font || st.font) +
         '; font-size: ' +
         x.size +
         'pt; color: ' +

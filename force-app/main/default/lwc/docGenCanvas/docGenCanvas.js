@@ -26,6 +26,7 @@ import {
     FONT_CHOICES,
     DEFAULT_STYLE,
     GRID_STYLES,
+    SAFE_SYMBOLS,
     newTableBox,
     tablePreviewHtml,
     snapBox,
@@ -1284,6 +1285,22 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     /** Header and body rows are styled separately — see DEFAULT_HEADER_TEXT. */
+    get selHeaderFont() {
+        return this.selHeaderText.font || this.selFont;
+    }
+
+    get selRowFont() {
+        return this.selRowText.font || this.selFont;
+    }
+
+    get selTotalsFont() {
+        return this.selTotalsText.font || this.selFont;
+    }
+
+    get selSubFont() {
+        return this.selSubText.font || this.selFont;
+    }
+
     handleRowTextChange(event) {
         const which = event.currentTarget.dataset.which;
         const key = event.currentTarget.dataset.key;
@@ -2934,6 +2951,28 @@ export default class DocGenCanvas extends LightningElement {
         const current = box.html != null ? box.html : box.text || '';
         this.applyToBox(box.id, { html: sanitizeInline(current + html) });
         this.statusText = rows + 'x' + cols + ' table added';
+    }
+
+    // ---- Symbols ---------------------------------------------------------
+    //
+    // Offered because the alternative is silent loss: a checkmark pasted into a box
+    // renders as NOTHING in the PDF. Blob.toPdf embeds three fonts, all WinAnsi, so
+    // ✓ ✔ ☑ ★ ■ have no glyph and no substitute — they simply vanish, and the author
+    // finds out from a customer. These are the ones measured to survive.
+    get safeSymbols() {
+        return SAFE_SYMBOLS.map((sym) => ({ ...sym, key: sym.name }));
+    }
+
+    handleInsertSymbol(event) {
+        const box = this.selectedBox;
+        if (!box) {
+            return;
+        }
+        const ch = event.currentTarget.dataset.ch;
+        const current = box.html != null ? box.html : box.text || '';
+        this.applyToBox(box.id, { html: sanitizeInline(current + ch) });
+        this.reseedEditor();
+        this.statusText = 'Inserted ' + ch;
     }
 
     handleSourceChange(event) {

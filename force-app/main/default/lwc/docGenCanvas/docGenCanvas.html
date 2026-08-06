@@ -118,6 +118,25 @@
                         instead — it binds a relationship and totals.
                     </p>
 
+                    <h4 class="dg-panel-sub">Symbols</h4>
+                    <div class="dg-field-chips">
+                        <template for:each={safeSymbols} for:item="sym">
+                            <button
+                                key={sym.key}
+                                class="dg-sym-chip"
+                                data-ch={sym.value}
+                                onclick={handleInsertSymbol}
+                                title={sym.name}
+                            >
+                                {sym.label}
+                            </button>
+                        </template>
+                    </div>
+                    <p class="dg-panel-note">
+                        These print. Checkmarks and boxes (&#10003; &#9745; &#9733;) do not — the PDF engine has no
+                        glyph for them and they come out blank, so use an image for a tick.
+                    </p>
+
                     <h4 class="dg-panel-sub">Link</h4>
                     <input
                         class="dg-panel-input"
@@ -378,6 +397,15 @@
                     </p>
 
                     <h4 class="dg-panel-sub">Header text</h4>
+                    <lightning-combobox
+                        label="Font"
+                        variant="label-stacked"
+                        value={selHeaderFont}
+                        options={fontOptions}
+                        data-which="header"
+                        data-key="font"
+                        onchange={handleRowTextChange}
+                    ></lightning-combobox>
                     <div class="dg-prop-row">
                         <label class="dg-prop-label">Size</label>
                         <input
@@ -410,6 +438,15 @@
                     </div>
 
                     <h4 class="dg-panel-sub">Row text</h4>
+                    <lightning-combobox
+                        label="Font"
+                        variant="label-stacked"
+                        value={selRowFont}
+                        options={fontOptions}
+                        data-which="row"
+                        data-key="font"
+                        onchange={handleRowTextChange}
+                    ></lightning-combobox>
                     <div class="dg-prop-row">
                         <label class="dg-prop-label">Size</label>
                         <input
