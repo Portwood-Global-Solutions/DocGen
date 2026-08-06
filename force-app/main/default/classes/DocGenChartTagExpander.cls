@@ -147,7 +147,7 @@ public with sharing class DocGenChartTagExpander {
         List<String> out = new List<String>();
         Integer cursor = 0;
         Integer len = xml.length();
-        Boolean isHtml = (templateType == 'HTML');
+        Boolean isHtml = DocGenService.isHtmlBacked(templateType);
 
         while (cursor < len) {
             Integer next = xml.indexOf(OPEN_PREFIX, cursor);

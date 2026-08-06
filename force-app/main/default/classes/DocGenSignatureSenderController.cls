@@ -223,7 +223,7 @@ public with sharing class DocGenSignatureSenderController {
             return null;
 
         DocGen_Template_Version__c activeVersion = activeVersions[0];
-        if (activeVersion.Template__r.Type__c == 'HTML') {
+        if (DocGenService.isHtmlBacked(activeVersion.Template__r.Type__c)) {
             if (String.isBlank(activeVersion.Content_Version_Id__c))
                 return null;
 
@@ -1222,7 +1222,7 @@ public with sharing class DocGenSignatureSenderController {
         String templateType,
         List<PlacementInfo> placements
     ) {
-        if (templateType == 'HTML') {
+        if (DocGenService.isHtmlBacked(templateType)) {
             String block =
                 '<div style="margin-top:40px;border-top:1px solid #999;padding-top:14px;">' +
                 '<div style="font-weight:bold;font-size:12pt;margin-bottom:10px;">Signatures</div>';
@@ -1585,7 +1585,7 @@ public with sharing class DocGenSignatureSenderController {
             pdfImageMap = new Map<String, String>();
         }
         String viewingHtml;
-        if (templateType == 'HTML') {
+        if (DocGenService.isHtmlBacked(templateType)) {
             viewingHtml = frozenBody;
         } else {
             // Re-prime the renderer context (mergeTemplateForSignature set it, but be
@@ -1841,7 +1841,7 @@ public with sharing class DocGenSignatureSenderController {
             frozenMergeOutputs.add(frozenMerge);
 
             String docViewing;
-            if (templateType == 'HTML') {
+            if (DocGenService.isHtmlBacked(templateType)) {
                 docViewing = frozenBody;
             } else {
                 DocGenHtmlRenderer.stylesXml = (String) mergeData.get('stylesXml');
@@ -3083,7 +3083,7 @@ public with sharing class DocGenSignatureSenderController {
             return null;
         }
 
-        if ((String) mergeData.get('templateType') == 'HTML') {
+        if (DocGenService.isHtmlBacked((String) mergeData.get('templateType'))) {
             return rewriteHtmlImageSources(docXml, imageMap);
         }
 

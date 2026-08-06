@@ -989,7 +989,7 @@ public without sharing class DocGenSignatureController {
                 Map<String, String> pdfImageMap = (Map<String, String>) mergeData.get('pdfImageMap');
                 if (String.isNotBlank(docXml)) {
                     String liveHtml;
-                    if ((String) mergeData.get('templateType') == 'HTML') {
+                    if (DocGenService.isHtmlBacked((String) mergeData.get('templateType'))) {
                         liveHtml = docXml;
                     } else {
                         DocGenService.applyWatermarkOverride(templateId);

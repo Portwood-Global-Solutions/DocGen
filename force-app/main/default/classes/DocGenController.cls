@@ -3229,8 +3229,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (tpls.isEmpty()) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
-        if (tpls[0].Type__c != 'HTML') {
-            throw new DocGenException('saveHtmlTemplateImage is for HTML-type templates only.');
+        if (!DocGenService.isHtmlBacked(tpls[0].Type__c)) {
+            throw new DocGenException('saveHtmlTemplateImage is for HTML-backed templates only.');
         }
 
         String base = fileName.substringAfterLast('/');

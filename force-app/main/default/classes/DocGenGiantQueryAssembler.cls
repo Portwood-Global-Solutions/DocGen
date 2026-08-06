@@ -245,7 +245,7 @@ public with sharing class DocGenGiantQueryAssembler implements Queueable {
             WITH SYSTEM_MODE
             LIMIT 1
         ];
-        if (!tpls.isEmpty() && tpls[0].Type__c == 'HTML') {
+        if (!tpls.isEmpty() && DocGenService.isHtmlBacked(tpls[0].Type__c)) {
             // v1.97 — prefer the active version's snapshotted header/footer so
             // editing the template doesn't retroactively rewrite earlier versions.
             String headerHtml = tpls[0].Header_Html__c;
