@@ -455,7 +455,6 @@
                     Built from the tags actually on the canvas, so a field can't render blank because nobody remembered
                     to query it.
                 </p>
-                <button class="dg-panel-btn" onclick={handleOpenQueryBuilder}>Build the query…</button>
                 <textarea class="dg-query-edit" value={queryText} oninput={handleQueryEdit}></textarea>
                 <button class="dg-panel-btn" onclick={handleUseGenerated}>Use what the canvas needs</button>
                 <div class="dg-query-preview">{generatedQuery}</div>
@@ -506,21 +505,6 @@
                 </button>
                 <span class="dg-qb-status">{statusText}</span>
             </div>
-
-            <template lwc:if={showQueryBuilder}>
-                <div class="dg-builder-wrap">
-                    <div class="dg-builder-bar">
-                        Build the query — pick fields and relationships instead of typing them
-                        <button class="dg-sbtn" onclick={handleCloseQueryBuilder}>Done</button>
-                    </div>
-                    <c-doc-gen-query-builder
-                        selected-object={baseObject}
-                        query-config={queryText}
-                        test-record-id={sampleRecordId}
-                        onconfigchange={handleBuilderConfigChange}
-                    ></c-doc-gen-query-builder>
-                </div>
-            </template>
 
             <div class="dg-scroll">
                 <template for:each={renderedBoards} for:item="board">

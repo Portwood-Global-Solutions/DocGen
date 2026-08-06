@@ -532,38 +532,13 @@ export default class DocGenCanvas extends LightningElement {
         this.queryDraft = event.target.value;
     }
 
-    @track showQueryBuilder = false;
-
-    /**
-     * Opens the existing query builder rather than a second implementation.
-     *
-     * It already knows how to walk relationships, validate fields and preview against
-     * a record; rebuilding a cut-down version in a 260px panel would be a worse tool
-     * AND a second place for the V1/V3 config formats to diverge, which CLAUDE.md
-     * calls out as a standing hazard.
-     */
-    handleOpenQueryBuilder() {
-        this.showQueryBuilder = true;
-    }
-
-    /**
-     * Done SAVES. Building a query and then having to find a separate Save button is
-     * how people end up with a canvas that references fields the template never
-     * queries — the exact failure this was meant to remove.
-     */
-    async handleCloseQueryBuilder() {
-        this.showQueryBuilder = false;
-        if (this.queryDraft != null && this.queryDraft !== (this.queryConfig || '')) {
-            await this.handleSaveQuery();
-        }
-    }
-
-    handleBuilderConfigChange(event) {
-        const cfg = event.detail && (event.detail.queryConfig || event.detail.config || event.detail.value);
-        if (cfg != null) {
-            this.queryDraft = cfg;
-        }
-    }
+    // The embedded query builder was removed. Two reasons, and the second is the one
+    // that matters: the component docGenAdmin actually uses is docGenTreeBuilder (the
+    // V3 node tree), not the older standalone docGenQueryBuilder I had wired here, so
+    // it was the wrong tool — and report-to-query is a genuinely hard mapping that is
+    // not worth carrying inside the canvas. The query stays editable here, and
+    // "Use what the canvas needs" derives it from the boxes, which is the part that
+    // actually removes work.
 
     handleUseGenerated() {
         this.queryDraft = this.generatedQuery;
