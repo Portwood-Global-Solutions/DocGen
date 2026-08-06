@@ -386,6 +386,72 @@
                     </template>
                     <button class="dg-panel-btn" onclick={handleAddColumn}>Add column</button>
 
+                    <template lwc:if={selTableTotals}>
+                        <h4 class="dg-panel-sub">Totals row style</h4>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Fill</label>
+                            <input
+                                type="color"
+                                class="dg-prop-color"
+                                value={selTotalsFill}
+                                data-key="totalsFill"
+                                onchange={handleTableStyleChange}
+                            />
+                            <label class="dg-prop-label">Text</label>
+                            <input
+                                type="color"
+                                class="dg-prop-color"
+                                value={selTotalsText.color}
+                                data-which="totals"
+                                data-key="color"
+                                onchange={handleRowTextChange}
+                            />
+                        </div>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Size</label>
+                            <input
+                                type="number"
+                                class="dg-prop-num"
+                                min="5"
+                                max="72"
+                                step="0.5"
+                                value={selTotalsText.size}
+                                data-which="totals"
+                                data-key="size"
+                                onchange={handleRowTextChange}
+                            />
+                            <button
+                                class={totalsBoldClass}
+                                data-which="totals"
+                                data-key="bold"
+                                onclick={handleRowTextChange}
+                                title="Bold"
+                            >
+                                <b>B</b>
+                            </button>
+                            <button
+                                class="dg-sbtn"
+                                data-which="totals"
+                                data-key="align"
+                                data-align="right"
+                                onclick={handleTotalsAlign}
+                                title="Align the totals right"
+                            >
+                                &#8677;
+                            </button>
+                            <button
+                                class="dg-sbtn"
+                                data-which="totals"
+                                data-key="align"
+                                data-align="left"
+                                onclick={handleTotalsAlign}
+                                title="Align the totals left"
+                            >
+                                &#8676;
+                            </button>
+                        </div>
+                    </template>
+
                     <h4 class="dg-panel-sub">Extra rows</h4>
                     <p class="dg-panel-note">Literal rows, appended after the repeating ones.</p>
                     <template for:each={selTableRows} for:item="row">

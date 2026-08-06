@@ -213,6 +213,16 @@ export function newTextBox(xIn, yIn, wIn, hIn) {
 export const DEFAULT_ROW_TEXT = { size: 11, color: '#1a1a1a', bold: false, align: 'left' };
 export const DEFAULT_HEADER_TEXT = { size: 11, color: '#1a1a1a', bold: true, align: 'left' };
 
+/**
+ * The totals row carries its OWN fill and typography.
+ *
+ * It used to be hardcoded to bold-on-headerFill, which meant a grand total could not
+ * be distinguished from a column heading — the two rows looked identical at opposite
+ * ends of the table, and an author wanting a dark total band had to accept a dark
+ * header too.
+ */
+export const DEFAULT_TOTALS_TEXT = { size: 11, color: '#1a1a1a', bold: true, align: 'left' };
+
 export const DEFAULT_TABLE_STYLE = {
     headerFill: '#eeeeee',
     headerBold: true,
@@ -220,7 +230,9 @@ export const DEFAULT_TABLE_STYLE = {
     gridWidth: 0.5,
     cellPadding: 3,
     headerText: { ...DEFAULT_HEADER_TEXT },
-    rowText: { ...DEFAULT_ROW_TEXT }
+    rowText: { ...DEFAULT_ROW_TEXT },
+    totalsFill: '#eeeeee',
+    totalsText: { ...DEFAULT_TOTALS_TEXT }
 };
 
 /**
@@ -843,6 +855,23 @@ function esc(v) {
  * expansion looks for, and the same pattern the reference templates use. The header
  * lives in <thead> so it repeats on every continuation page.
  */
+/** One totals cell, styled from the table's own totals settings. */
+function totalsCell(t, tt, frame, value) {
+    const fill = t.totalsFill ? ' background: ' + t.totalsFill + ';' : '';
+    const css =
+        frame +
+        ' font-size: ' +
+        tt.size +
+        'pt; color: ' +
+        tt.color +
+        '; text-align: ' +
+        tt.align +
+        ';' +
+        (tt.bold ? ' font-weight: bold;' : ' font-weight: normal;') +
+        fill;
+    return '<td style="' + css + '">' + (value || '') + '</td>';
+}
+
 function tableToHtml(box) {
     const t = box.table || {};
     const cols = t.columns || [];
@@ -866,6 +895,7 @@ function tableToHtml(box) {
     const frame = 'border: ' + t.gridWidth + 'pt solid ' + t.gridColor + '; padding: ' + t.cellPadding + 'pt;';
     const cellCss = frame + typo(rt);
     const headCss = frame + typo(ht);
+    const tt = { ...DEFAULT_TOTALS_TEXT, ...(t.totalsText || {}) };
     let out = '<table style="border-collapse: collapse; width: 100%; -fs-table-paginate: paginate;">';
     if (t.showHeader) {
         out += '<thead style="display: table-header-group;"><tr>';
@@ -894,21 +924,7 @@ function tableToHtml(box) {
     }
     if (t.totals && t.totals.enabled) {
         const tc = t.totals.cells || [];
-        out +=
-            '<tr data-dg-row="totals">' +
-            cols
-                .map(
-                    (c, i) =>
-                        '<td style="' +
-                        cellCss +
-                        ' font-weight: bold; background: ' +
-                        t.headerFill +
-                        ';">' +
-                        (tc[i] || '') +
-                        '</td>'
-                )
-                .join('') +
-            '</tr>';
+        out += '<tr data-dg-row="totals">' + cols.map((c, i) => totalsCell(t, tt, frame, tc[i])).join('') + '</tr>';
     }
     out += '</tbody></table>';
     return out;
@@ -949,8 +965,10 @@ export function tablePreviewHtml(box) {
         out += '</tr></thead>';
     }
     out += '<tbody>';
-    const rows = t.relationship ? 2 : 1;
-    for (let i = 0; i < rows; i++) {
+    // The repeating body. Two sample rows when bound to a relationship, so it reads as
+    // a list rather than a single row.
+    const sampleRows = t.relationship ? 2 : (t.rows || []).length ? 0 : 1;
+    for (let i = 0; i < sampleRows; i++) {
         out += '<tr>' + cols.map((c) => '<td style="' + cellCss + '">' + esc(c.tag || '') + '</td>').join('') + '</tr>';
     }
     if (t.relationship) {
@@ -962,6 +980,18 @@ export function tablePreviewHtml(box) {
             ' font-style: italic; color: #6b7280;">… one row per ' +
             esc(t.relationship) +
             ' record</td></tr>';
+    }
+    // Extra rows and the totals band, drawn exactly as they serialize. Leaving them out
+    // meant an author added a row, saw nothing change on the page, and could only find
+    // out whether it worked by generating a PDF.
+    for (const r of t.rows || []) {
+        out +=
+            '<tr>' + cols.map((c, i) => '<td style="' + cellCss + '">' + esc(r[i] || '') + '</td>').join('') + '</tr>';
+    }
+    if (t.totals && t.totals.enabled) {
+        const tt = { ...DEFAULT_TOTALS_TEXT, ...(t.totalsText || {}) };
+        const tc = t.totals.cells || [];
+        out += '<tr>' + cols.map((c, i) => totalsCell(t, tt, frame, esc(tc[i] || ''))).join('') + '</tr>';
     }
     out += '</tbody></table>';
     return out;
@@ -1497,9 +1527,23 @@ function readTable(wrapper, tableEl) {
         if (role === 'loop') {
             continue;
         }
-        const cells = [...tr.querySelectorAll('td')].map((td) => (td.textContent || '').trim());
+        const tds2 = [...tr.querySelectorAll('td')];
+        const cells = tds2.map((td) => (td.textContent || '').trim());
         if (role === 'totals') {
             t.totals = { enabled: true, cells };
+            // Recover the row's own styling, or reopening the template would silently
+            // reset a customised totals band to the default on the next save.
+            const cs = tds2[0] ? tds2[0].getAttribute('style') || '' : '';
+            if (cs) {
+                t.totalsFill = readCss(cs, 'background') || t.totalsFill;
+                t.totalsText = {
+                    ...DEFAULT_TOTALS_TEXT,
+                    size: parseFloat(readCss(cs, 'font-size')) || DEFAULT_TOTALS_TEXT.size,
+                    color: readCss(cs, 'color') || DEFAULT_TOTALS_TEXT.color,
+                    align: readCss(cs, 'text-align') || DEFAULT_TOTALS_TEXT.align,
+                    bold: /font-weight:\s*bold/.test(cs)
+                };
+            }
         } else {
             t.rows.push(cells);
         }

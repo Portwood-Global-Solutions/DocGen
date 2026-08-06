@@ -971,6 +971,28 @@ export default class DocGenCanvas extends LightningElement {
         return { size: 11, color: '#1a1a1a', bold: true, align: 'left', ...(t.headerText || {}) };
     }
 
+    get selTotalsText() {
+        const t = (this.selectedBox || {}).table || {};
+        return { size: 11, color: '#1a1a1a', bold: true, align: 'left', ...(t.totalsText || {}) };
+    }
+
+    get selTotalsFill() {
+        return ((this.selectedBox || {}).table || {}).totalsFill || '#eeeeee';
+    }
+
+    get totalsBoldClass() {
+        return this.selTotalsText.bold ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+
+    /** Align is a button, not a field, so it carries its value in data-align. */
+    handleTotalsAlign(event) {
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'table') return;
+        this._patchTable({
+            totalsText: { ...this.selTotalsText, align: event.currentTarget.dataset.align }
+        });
+    }
+
     get selRowText() {
         const t = (this.selectedBox || {}).table || {};
         return { size: 11, color: '#1a1a1a', bold: false, align: 'left', ...(t.rowText || {}) };
@@ -990,7 +1012,8 @@ export default class DocGenCanvas extends LightningElement {
         const key = event.currentTarget.dataset.key;
         const box = this.selectedBox;
         if (!box || box.kind !== 'table') return;
-        const current = which === 'header' ? this.selHeaderText : this.selRowText;
+        const current =
+            which === 'header' ? this.selHeaderText : which === 'totals' ? this.selTotalsText : this.selRowText;
         let value;
         if (key === 'bold') {
             value = !current.bold;
@@ -1000,7 +1023,8 @@ export default class DocGenCanvas extends LightningElement {
         } else {
             value = event.target.value;
         }
-        this._patchTable({ [which === 'header' ? 'headerText' : 'rowText']: { ...current, [key]: value } });
+        const field = which === 'header' ? 'headerText' : which === 'totals' ? 'totalsText' : 'rowText';
+        this._patchTable({ [field]: { ...current, [key]: value } });
     }
 
     handleAddColumn() {
