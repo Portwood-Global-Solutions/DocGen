@@ -1,5 +1,180 @@
 # Changelog
 
+## v3.54.0 — Canvas designer (Beta)
+
+Released 2026-08-06 · `04tVx0000010Y4LIAU` · ancestor 3.53.0 · 1,905 tests, 78% coverage
+
+A new **`Canvas`** template type with a Canva-style artboard. Boxes are placed in
+inches and land there in the PDF; lists still flow across as many pages as the data
+needs. It renders through the HTML path (`DocGenService.isHtmlBacked`), so output is
+always PDF.
+
+### Added
+
+- **Canvas editor** (`lwc/docGenCanvas`) — a scene graph is the document and the DOM is
+  a disposable projection of it, which is what keeps it clear of the Lightning Web
+  Security bug class that broke the flow designer (v3.39/v3.41). Confirmed working in a
+  namespaced subscriber install.
+- **Elements**: text (rich text or raw HTML), tables, images, shapes, QR/barcodes and
+  signature placements. Per-box `{#IF}` conditions, z-order, an element list, undo/redo,
+  duplicate page, page setup with custom sizes.
+- **Tables**: a nested second list under each row (grandchildren), totals with their own
+  styling, per-column text on extra rows, and a widest-row column rule so a nested list
+  wider than its parent no longer leaves ragged rows.
+- **Derived queries** follow loop context, so a hand-written nested loop produces a
+  nested subquery rather than a flat SELECT that runs and renders blank.
+- **HTML importer** — re-describes an existing HTML body as boxes. Measured lossless
+  against all five shipped starters; three rendered to identical page count, page size
+  and words.
+
+### Fixed
+
+- Canvas templates took the DOCX path in **13 branches across 7 classes** — signature
+  send/finalize, the signing page, bulk generation, charts, the giant-query assembler.
+  A Canvas body is HTML, so it reached a ZIP reader ("Could not load Zip"). All now route
+  through `DocGenService.isHtmlBacked`.
+- Image size tokens without an `x` were silently ignored, so `{%asset:logo:144}` rendered
+  at intrinsic size — a logo 24 inches wide. The form is `144x` or `144x96`.
+- Border and padding pushed boxes off the right edge: Flying Saucer is CSS 2.1, `width`
+  is the content box and `box-sizing` is ignored (measured both ways).
+
+### Notes for template authors
+
+- **Symbols and CJK need `'Arial Unicode MS'`.** `Blob.toPdf` resolves the generic
+  families to the base-14 fonts, where ✓ ✔ ☑ ★ render as nothing at all. That font
+  embeds as a subset and draws them; the Symbols control inserts them with it attached.
+- **Serializer changes do not reach documents already saved.** A stored body keeps its
+  markup until something re-saves it.
+
+## Unreleased — Multi-currency aggregates + SLDS lint cleanup
+
+### Fixed — aggregates silently added across currencies (P0, silent corruption)
+
+`{SUM:Lines.Amount:currency:EUR}` over child rows carrying different
+`CurrencyIsoCode` values added the raw numbers together and stamped a euro sign
+on the result. The total was wrong, no error was raised, and nothing about the
+output looked suspect — the highest-impact failure class in the triage rubric.
+
+`resolveAggregate` did a plain `result += v` across rows with no currency check
+of any kind, and `DocGenGiantQueryAssembler` issued a plain `SUM(field)` SOQL
+aggregate with the same blind spot.
+
+Both paths now detect the conflict and refuse to guess. The guard fires only
+when there is a **provable** conflict — two or more distinct ISO codes among the
+rows actually being aggregated. A single currency, rows with no currency code,
+and single-currency orgs all behave exactly as before, so no existing template
+changes behavior unless it was already producing a wrong number.
+
+Child subqueries now select `CurrencyIsoCode` in multi-currency orgs so the
+guard can see per-row currencies without the author listing the field. No-op
+where the child object doesn't have the field.
+
+### Added — `:convert` for genuine cross-currency totals
+
+```
+{SUM:Lines.Amount:currency:EUR:convert}          convert every row to EUR, then sum
+{AVG:Lines.Amount:currency:auto:convert}         convert into the parent record's currency
+{MAX:Lines.Amount:currency:USD:de_DE:convert}    convert always goes last
+```
+
+Works on `SUM`, `AVG`, `MIN` and `MAX`. `MIN`/`MAX` compare **converted**
+amounts, so a larger raw number in a weaker currency isn't mistaken for a larger
+amount. On the giant-query path the aggregate becomes a
+`GROUP BY CurrencyIsoCode` selecting `SUM`/`MIN`/`MAX`/`COUNT` per group, which
+keeps every function exactly derivable after conversion — `AVG` is
+Σ(converted sums) ÷ Σ(counts), not an average of per-group averages.
+
+Rates come from the org's `CurrencyType` records, pivoted through the corporate
+currency. A missing rate throws with an actionable message rather than returning
+an unconverted number. Advanced Currency Management dated rates
+(`DatedConversionRate`) are deliberately not consulted — see #273 for why and
+what it would take.
+
+New `DocGenCurrency` class holds all of it so the in-memory and giant-query
+paths can't drift apart.
+
+### Added — Runner: configurable default output destination
+
+New App Builder property **Default Output Destination** (Save & Download /
+Download / Save to Record) on every Runner placement. The chosen destination is
+pre-selected _and_ renders as the leftmost pill, so the default is always the one
+under the user's cursor.
+
+Ships defaulting to **Save & Download** on internal placements — it is the only
+destination that leaves the user with both a copy in hand and an attachment on the
+record, so it can't lose work the way picking one of the halves can. Community
+placements default to Download, matching the existing community posture.
+
+Promotion only, never inclusion: a destination an admin turned off can't be
+defaulted back in. Falls back cleanly wherever the configured default isn't
+available — mobile stays save-only, Combine PDFs and Document Packet stay
+download-only.
+
+Also fixes a hint that was scoped too narrowly — the "files under 5 MB save
+automatically" size warning fired only for Save to Record, but Save & Download
+attaches to the record too and hits the same Aura ceiling. Now shown for both,
+which matters more with Save & Download as the shipped default.
+
+### Fixed — Designer: the caret landed to the LEFT of an inserted merge tag
+
+Insert a merge tag and the caret sat before it, so the next thing typed went in
+front of the tag instead of after it. `Range.insertNode` leaves the range positioned
+before the content it inserted — that is what the DOM spec says it does — and
+nothing moved the caret past it afterwards.
+
+The same bug also silently reversed consecutive inserts: because inserts prefer the
+REMEMBERED caret over the live selection, a second tag went back to where the first
+one started, so clicking Name then Industry produced Industry then Name.
+
+Both routes through the insert path (caret insert and end-of-document append) now
+park the caret after the inserted content and refresh the remembered caret with it,
+the same way the type-to-pill and pill-edit paths already did.
+
+### Added — Designer: a landing box shows where a dragged tag will go
+
+Dragging a merge tag onto the page showed a thin purple caret. A caret answers
+"between which two characters" — but the question an author actually has is "into
+which cell, which paragraph", and the caret never answered it. Alongside the caret
+there is now a translucent dashed box outlining the block that will receive the
+drop: the table cell, the list item, the paragraph. Between blocks or over empty
+canvas the box hides rather than guessing, and the caret stands alone.
+
+The box deliberately carries the `dg-drop-marker` class in addition to its own.
+Four separate places strip editor chrome out of the serialized body by that class
+name — the save path, the Source view, the preview scrub and the region walker — so
+a brand-new class would have meant finding all four, and missing one would leak a
+`<div>` into a customer's saved template.
+
+### Fixed — SLDS linter errors
+
+`npx @salesforce-ux/slds-linter lint force-app` reported 934 violations
+(4 errors, 930 warnings). Now **0 errors, 697 warnings**.
+
+- 4 × `modal-close-button-issue` — modal close buttons in `docGenAssets` (×3) and
+  `docGenSignatureSender` (×1) carried only `slds-modal__close`; added
+  `slds-button slds-button_icon`.
+- `docGenRunner.css` referenced `--slds-g-color-neutral-60`, which is not an SLDS
+  hook — it always fell through to its literal fallback. Now
+  `--slds-g-color-on-surface-3`.
+- 232 auto-fixable token warnings applied. The fixer rewrites
+  `padding: 1rem` → `padding: var(--slds-g-spacing-4, 1rem)`, preserving the
+  original value as the fallback, so rendering is unchanged in orgs without
+  SLDS 2 hooks defined.
+
+The remaining 697 warnings are tracked in #274 — they need a human choosing among
+4–5 candidate hooks per color, plus 4 deliberate `slds-*` class overrides that
+are load-bearing.
+
+### Validation
+
+- `RunLocalTests`: 1905 tests, 100% pass, 78% org-wide coverage
+- e2e-01…08 + 07-syntax1…5: 269 assertions, **FAIL: 0** across all 14 scripts
+- `sf code-analyzer` (Security + AppExchange): **0 violations**
+- `npm run format:check`: clean
+- New `DocGenCurrencyTest`: 13 tests covering the guard, conversion,
+  cross-rate pivoting, MIN/MAX ordering, missing rates, custom currency fields,
+  and single-currency no-op behavior
+
 ## v3.53.0 — Excel files save as .xlsx + output format honored from Flow
 
 `04tVx0000010BvlIAE` (build 3.53.0-1, promoted 2026-08-04, ancestor 3.52.0). Build

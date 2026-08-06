@@ -47,6 +47,45 @@ function frontDoorUrl(org) {
 }
 
 /**
+ * The Template Manager tab carries the package namespace prefix in a packaged or
+ * namespaced org, and no prefix in a source-deployed one. Hardcoding the prefix
+ * made this script navigate to "Page doesn't exist" in every org
+ * scripts/qa/setup-org.sh produces — that script creates the org --no-namespace so
+ * the e2e Apex compiles — and then time out for 30s waiting on a tab that could
+ * never appear. The designer's only regression guard was therefore unrunnable
+ * against the standard QA org, which is how a class of dead interactions ships
+ * unnoticed. Resolve the prefix from the org instead of assuming it.
+ */
+function tabPath(org) {
+    // Three shapes, and org namespace alone does not distinguish them:
+    //   source-deployed, no namespace   -> DocGen_Template_Manager
+    //   namespaced scratch org          -> portwoodglobal__DocGen_Template_Manager
+    //   SUBSCRIBER org, package INSTALLED -> portwoodglobal__DocGen_Template_Manager
+    //     ...but `sf org display` reports namespace: null there, because a subscriber
+    //     org does not OWN the namespace, it receives it from the package. Reading only
+    //     the org namespace therefore gets the install case exactly backwards, so also
+    //     ask which packages are installed.
+    const run = (argv) => {
+        try {
+            return JSON.parse(execFileSync('sf', argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }))
+                .result;
+        } catch {
+            return null;
+        }
+    };
+    const own = (run(['org', 'display', '--target-org', org, '--json']) || {}).namespace || null;
+    if (own) return `/lightning/n/${own}__DocGen_Template_Manager`;
+
+    const installed = run(['package', 'installed', 'list', '--target-org', org, '--json']) || [];
+    const pkg = (Array.isArray(installed) ? installed : []).find(
+        (p) => String(p.SubscriberPackageNamespace || '').length > 0
+    );
+    if (pkg) return `/lightning/n/${pkg.SubscriberPackageNamespace}__DocGen_Template_Manager`;
+
+    return '/lightning/n/DocGen_Template_Manager';
+}
+
+/**
  * Piercing query: the Designer lives inside LWC shadow roots, so a plain
  * document.querySelector never finds it.
  */
@@ -72,6 +111,31 @@ const PIERCE = `
  * body's value.
  */
 const inPage = (body) => `(() => {${PIERCE}\n return (() => {${body}})(); })()`;
+
+/**
+ * Opens the Tags rail and waits until chips are actually on screen.
+ *
+ * A single click-then-wait was flaky: handlePanelToggle toggles, the rail can already
+ * be open or closed depending on what the previous block did, and one fixed 700ms wait
+ * sometimes lost the race. That produced runs reporting "no chip available to insert" —
+ * a precondition failure wearing the costume of a real regression, which is the fastest
+ * way to teach someone to ignore this suite. Poll instead: only click when the chips
+ * are absent, then give the render a chance, up to `tries` times.
+ */
+async function ensureTagRail(page, inPageFn, tries = 6) {
+    for (let i = 0; i < tries; i++) {
+        const seen = await page.evaluate(
+            inPageFn(
+                `return { chips: !!__dgFind('.dg-tag-chip[data-snippet]'), btn: !!__dgFind('[data-panel="tags"]') };`
+            )
+        );
+        if (seen.chips) return true;
+        if (!seen.btn) return false;
+        await page.evaluate(inPageFn(`const b = __dgFind('[data-panel="tags"]'); if (b) b.click(); return true;`));
+        await page.waitForTimeout(600);
+    }
+    return await page.evaluate(inPageFn(`return !!__dgFind('.dg-tag-chip[data-snippet]');`));
+}
 
 async function main() {
     console.log(`\nDesigner UI smoke — org: ${ORG}\n`);
@@ -113,7 +177,7 @@ async function main() {
         });
 
         const base = new URL(url).origin.replace('.my.salesforce.com', '.lightning.force.com');
-        await page.goto(`${base}/lightning/n/portwoodglobal__DocGen_Template_Manager?smoke=${Date.now()}`, {
+        await page.goto(`${base}${tabPath(ORG)}?smoke=${Date.now()}`, {
             waitUntil: 'domcontentloaded'
         });
         await page.waitForTimeout(6000);
@@ -2100,7 +2164,7 @@ async function main() {
         // template every other assertion depends on.
         // Reload the app so the Designer tab starts with nothing open — the state a
         // person actually arrives in.
-        await page.goto(`${base}/lightning/n/portwoodglobal__DocGen_Template_Manager?empty=${Date.now()}`, {
+        await page.goto(`${base}${tabPath(ORG)}?empty=${Date.now()}`, {
             waitUntil: 'domcontentloaded'
         });
         await page.waitForTimeout(7000);
@@ -2153,11 +2217,41 @@ async function main() {
         record('template search filters the list', scale.search === 'ok', scale.search);
         record('clearing the search restores the list', !!scale.restored, '');
         if (emptyState.count > 0) {
+            // SEARCH for it first. The picker renders at most 8 templates, ordered by
+            // most-recently-modified, so in an org with a handful of newer templates the
+            // one this suite is built around silently drops off the list — and every
+            // assertion after it then tests whatever happened to be first instead. That
+            // is how a whole run reports "no chip available" as if it were a regression.
             await page.evaluate(
-                inPage(`
-      const item = __dgFind('.dg-designer-open-item');
-      item.click();
-      return true;`)
+                inPage(
+                    `
+      const input = __dgFind('.dg-designer-open-search__input');
+      if (input) {
+        input.value = ` +
+                        JSON.stringify(TEMPLATE_HINT) +
+                        `;
+        input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      }
+      return true;`
+                )
+            );
+            await page.waitForTimeout(1500);
+            await page.evaluate(
+                inPage(
+                    `
+      // Pick by NAME, not items[0]. The Designer list now also offers Canvas
+      // templates, which open the canvas editor instead of the flow designer — so
+      // whichever template happened to be most-recently-modified silently decided
+      // what this whole suite was testing.
+      const items = __dgFind('.dg-designer-open-item', true) || [];
+      const hint = ` +
+                        JSON.stringify(TEMPLATE_HINT) +
+                        `;
+      const match = items.find((i) => (i.textContent || '').indexOf(hint) !== -1) || items[0];
+      if (!match) return false;
+      match.click();
+      return true;`
+                )
             );
             await page.waitForTimeout(8000);
             const opened = await page.evaluate(
@@ -2168,6 +2262,306 @@ async function main() {
                 opened.pv && opened.bar,
                 JSON.stringify(opened)
             );
+        }
+
+        // --- 4b. Dragging a tag chip onto the page ------------------------------
+        // The one interaction with no coverage until now, and the one most likely to
+        // rot silently: HTML5 drag-and-drop does not survive LWS, so chip drag is
+        // hand-rolled from raw mouse events (mousedown arms, >7px starts, a ghost
+        // follows the cursor, mouseup over the page inserts at the drop caret). None of
+        // that is exercised by clicking, so every other check here can pass while
+        // dragging is completely dead — which is exactly what a user reported.
+        {
+            const seedCanvas = inPage(`
+      const pv = __dgFind('.dg-pv');
+      if (!pv) return false;
+      const keep = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (keep) pv.appendChild(keep);
+      const p = document.createElement('p');
+      p.textContent = 'DROP TARGET LINE';
+      pv.appendChild(p);
+      return true;`);
+
+            // The chips live in the Tags rail panel, which is closed by default —
+            // open it first or every drag assertion below reports a missing chip
+            // rather than a broken drag.
+            const openTagPanel = inPage(`
+      // Idempotent on purpose: handlePanelToggle TOGGLES, so a second blind click
+      // closes the rail and the next assertion reports "no chip" instead of testing
+      // anything. Only click when the chips are not already on screen.
+      if (__dgFind('.dg-tag-chip[data-snippet]')) return 'already-open';
+      const btn = __dgFind('[data-panel="tags"]');
+      if (!btn) return false;
+      btn.click();
+      return true;`);
+
+            const geometry = inPage(`
+      const chip = __dgFind('.dg-tag-chip[data-snippet]');
+      const pv = __dgFind('.dg-pv');
+      if (!chip || !pv) return null;
+      const c = chip.getBoundingClientRect();
+      const p = pv.getBoundingClientRect();
+      return {
+        snippet: chip.getAttribute('data-snippet'),
+        chipX: c.left + c.width / 2, chipY: c.top + c.height / 2,
+        pvX: p.left + Math.min(120, p.width / 2), pvY: p.top + 30
+      };`);
+
+            const readCanvas = (snippet) =>
+                inPage(
+                    `
+      const pv = __dgFind('.dg-pv');
+      const html = pv ? pv.innerHTML : '';
+      const needle = ` +
+                        JSON.stringify(snippet) +
+                        `;
+      return {
+        landed: html.indexOf(needle) !== -1,
+        ghostLeft: !!__dgFind('.dg-drag-ghost'),
+        markerLeft: !!__dgFind('.dg-drop-marker'),
+        zoneLeft: !!__dgFind('.dg-drop-zone')
+      };`
+                );
+
+            let drag = {};
+            try {
+                drag.seeded = await page.evaluate(seedCanvas);
+                drag.panel = await ensureTagRail(page, inPage);
+                const geo = await page.evaluate(geometry);
+                if (!geo) {
+                    record(
+                        'chip drag: a draggable tag chip is present',
+                        false,
+                        'no .dg-tag-chip[data-snippet] in the rail'
+                    );
+                } else {
+                    record('chip drag: a draggable tag chip is present', true, geo.snippet);
+                    // A real mouse gesture, not a synthetic event: the 7px threshold and
+                    // the document-level capture listeners only respond to genuine moves.
+                    await page.mouse.move(geo.chipX, geo.chipY);
+                    await page.mouse.down();
+                    await page.mouse.move(geo.chipX + 20, geo.chipY + 10, { steps: 5 });
+                    await page.mouse.move(geo.pvX, geo.pvY, { steps: 12 });
+                    await page.waitForTimeout(250);
+                    const midFlight = await page.evaluate(
+                        inPage(`
+      const zone = __dgFind('.dg-drop-zone');
+      const shown = zone && zone.style.display !== 'none';
+      const r = shown ? zone.getBoundingClientRect() : null;
+      return {
+        ghost: !!__dgFind('.dg-drag-ghost'),
+        caret: !!__dgFind('.dg-drop-marker:not(.dg-drop-zone)'),
+        zoneShown: !!shown,
+        zoneHasArea: !!(r && r.width > 4 && r.height > 4),
+        // The box must answer to .dg-drop-marker too — that is the single class the
+        // four serialization strippers key on.
+        zoneStripsAsChrome: !!(zone && zone.classList.contains('dg-drop-marker'))
+      };`)
+                    );
+                    record('chip drag: a ghost follows the cursor mid-drag', !!midFlight.ghost);
+                    record('chip drag: an insertion caret tracks the pointer', !!midFlight.caret);
+                    record(
+                        'chip drag: a landing box outlines the receiving block',
+                        !!midFlight.zoneShown && !!midFlight.zoneHasArea,
+                        JSON.stringify(midFlight)
+                    );
+                    record(
+                        'chip drag: the landing box is strippable as editor chrome',
+                        !!midFlight.zoneStripsAsChrome,
+                        'must carry dg-drop-marker or it leaks into the saved template'
+                    );
+                    await page.mouse.up();
+                    await page.waitForTimeout(800);
+
+                    const after = await page.evaluate(readCanvas(geo.snippet));
+                    record('chip drag: the snippet lands in the page', !!after.landed, JSON.stringify(after));
+                    record('chip drag: the ghost is cleaned up', !after.ghostLeft);
+                    record('chip drag: no drop marker is left behind', !after.markerLeft);
+                    record('chip drag: no landing box is left behind', !after.zoneLeft);
+                }
+            } catch (e) {
+                record('chip drag onto the page', false, e.message);
+            }
+
+            // A mousedown with no movement must still behave as a plain click-insert —
+            // arming the drag must not swallow the click.
+            try {
+                await page.evaluate(seedCanvas);
+                await ensureTagRail(page, inPage);
+                const geo2 = await page.evaluate(geometry);
+                if (!geo2) {
+                    // Never let this fall through silently — a check that quietly does
+                    // not run looks identical to a check that passed.
+                    record('chip click (no drag) still inserts', false, 'tag rail had no chip to click');
+                } else {
+                    await page.mouse.move(geo2.chipX, geo2.chipY);
+                    await page.mouse.down();
+                    await page.mouse.up();
+                    await page.waitForTimeout(700);
+                    const after2 = await page.evaluate(readCanvas(geo2.snippet));
+                    record('chip click (no drag) still inserts', !!after2.landed, JSON.stringify(after2));
+                }
+            } catch (e) {
+                record('chip click (no drag) still inserts', false, e.message);
+            }
+        }
+
+        // --- 4c. Where the caret lands after an insert ---------------------------
+        // Range.insertNode leaves the range BEFORE the content it inserted, so without
+        // an explicit park the caret sits to the LEFT of a freshly inserted merge tag
+        // and the next keystroke types in front of it. Typing is the only honest test:
+        // reading the range says where the caret claims to be, not where text goes.
+        {
+            const seedOne = inPage(`
+      const pv = __dgFind('.dg-pv');
+      if (!pv) return false;
+      const keep = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (keep) pv.appendChild(keep);
+      const p = document.createElement('p');
+      p.textContent = 'HEAD ';
+      pv.appendChild(p);
+      const r = document.createRange();
+      r.selectNodeContents(p); r.collapse(false);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      pv.focus();
+      document.dispatchEvent(new Event('selectionchange'));
+      return true;`);
+
+            const openTags = inPage(`
+      if (__dgFind('.dg-tag-chip[data-snippet]')) return 'already-open';
+      const btn = __dgFind('[data-panel="tags"]');
+      if (!btn) return false;
+      btn.click();
+      return true;`);
+
+            const clickFirstChip = inPage(`
+      const chip = __dgFind('.dg-tag-chip[data-snippet]');
+      if (!chip) return null;
+      const snip = chip.getAttribute('data-snippet');
+      chip.click();
+      return snip;`);
+
+            try {
+                await page.evaluate(seedOne);
+                await ensureTagRail(page, inPage);
+                const snip = await page.evaluate(clickFirstChip);
+                if (!snip) {
+                    record('insert: caret lands after the tag', false, 'no chip available to insert');
+                } else {
+                    await page.waitForTimeout(900);
+                    await page.keyboard.type('XYZ');
+                    await page.waitForTimeout(500);
+                    const text = await page.evaluate(
+                        inPage(`const pv = __dgFind('.dg-pv'); return pv ? pv.textContent : '';`)
+                    );
+                    // The typed marker must appear AFTER the tag text, not before it.
+                    const tagAt = text.indexOf(snip.replace(/[{}]/g, ''));
+                    const typedAt = text.indexOf('XYZ');
+                    record(
+                        'insert: caret lands after the tag, not before it',
+                        tagAt !== -1 && typedAt !== -1 && typedAt > tagAt,
+                        JSON.stringify({ tagAt, typedAt, text: text.slice(0, 80) })
+                    );
+                }
+            } catch (e) {
+                record('insert: caret lands after the tag, not before it', false, e.message);
+            }
+
+            // Two inserts in a row must read left-to-right. A stale remembered caret
+            // sends the second insert back to where the first started, which silently
+            // reverses their order.
+            try {
+                await page.evaluate(seedOne);
+                await ensureTagRail(page, inPage);
+                const order = await page.evaluate(
+                    inPage(`
+      const chips = __dgFind('.dg-tag-chip[data-snippet]', true);
+      if (!chips || chips.length < 2) return null;
+      return [chips[0].getAttribute('data-snippet'), chips[1].getAttribute('data-snippet')];`)
+                );
+                if (!order) {
+                    record('insert: two inserts keep their order', false, 'need two distinct chips');
+                } else {
+                    await page.evaluate(
+                        inPage(`const c = __dgFind('.dg-tag-chip[data-snippet]', true); c[0].click(); return true;`)
+                    );
+                    await page.waitForTimeout(900);
+                    await page.evaluate(
+                        inPage(`const c = __dgFind('.dg-tag-chip[data-snippet]', true); c[1].click(); return true;`)
+                    );
+                    await page.waitForTimeout(900);
+                    const text2 = await page.evaluate(
+                        inPage(`const pv = __dgFind('.dg-pv'); return pv ? pv.textContent : '';`)
+                    );
+                    const a = text2.indexOf(order[0].replace(/[{}]/g, ''));
+                    const b = text2.indexOf(order[1].replace(/[{}]/g, ''));
+                    record(
+                        'insert: two inserts keep their order',
+                        a !== -1 && b !== -1 && b > a,
+                        JSON.stringify({ first: order[0], second: order[1], a, b })
+                    );
+                }
+            } catch (e) {
+                record('insert: two inserts keep their order', false, e.message);
+            }
+        }
+
+        // --- 4d. "/" must reach the canvas, not Lightning's global search ---------
+        // Lightning binds "/" as a global search hotkey on window capture. This broke
+        // once and nobody noticed, because the recovery that was supposed to catch it
+        // keyed off event.relatedTarget — which is null on focusout across trees, so
+        // the condition was false every single time and the whole mechanism was dead
+        // code. A silently-disabled workaround is exactly what a regression guard is
+        // for, so this asserts the OBSERVABLE outcome: the slash lands in the document
+        // and focus stays put.
+        {
+            try {
+                const seeded = await page.evaluate(
+                    inPage(`
+      const pv = __dgFind('.dg-pv');
+      if (!pv) return false;
+      const keep = pv.querySelector('style');
+      while (pv.firstChild) pv.removeChild(pv.firstChild);
+      if (keep) pv.appendChild(keep);
+      const p = document.createElement('p');
+      p.textContent = 'SLASHTEST ';
+      pv.appendChild(p);
+      pv.focus();
+      const r = document.createRange();
+      r.selectNodeContents(p); r.collapse(false);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      document.dispatchEvent(new Event('selectionchange'));
+      return true;`)
+                );
+                if (!seeded) {
+                    record('"/" reaches the canvas instead of global search', false, 'could not seed the canvas');
+                } else {
+                    await page.waitForTimeout(500);
+                    await page.keyboard.press('/');
+                    // Generous: the recovery path is asynchronous by design.
+                    await page.waitForTimeout(1800);
+                    const after = await page.evaluate(
+                        inPage(`
+      const pv = __dgFind('.dg-pv');
+      const ae = document.activeElement;
+      const cls = String((ae && ae.className) || '');
+      return {
+        text: pv ? (pv.textContent || '') : '',
+        focusInSearch: cls.indexOf('saInput') !== -1 || cls.indexOf('slds-lookup__search-input') !== -1
+      };`)
+                    );
+                    record(
+                        '"/" reaches the canvas instead of global search',
+                        after.text.indexOf('/') !== -1,
+                        JSON.stringify({ text: after.text.slice(0, 40), focusInSearch: after.focusInSearch })
+                    );
+                    record('"/" does not leave focus in global search', !after.focusInSearch);
+                }
+            } catch (e) {
+                record('"/" reaches the canvas instead of global search', false, e.message);
+            }
         }
 
         // --- 5. No console errors while driving the UI ---------------------------

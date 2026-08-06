@@ -223,7 +223,13 @@ export async function run({ org, headed }) {
     try {
         g = await measurePills(org, headed);
     } catch (e) {
-        add(skip('merge-tag pills stay inside their table cells', `threw: ${String(e.message).slice(0, 160)}`, SEVERITY.MAJOR));
+        add(
+            skip(
+                'merge-tag pills stay inside their table cells',
+                `threw: ${String(e.message).slice(0, 160)}`,
+                SEVERITY.MAJOR
+            )
+        );
         return suiteResult('template-integrity', 'Template integrity', checks);
     }
     if (!g || !g.ok) {

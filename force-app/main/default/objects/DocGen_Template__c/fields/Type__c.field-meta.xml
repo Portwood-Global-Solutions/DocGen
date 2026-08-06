@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Type__c</fullName>
-    <description>Type of the template (Word, PowerPoint, Excel, or HTML).</description>
+    <description>Type of the template (Word, PowerPoint, Excel, HTML, PDF, or Canvas).</description>
     <label>Type</label>
     <required>true</required>
     <type>Picklist</type>
@@ -33,6 +33,11 @@
                 <fullName>PDF</fullName>
                 <default>false</default>
                 <label>PDF</label>
+            </value>
+            <value>
+                <fullName>Canvas</fullName>
+                <default>false</default>
+                <label>Canvas</label>
             </value>
         </valueSetDefinition>
     </valueSet>

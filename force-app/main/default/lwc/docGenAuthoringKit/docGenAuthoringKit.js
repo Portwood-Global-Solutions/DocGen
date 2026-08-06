@@ -1748,3 +1748,72 @@ export function stripRegionMarkers(html) {
     }
     return slice.rebuild(serializeChildren(tpl.content));
 }
+
+// ---------------------------------------------------------------------------
+// Canvas template type
+// ---------------------------------------------------------------------------
+
+/**
+ * The canonical CSS contract for a Canvas template.
+ *
+ * Every rule here was measured against a real Blob.toPdf render rather than
+ * assumed — see scripts/canvas-layout-model-probe.apex and the four rendered pages
+ * in docs/canvas-layout-model-p*.png. Flying Saucer is CSS 2.1 plus an
+ * idiosyncratic subset, so "should work" is not a basis for a layout engine.
+ *
+ *   .dg-artboard        one artboard = one page. position:relative and in NORMAL
+ *                       flow, which is what makes it the containing block for its
+ *                       pinned children AND lets a flow region paginate out of it.
+ *                       min-height, never height: a pinned height gets overrun by
+ *                       growing content instead of growing with it.
+ *   .dg-artboard_break  page-break-BEFORE on every artboard after the first. Not
+ *                       page-break-after on the previous one — measured, that gets
+ *                       swallowed when a flow region spills, and the next artboard
+ *                       paints its pinned boxes on top of the overflow.
+ *   .dg-pin             absolutely positioned box. Lands at its declared inch
+ *                       offsets, exactly. Does NOT repeat on continuation pages.
+ *   .dg-flow            normal-flow box. Paginates like any block, so this is where
+ *                       a {#Loop} that grows to 60 rows goes.
+ *
+ * Chrome that must appear on continuation pages belongs in @page margin boxes, not
+ * in a pinned box — a pin belongs to its artboard, and an artboard is one page.
+ */
+export const CANVAS_CSS =
+    '@page { size: {{SIZE}}; margin: {{MARGIN}}; }\n' +
+    'body { font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; margin: 0; }\n' +
+    '.dg-artboard { position: relative; width: {{WIDTH}}; min-height: {{HEIGHT}}; }\n' +
+    '.dg-artboard_break { page-break-before: always; }\n' +
+    '.dg-pin { position: absolute; }\n' +
+    '.dg-flow { position: relative; }\n' +
+    'table { border-collapse: collapse; width: 100%; -fs-table-paginate: paginate; }\n' +
+    'thead { display: table-header-group; }\n' +
+    'td, th { border: 0.5pt solid #999; padding: 2pt 4pt; }\n';
+
+/** Page geometry per size/orientation, in inches, minus default 0.5in margins. */
+const CANVAS_PAGES = {
+    'Letter portrait': { size: 'Letter portrait', w: '7.5in', h: '10in' },
+    'Letter landscape': { size: 'Letter landscape', w: '10in', h: '7.5in' },
+    'A4 portrait': { size: 'A4 portrait', w: '7.27in', h: '10.69in' },
+    'A4 landscape': { size: 'A4 landscape', w: '10.69in', h: '7.27in' }
+};
+
+export function canvasPageGeometry(pageSize, orientation) {
+    const key = (pageSize || 'Letter') + ' ' + (orientation || 'portrait').toLowerCase();
+    return CANVAS_PAGES[key] || CANVAS_PAGES['Letter portrait'];
+}
+
+/** A Canvas document with one empty artboard — what the editor opens on. */
+export function buildBlankCanvasBody(pageSize, orientation) {
+    const geo = canvasPageGeometry(pageSize, orientation);
+    const css = CANVAS_CSS.replace('{{SIZE}}', geo.size)
+        .replace('{{MARGIN}}', '0.5in')
+        .replace('{{WIDTH}}', geo.w)
+        .replace('{{HEIGHT}}', geo.h);
+    return (
+        '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n<style>\n' +
+        css +
+        '</style>\n</head>\n<body>\n' +
+        '<div class="dg-artboard" data-dg-artboard="1"></div>\n' +
+        '</body>\n</html>\n'
+    );
+}

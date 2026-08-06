@@ -24,6 +24,14 @@
                 default="true"
                 description="Offers the combined Save-to-Record-and-Download destination. Only appears when Download and Save to Record are both enabled."
             />
+            <property
+                name="defaultOutputDestination"
+                type="String"
+                label="Default Output Destination"
+                datasource="Save &amp; Download,Download,Save to Record"
+                default="Save &amp; Download"
+                description="Which destination is pre-selected, and which pill appears first. Ignored when that destination is turned off above, or when the mode forces one (mobile is save-only; Combine PDFs and Document Packet are download-only)."
+            />
             <property name="showDocumentPacketOption" type="Boolean" label="Show Document Packet Mode" default="true" />
             <property name="showCombinePdfsOption" type="Boolean" label="Show Combine PDFs Mode" default="true" />
             <property
@@ -65,6 +73,14 @@
                 default="true"
                 description="Offers the combined Save-to-Record-and-Download destination. Only appears when Download and Save to Record are both enabled."
             />
+            <property
+                name="defaultOutputDestination"
+                type="String"
+                label="Default Output Destination"
+                datasource="Save &amp; Download,Download,Save to Record"
+                default="Save &amp; Download"
+                description="Which destination is pre-selected, and which pill appears first. Ignored when that destination is turned off above, or when the mode forces one (mobile is save-only; Combine PDFs and Document Packet are download-only)."
+            />
             <property name="showDocumentPacketOption" type="Boolean" label="Show Document Packet Mode" default="true" />
             <property name="showCombinePdfsOption" type="Boolean" label="Show Combine PDFs Mode" default="true" />
             <property
@@ -95,6 +111,14 @@
                 label="Show Save &amp; Download Option"
                 default="true"
                 description="Offers the combined Save-to-Record-and-Download destination. Only appears when Download and Save to Record are both enabled."
+            />
+            <property
+                name="defaultOutputDestination"
+                type="String"
+                label="Default Output Destination"
+                datasource="Save &amp; Download,Download,Save to Record"
+                default="Save &amp; Download"
+                description="Which destination is pre-selected, and which pill appears first. Ignored when that destination is turned off above, or when the mode forces one (mobile is save-only; Combine PDFs and Document Packet are download-only)."
             />
             <property name="showDocumentPacketOption" type="Boolean" label="Show Document Packet Mode" default="true" />
             <property name="showCombinePdfsOption" type="Boolean" label="Show Combine PDFs Mode" default="true" />
@@ -145,6 +169,14 @@
                 label="Show Save &amp; Download Option"
                 default="false"
                 description="Combined Save-to-Record-and-Download destination. Internal-context only — leave off for community placements."
+            />
+            <property
+                name="defaultOutputDestination"
+                type="String"
+                label="Default Output Destination"
+                datasource="Save &amp; Download,Download,Save to Record"
+                default="Download"
+                description="Which destination is pre-selected, and which pill appears first. Community placements normally offer Download only."
             />
             <property
                 name="showDocumentPacketOption"

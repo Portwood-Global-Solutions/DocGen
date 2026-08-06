@@ -556,13 +556,21 @@ HARD RULES — never use these (Flying Saucer drops them):
 - linear-gradient(...), radial-gradient(...), conic-gradient(...)
 - calc(...), CSS variables (--name, var(--name))
 - transform, transition, animation, @keyframes
-- position: absolute or position: fixed (use @page running elements only)
 - box-shadow, text-shadow, outline
 - border-radius — in EVERY form, including on a <td>, on a <table> with
   border-collapse: separate, and the -fs-border-radius variant. There are no
   rounded corners. Every box is square. Do not attempt a workaround.
 - rgba(...) and hsla(...) — these do not fall back to a solid colour, the
   background disappears completely. Write a pre-computed flat hex instead.
+
+POSITIONING — measured 2026-08-05, not assumed. `position: absolute`, `relative`,
+`fixed` and `float` all WORK and are pixel-exact against declared inches. Two
+limits that matter more than the support itself:
+- An absolutely positioned box with **no explicit height GROWS** to fit merged
+  content, background and border following it. Pin a height and the content
+  overflows the box instead — visible, not clipped, but the chrome stays put.
+- Nothing beyond **page 1** renders. A box at `top: 10.5in` on Letter is dropped
+  entirely. Absolute layout is single-page; use one artboard per page.
 - opacity — pick a lighter hex colour instead.
 - :has(), :is(), :where(), container queries
 
@@ -1477,7 +1485,27 @@ How it works and what to know:
 - **List the source field in your template's Query Config.** Portwood builds its query from the Query Config (it does not scan the template body), so a field referenced only inside `:currency:auto=...` must be added to the Query Config like any other merge field. The standard `CurrencyIsoCode` is added automatically in multi-currency orgs, so bare `:currency:auto` works without listing it.
 - **Safe fallback:** if the source field is missing, blank, or not a recognized ISO code, the tag falls back to the default `$` format — it never errors or prints a raw code.
 - **Bare `:currency` is unchanged** — it always emits `$`. Auto-detection is strictly opt-in via `:auto`.
-- **Aggregates** support it too: `{SUM:Lines.Amount:currency:auto=CustomerCurrency__c}` uses the **parent** record's currency for the symbol (values are summed as stored — no exchange-rate conversion).
+- **Aggregates** support it too: `{SUM:Lines.Amount:currency:auto=CustomerCurrency__c}` uses the **parent** record's currency for the symbol.
+
+##### Totalling across currencies
+
+In a multi-currency org, the rows behind an aggregate can each carry their own currency. Adding them together and stamping one symbol on the result produces a number that looks authoritative and is meaningless — so Portwood won't do it silently.
+
+```
+{SUM:Lines.Amount:currency:EUR}            Mixed-currency rows → generation fails with a clear error
+{SUM:Lines.Amount:currency:EUR:convert}    Every row converted to EUR first, then summed
+{SUM:Lines.Amount:currency:auto:convert}   Converts into the parent record's own currency
+{SUM:Lines.Amount:currency:EUR:de_DE:convert}   convert always goes last, after any locale
+```
+
+What to know:
+
+- **The guard only fires when there's a real conflict** — two or more different currency codes among the rows being aggregated. One currency, or rows with no currency code at all, behave exactly as they always have.
+- **Append `:convert` to any aggregate** (`SUM`, `AVG`, `MIN`, `MAX`) to convert first. `MIN`/`MAX` compare converted amounts, so the smallest _number_ isn't mistaken for the smallest _amount_.
+- **Rates come from Setup → Manage Currencies** (`CurrencyType`), pivoting through your corporate currency. If a rate is missing, the tag fails with an actionable message rather than quietly returning an unconverted number.
+- **Advanced Currency Management dated rates are not used** — conversion applies your current static rate. See issue #273.
+- **Single-currency orgs are entirely unaffected.** None of this engages.
+- **Without `:convert`, nothing converts.** `{SUM:Lines.Amount:currency:EUR}` over EUR-only rows formats them as euros; it does not translate other currencies into euros.
 
 #### Number formatting
 

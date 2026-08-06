@@ -91,7 +91,11 @@ public with sharing class DocGenChartImageController {
         // Word, HTML, and PowerPoint all flow through the PNG-via-CV pipeline.
         // PowerPoint scans its slide XML for chart tags; the merge-time expander
         // + postProcessPowerPointSlides embed the resulting PNG as a <p:pic>. (#116/PPTX)
-        if (template.Type__c != 'Word' && template.Type__c != 'HTML' && template.Type__c != 'PowerPoint') {
+        if (
+            template.Type__c != 'Word' &&
+            !DocGenService.isHtmlBacked(template.Type__c) &&
+            template.Type__c != 'PowerPoint'
+        ) {
             return new List<ChartImageRequest>();
         }
 
@@ -167,7 +171,7 @@ public with sharing class DocGenChartImageController {
             return false;
         }
         String t = templates[0].Type__c;
-        if (t != 'Word' && t != 'HTML' && t != 'PowerPoint') {
+        if (t != 'Word' && !DocGenService.isHtmlBacked(t) && t != 'PowerPoint') {
             return false;
         }
         String body = loadActiveBody(t, templateId);
@@ -228,7 +232,11 @@ public with sharing class DocGenChartImageController {
         Map<String, String> chartCvMap = new Map<String, String>();
         // Word, HTML, and PowerPoint flow through the PNG-via-CV pipeline.
         // Excel embedding is not wired on this path yet.
-        if (template.Type__c != 'Word' && template.Type__c != 'HTML' && template.Type__c != 'PowerPoint') {
+        if (
+            template.Type__c != 'Word' &&
+            !DocGenService.isHtmlBacked(template.Type__c) &&
+            template.Type__c != 'PowerPoint'
+        ) {
             return chartCvMap;
         }
 
@@ -401,7 +409,7 @@ public with sharing class DocGenChartImageController {
      * XML concatenated; everything else (Word) → word/document.xml.
      */
     private static String loadActiveBody(String templateType, Id templateId) {
-        if (templateType == 'HTML') {
+        if (DocGenService.isHtmlBacked(templateType)) {
             return loadActiveHtmlBody(templateId);
         }
         if (templateType == 'PowerPoint') {

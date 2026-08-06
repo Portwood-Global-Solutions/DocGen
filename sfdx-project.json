@@ -1,15 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.53.0 — Excel files save as .xlsx + output format honored from Flow",
-      "versionNumber": "3.53.0.NEXT",
+      "versionName": "v3.54.0 — Canvas designer (Beta)",
+      "versionNumber": "3.54.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood",
-      "ancestorVersion": "3.52.0",
-      "versionDescription": "Portwood turns any Salesforce record into a finished document — quotes, invoices, contracts, certificates, letters and reports — as PDF, Word, Excel or PowerPoint. Build templates in a drag-and-drop visual editor, upload a Word file you already have, or describe what you want and let the built-in AI write it for you. Templates pull fields from the record and its related lists, and handle repeating tables, running totals, conditional sections, charts, images, watermarks and page setup. Users create documents in one click from a record page, a Lightning app page, a screen flow, or in bulk from a list view, then download them or save them straight back to the record. Send documents out for e-signature with automatic reminders, a full audit trail and a certificate of completion. Available in 10 languages. 100% native Salesforce — no external services or callouts. Free for all users."
+      "ancestorVersion": "3.53.0",
+      "versionDescription": "Portwood turns any Salesforce record into a finished document — quotes, invoices, contracts, certificates, letters and reports — as PDF, Word, Excel or PowerPoint. New in 3.54: the Canvas designer (Beta). Drag text, tables, images, shapes, QR codes, barcodes and signature blocks exactly where you want them and they land there in the PDF, to the inch — while line-item lists still flow across as many pages as the data needs. Tables can nest a second list under each row, boxes can be shown conditionally, and symbols such as checkmarks now print. 100% native Salesforce — no external services or callouts. Free for all users."
     },
     {
       "versionName": "v1.1.0 — Free install, no installation key",
@@ -240,6 +240,7 @@
     "Portwood Agentforce Extension@1.1.0-1": "04tVx000000zxUbIAI",
     "Portwood@3.51.0-1": "04tVx000000zxWDIAY",
     "Portwood@3.52.0-1": "04tVx000000zz6bIAA",
-    "Portwood@3.53.0-1": "04tVx0000010BvlIAE"
+    "Portwood@3.53.0-1": "04tVx0000010BvlIAE",
+    "Portwood@3.54.0-1": "04tVx0000010Y4LIAU"
   }
 }

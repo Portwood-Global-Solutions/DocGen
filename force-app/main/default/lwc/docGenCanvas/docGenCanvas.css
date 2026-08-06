@@ -1,0 +1,967 @@
+/* Canva-shaped shell: icon rail, then a panel, then the stage. */
+/* ONE height for the whole editor.
+   The shell, the panel, the element list and the scrolling stage were on four
+   different values (78vh / 72vh / 78vh / 68vh), so the side menus ran on past the
+   bottom of the canvas area and the page needed its own scroll while there was still
+   room beside it. They all derive from --dg-h now, and it tracks the window rather
+   than being a fixed fraction of it, so a taller screen gives the canvas the space
+   instead of leaving a grey band. */
+.dg-canvas-shell {
+    --dg-shell-h: calc(100vh - 170px);
+    display: table;
+    width: 100%;
+    height: var(--dg-shell-h);
+    min-height: 560px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    background: var(--slds-g-color-surface-2, #f3f4f6);
+    table-layout: fixed;
+}
+
+.dg-rail,
+.dg-panel,
+.dg-stage,
+.dg-splitter,
+.dg-layers {
+    display: table-cell;
+    vertical-align: top;
+}
+
+/* Light rail, dark text.
+   It was a dark rail with light text via var(--slds-g-color-surface-container-2,
+   #1f2937) — but that hook resolves to a LIGHT surface, so the background flipped
+   while the text stayed pale and the labels became unreadable. Background and
+   foreground now come from a matched pair, so a hook resolving differently can never
+   leave one readable and the other not. */
+.dg-rail {
+    width: 72px;
+    background: var(--slds-g-color-surface-2, #f3f4f6);
+    border-right: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    padding: var(--slds-g-spacing-2, 8px) 0;
+}
+
+.dg-tool {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--slds-g-color-on-surface-1, #1f2937);
+    padding: 10px var(--slds-g-spacing-1, 4px);
+    cursor: pointer;
+    text-align: center;
+    font-size: 0.7rem;
+}
+
+.dg-tool:hover {
+    background: var(--slds-g-color-surface-3, #e5e7eb);
+}
+
+.dg-tool_active {
+    background: #ede9fe;
+    color: #5b21b6;
+    font-weight: var(--slds-g-font-weight-7, 700);
+}
+
+/* Inline SVG, stroked with currentColor so the glyph follows the button's text colour
+   — including the active state — without a second set of rules to keep in step. */
+.dg-rail-icon {
+    width: 22px;
+    height: 22px;
+    display: block;
+    margin: 0 auto 2px;
+    color: inherit;
+    flex: none;
+}
+
+.dg-rail-label {
+    display: block;
+    margin-top: 3px;
+}
+
+/* Drag handle between the panel and the canvas. A table-cell of its own so neither
+   neighbour's overflow can clip it. */
+.dg-splitter {
+    width: 6px;
+    cursor: col-resize;
+    background: var(--slds-g-color-surface-2, #f3f4f6);
+    border-right: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+.dg-splitter:hover {
+    background: #c7d2fe;
+}
+
+/* The editor's height is dragged rather than fixed — writing a paragraph in a 220px
+   box is the complaint this answers. */
+.dg-editor-wrap lightning-input-rich-text {
+    display: block;
+    min-height: var(--dg-editor-h, 220px);
+}
+
+.dg-editor-grip {
+    height: 8px;
+    margin: 2px 0 6px 0;
+    cursor: row-resize;
+    border-radius: 3px;
+    background: repeating-linear-gradient(90deg, #d1d5db, #d1d5db 3px, transparent 3px, transparent 7px);
+}
+
+.dg-editor-grip:hover {
+    background: repeating-linear-gradient(90deg, #93a3b8, #93a3b8 3px, transparent 3px, transparent 7px);
+}
+
+/* Wide enough to hold the rich-text editor's own overlays.
+   The link tooltip is an absolutely-positioned panel roughly 300px across, and this
+   column both clips (overflow-y: auto) and is narrower than that — so opening it put
+   its URL field half outside the panel and there was no way to finish typing a link.
+   Nothing here can stop an ancestor clipping an overlay, so the column has to be big
+   enough that the overlay never needs to escape it. */
+.dg-panel {
+    /* Starting width; the splitter overrides it inline. */
+    width: 340px;
+    background: var(--slds-g-color-surface-1, #fff);
+    border-right: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    padding: 14px;
+    /* Scrolls on its own rather than stretching the shell. The table row takes the
+       height of its tallest cell, so a long properties panel dragged the whole editor
+       taller and pushed the canvas down the page. */
+    max-height: var(--dg-shell-h);
+    overflow-y: auto;
+    /* Overlays inside are positioned relative to this column. */
+    position: relative;
+}
+
+.dg-panel-title {
+    font-size: 0.95rem;
+    font-weight: var(--slds-g-font-weight-7, 700);
+    margin: 0 0 6px 0;
+}
+
+.dg-panel-hint,
+.dg-panel-note {
+    font-size: 0.78rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    line-height: 1.35;
+    margin: 0 0 10px 0;
+}
+
+.dg-panel-btn {
+    display: block;
+    width: 100%;
+    padding: 7px 10px;
+    margin-bottom: var(--slds-g-spacing-2, 8px);
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    background: var(--slds-g-color-surface-1, #fff);
+    border-radius: var(--slds-g-radius-border-2, 6px);
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.dg-panel-btn:hover {
+    background: var(--slds-g-color-surface-2, #f9fafb);
+}
+
+.dg-panel-btn_danger {
+    color: var(--slds-g-color-error-base-30, #991b1b);
+}
+
+.dg-stage {
+    background: var(--slds-g-color-surface-2, #eef0f3);
+}
+
+.dg-quickbar {
+    padding: 6px 10px;
+    background: var(--slds-g-color-surface-1, #fff);
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+.dg-qb-btn {
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    background: var(--slds-g-color-surface-1, #fff);
+    width: var(--slds-g-sizing-7, 24px);
+    height: var(--slds-g-sizing-7, 24px);
+    cursor: pointer;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+}
+
+.dg-qb-zoom {
+    display: inline-block;
+    width: var(--slds-g-sizing-10, 48px);
+    text-align: center;
+    font-size: 0.78rem;
+}
+
+.dg-qb-sep {
+    display: inline-block;
+    width: 14px;
+}
+
+.dg-qb-save {
+    border: none;
+    background: var(--slds-g-color-accent-2, #1d4ed8);
+    color: #fff;
+    padding: 5px 14px;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.dg-qb-status {
+    margin-left: 10px;
+    font-size: var(--slds-g-font-scale-neg-1, 0.75rem);
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-scroll {
+    padding: 20px;
+    overflow: auto;
+    /* The shell height less the quickbar row. */
+    height: calc(var(--dg-shell-h) - 48px);
+    min-height: 420px;
+}
+
+.dg-board-wrap {
+    margin: 0 auto var(--slds-g-spacing-5, 24px) auto;
+    display: table;
+}
+
+.dg-board-label {
+    font-size: 0.72rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    margin-bottom: var(--slds-g-spacing-1, 4px);
+}
+
+/* The artboard. A white sheet at true page proportions — 1in = 96 CSS px x zoom,
+   so what is measured here is what the PDF gets. */
+.dg-board {
+    cursor: crosshair;
+}
+
+.dg-cbox {
+    border: var(--slds-g-sizing-border-1, 1px) dashed rgba(124, 58, 237, 0.45);
+    cursor: move;
+    box-sizing: border-box;
+}
+
+.dg-cbox_selected {
+    border: 2px solid rgba(124, 58, 237, 0.9);
+}
+
+.dg-cbox-body {
+    padding: 2px 3px;
+    outline: none;
+    /* Read-only: content is authored in the panel, so the box is for arranging. */
+    cursor: move;
+    min-height: 1em;
+    font-size: 11pt;
+}
+
+/* Readout rides above the box so the author can see real inches while dragging —
+   pixel-exactness is only useful if the number is visible. */
+.dg-cbox-readout {
+    position: absolute;
+    top: -18px;
+    left: 0;
+    background: rgba(124, 58, 237, 0.9);
+    color: #fff;
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    white-space: nowrap;
+}
+
+.dg-h {
+    position: absolute;
+    background: #7c3aed;
+    width: var(--slds-g-sizing-3, 8px);
+    height: var(--slds-g-sizing-3, 8px);
+}
+
+.dg-h_e {
+    right: -5px;
+    top: 50%;
+    cursor: ew-resize;
+}
+
+.dg-h_s {
+    bottom: -5px;
+    left: 50%;
+    cursor: ns-resize;
+}
+
+.dg-h_se {
+    right: -5px;
+    bottom: -5px;
+    cursor: nwse-resize;
+}
+
+/* Property rows in the panel */
+.dg-prop-row {
+    margin: var(--slds-g-spacing-2, 8px) 0;
+}
+
+.dg-prop-label {
+    font-size: 0.72rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    margin-right: var(--slds-g-spacing-1, 4px);
+}
+
+.dg-prop-num {
+    width: 62px;
+    padding: 3px 5px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    font-size: 0.78rem;
+}
+
+.dg-prop-num_sm {
+    width: 46px;
+}
+
+.dg-prop-color {
+    width: 30px;
+    height: var(--slds-g-sizing-7, 24px);
+    padding: 0;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    vertical-align: middle;
+    cursor: pointer;
+    margin-right: 6px;
+}
+
+.dg-sbtn {
+    min-width: 26px;
+    height: var(--slds-g-sizing-7, 24px);
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    background: var(--slds-g-color-surface-1, #fff);
+    cursor: pointer;
+    font-size: 0.78rem;
+    margin-right: 3px;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+}
+
+.dg-sbtn_on {
+    background: rgba(124, 58, 237, 0.15);
+    border-color: rgba(124, 58, 237, 0.7);
+}
+
+.dg-prop-gap {
+    display: inline-block;
+    width: 10px;
+}
+
+/* Table column editor */
+.dg-panel-sub {
+    font-size: 0.82rem;
+    font-weight: var(--slds-g-font-weight-7, 700);
+    margin: var(--slds-g-spacing-3, 12px) 0 var(--slds-g-spacing-1, 4px) 0;
+}
+
+.dg-prop-text {
+    padding: 3px 5px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    font-size: var(--slds-g-font-scale-neg-1, 0.75rem);
+    width: 140px;
+}
+
+.dg-col-row {
+    margin-bottom: var(--slds-g-spacing-1, 4px);
+    white-space: nowrap;
+}
+
+.dg-col-num {
+    display: inline-block;
+    width: 14px;
+    font-size: 0.68rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-col-label {
+    width: 68px;
+}
+
+.dg-col-tag {
+    width: 78px;
+}
+
+.dg-col-w {
+    width: 40px;
+}
+
+/* Table cells inside a canvas box must not inherit the box's text padding twice. */
+/* The table display model, pinned explicitly.
+   SLDS normalizes tables across the whole page, and a cell that inherits `display:
+   block` stops being a cell — the columns stack into a single ragged column and the
+   table looks broken on the canvas while the PDF, which never sees SLDS, renders it
+   correctly. This is the same trap that removed list markers earlier: the inline
+   styles the serializer writes cover borders, padding and typography, so nothing was
+   defending `display`, and a reset elsewhere on the page wins by default.
+   Stated here so no page-level stylesheet can take the table apart. */
+.dg-cbox-body table {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+.dg-cbox-body thead {
+    display: table-header-group;
+}
+
+.dg-cbox-body tbody {
+    display: table-row-group;
+}
+
+.dg-cbox-body tr {
+    display: table-row;
+}
+
+.dg-cbox-body th,
+.dg-cbox-body td {
+    display: table-cell;
+    vertical-align: top;
+    /* A long unbroken merge tag must not force a column wider than the page. */
+    word-break: break-word;
+}
+
+/* The text box IS a textarea — see canvasModel's note on why. It has to look like
+   nothing: no chrome, no resize grip, and it must inherit the box's own typography
+   so the canvas keeps matching the PDF. */
+textarea.dg-cbox-text {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    resize: none;
+    overflow: hidden;
+    outline: none;
+    font: inherit;
+    color: inherit;
+    text-align: inherit;
+    line-height: inherit;
+    padding: 0;
+    margin: 0;
+    min-height: 1.2em;
+}
+
+/* Alignment guides. Drawn from model inches, so they stay true at any zoom. */
+.dg-guide {
+    background: #e5399e;
+    pointer-events: none;
+    z-index: 50;
+}
+
+/* A literal row edits as one labelled field per column — not a pipe-separated string. */
+.dg-row-block {
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    padding: 6px;
+    margin-bottom: 6px;
+}
+
+.dg-row-head {
+    margin-bottom: var(--slds-g-spacing-1, 4px);
+}
+
+.dg-row-del {
+    float: right;
+    min-width: var(--slds-g-sizing-10, 48px);
+    color: var(--slds-g-color-error-base-30, #991b1b);
+}
+
+.dg-cell-row {
+    margin: 3px 0;
+    white-space: nowrap;
+}
+
+.dg-cell-label {
+    display: inline-block;
+    width: 66px;
+    font-size: 0.68rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+.dg-cell-input {
+    width: 150px;
+}
+
+/* Field chips — click to place, never type from memory. */
+.dg-field-chips {
+    margin-bottom: 10px;
+}
+
+.dg-field-chip {
+    display: inline-block;
+    margin: 0 3px 3px 0;
+    padding: 2px 7px;
+    border: var(--slds-g-sizing-border-1, 1px) solid rgba(124, 58, 237, 0.35);
+    background: rgba(124, 58, 237, 0.08);
+    border-radius: var(--slds-g-radius-border-4, 50px);
+    font-size: 0.7rem;
+    cursor: pointer;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.dg-field-chip:hover {
+    background: rgba(124, 58, 237, 0.18);
+}
+
+.dg-query-preview {
+    font-family: monospace;
+    font-size: 0.68rem;
+    background: var(--slds-g-color-surface-2, #f3f4f6);
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    padding: 6px;
+    margin-bottom: var(--slds-g-spacing-2, 8px);
+    word-break: break-word;
+    max-height: 120px;
+    overflow: auto;
+}
+
+/* A mismatch between the canvas and the query renders an empty table with no error —
+   so say it here rather than letting it be discovered at generate time. */
+.dg-panel-warn {
+    font-size: var(--slds-g-font-scale-neg-1, 0.75rem);
+    line-height: 1.35;
+    background: #fff4e5;
+    border: var(--slds-g-sizing-border-1, 1px) solid #f0b429;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    padding: 6px var(--slds-g-spacing-2, 8px);
+    margin: 0 0 10px 0;
+}
+
+.dg-qb-wide {
+    width: auto;
+    padding: 0 10px;
+    font-size: 0.78rem;
+}
+
+/* The query is editable HERE because the canvas is where you discover it is wrong. */
+.dg-query-edit {
+    width: 100%;
+    min-height: 68px;
+    font-family: monospace;
+    font-size: 0.68rem;
+    padding: 6px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    margin-bottom: 6px;
+}
+
+.dg-preview-wrap {
+    padding: 10px;
+    background: var(--slds-g-color-surface-1, #fff);
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+.dg-preview-bar {
+    font-size: var(--slds-g-font-scale-neg-1, 0.75rem);
+    margin-bottom: 6px;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-preview-bar button {
+    float: right;
+}
+
+.dg-preview-frame {
+    width: 100%;
+    height: 60vh;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+/* A save that did not happen has to be impossible to miss. */
+.dg-save-error {
+    background: #fdeaea;
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid #c23934;
+    color: #8c1d18;
+    padding: var(--slds-g-spacing-2, 8px) var(--slds-g-spacing-3, 12px);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.dg-save-error button {
+    float: right;
+}
+
+.dg-page-del {
+    float: right;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    background: var(--slds-g-color-surface-1, #fff);
+    color: var(--slds-g-color-error-base-30, #991b1b);
+    font-size: 0.68rem;
+    padding: 1px 7px;
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    cursor: pointer;
+}
+
+.dg-qb-version {
+    display: inline-block;
+    width: 230px;
+    vertical-align: middle;
+}
+
+/* The data picker takes the stage — it needs far more width than the panel has. */
+.dg-data-wrap {
+    padding: 10px;
+    background: var(--slds-g-color-surface-1, #fff);
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    max-height: var(--dg-shell-h);
+    overflow: auto;
+}
+
+.dg-data-bar {
+    font-size: 0.78rem;
+    margin-bottom: 8px;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-data-bar button {
+    float: right;
+    margin-left: 6px;
+}
+
+/* ---- Image picker -------------------------------------------------------- */
+.dg-file {
+    width: 100%;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.dg-imggrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.dg-imgcard {
+    background: #fff;
+    border: 1px solid #d4dbe4;
+    border-radius: 4px;
+    padding: 4px;
+    cursor: pointer;
+    text-align: center;
+    overflow: hidden;
+}
+
+.dg-imgcard_on {
+    border-color: #0176d3;
+    box-shadow: 0 0 0 1px #0176d3;
+}
+
+.dg-imgthumb {
+    display: block;
+    width: 100%;
+    height: 48px;
+    object-fit: contain;
+}
+
+.dg-imgname {
+    display: block;
+    font-size: 10px;
+    color: #444;
+    /* One line, clipped — a long file name must not stretch the 260px panel. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Page setup ---------------------------------------------------------- */
+.dg-pagesetup {
+    padding: 10px 12px 14px;
+    display: grid;
+    grid-template-columns: 200px 200px 1fr;
+    gap: 14px;
+    align-items: start;
+}
+
+.dg-margin-grid .dg-row {
+    gap: 4px;
+}
+
+@media (max-width: 900px) {
+    .dg-pagesetup {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* The back button carries an icon AND a word, so it cannot use the bare .dg-qb-btn —
+   that is a fixed 24x24 square built for the single-glyph zoom controls, and the label
+   was being crushed inside it. Auto width, and inline-flex so the chevron and the word
+   sit on one baseline instead of the icon pushing the text out of the box. */
+.dg-qb-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    width: auto;
+    height: auto;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    margin-right: 8px;
+}
+
+.dg-qb-icon {
+    width: 14px;
+    height: 14px;
+    /* Never let the flex row shrink the glyph into an ellipse. */
+    flex: none;
+}
+
+/* SLDS normalizes `ul, ol { list-style: none }` across the whole page, so a numbered
+   or bulleted list authored in the rich-text editor showed on the canvas as plain
+   lines while the PDF rendered proper markers — the editor quietly disagreeing with
+   the output again. Restored inside the box body only, so nothing else is affected. */
+.dg-cbox-body ol {
+    list-style: decimal outside;
+    margin: 0 0 0 1.5em;
+    padding: 0;
+}
+
+.dg-cbox-body ul {
+    list-style: disc outside;
+    margin: 0 0 0 1.5em;
+    padding: 0;
+}
+
+.dg-cbox-body li {
+    display: list-item;
+    margin: 0;
+    padding: 0;
+}
+
+/* Per-level markers, identical to the rules in canvasModel.buildCanvasCss. A nested
+   item numbered 1. on both surfaces read as a new list rather than a sub-point. */
+.dg-cbox-body ol ol {
+    list-style: lower-alpha outside;
+}
+
+.dg-cbox-body ol ol ol {
+    list-style: lower-roman outside;
+}
+
+.dg-cbox-body ul ul {
+    list-style: circle outside;
+}
+
+.dg-cbox-body ul ul ul {
+    list-style: square outside;
+}
+
+/* Matches the `p` rule in canvasModel.buildCanvasCss — 0.06in at 96dpi. */
+.dg-cbox-body p {
+    margin: 0 0 5.76px 0;
+}
+
+/* The sheet of paper. The artboard sits inside it, inset by the margins, so the
+   printable area and the paper are both visible and the difference between them is
+   obvious at a glance. */
+.dg-paper {
+    background: #fff;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.22);
+    display: inline-block;
+    /* The margin area, marked without shouting. */
+    background-image: linear-gradient(#fafbfc, #fafbfc);
+}
+
+.dg-paper .dg-board {
+    box-shadow: none;
+    outline: 1px dashed #b6c2d1;
+}
+
+.dg-sample-pick {
+    padding: 10px 12px 4px;
+    max-width: 420px;
+}
+
+/* ---- Layers ---------------------------------------------------------------
+   A third column, because once boxes overlap the artboard alone cannot reach the
+   one underneath — and a full-bleed background makes everything under it
+   unreachable at once. */
+/* A real table-cell with a stated width. As a plain div it became an ANONYMOUS cell
+   in the table-layout:fixed shell, which threw the column widths out — the stage was
+   squeezed until the page itself was clipped, and dead space opened to the right.
+   Off by default so it costs nothing until it is wanted. */
+.dg-layers {
+    width: 170px;
+    vertical-align: top;
+    border-left: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+    background: var(--slds-g-color-surface-1, #fff);
+    overflow-y: auto;
+    max-height: var(--dg-shell-h);
+    padding-bottom: 12px;
+}
+
+.dg-layers-head {
+    padding: 8px 10px;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+.dg-layer {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    border-bottom: 1px solid #f1f3f6;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.dg-layer:hover {
+    background: #f5f7fa;
+}
+
+.dg-layer_on {
+    background: #ede9fe;
+}
+
+.dg-layer-kind {
+    display: block;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #7c3aed;
+}
+
+.dg-layer-name {
+    display: block;
+    font-size: 0.74rem;
+    color: #1f2937;
+    /* One line — a long text box must not stretch the column. */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dg-layers-empty {
+    padding: 10px;
+    font-size: 0.72rem;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-qb-btn_off {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.dg-page-dup {
+    background: none;
+    border: none;
+    color: #1d4ed8;
+    font-size: 0.7rem;
+    cursor: pointer;
+    margin-left: 8px;
+    padding: 0;
+}
+
+.dg-page-dup:hover {
+    text-decoration: underline;
+}
+
+.dg-layers-close {
+    float: right;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    padding: 0 2px;
+}
+
+/* Hidden: the visible control is the toolbar button, which calls click() on this. */
+.dg-import-input {
+    display: none;
+}
+
+.dg-import-report {
+    padding: 8px 12px;
+    background: #fffbea;
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid #e6d9a8;
+    font-size: 0.76rem;
+}
+
+.dg-import-head {
+    font-weight: var(--slds-g-font-weight-7, 700);
+    margin-bottom: 4px;
+}
+
+.dg-import-list {
+    margin: 2px 0 4px 18px;
+    list-style: disc outside;
+}
+
+.dg-import-list li {
+    display: list-item;
+    margin: 1px 0;
+}
+
+.dg-import-list_note {
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}
+
+.dg-srctoggle {
+    margin-bottom: 6px;
+}
+
+/* The markup behind a text box. Monospace because it is code, and tall enough to see
+   a table's structure without scrolling one row at a time. */
+.dg-source-edit {
+    width: 100%;
+    min-height: 150px;
+    font-family: var(--slds-g-font-family-monospace, monospace);
+    font-size: 0.72rem;
+    line-height: 1.45;
+    padding: 6px;
+    border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
+    border-radius: var(--slds-g-radius-border-1, 4px);
+    resize: vertical;
+}
+
+/* The rich-text editor's link overlay must be reachable inside a scrolling column.
+   Quill positions it absolutely against the editor; without a floor on the editor's
+   own height the overlay can open below the visible area of the panel with nothing
+   to scroll to. */
+
+/* Says BETA where the work happens, not only on the tab. Matches the flow designer's
+   chip so the two surfaces make the same promise. */
+.dg-beta-chip {
+    display: inline-block;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 0.62rem;
+    font-weight: var(--slds-g-font-weight-7, 700);
+    letter-spacing: 0.06em;
+    margin-right: 8px;
+    vertical-align: middle;
+    cursor: help;
+}
+
+.dg-sym-chip {
+    background: var(--slds-g-color-surface-1, #fff);
+    border: 1px solid var(--slds-g-color-border-1, #d1d5db);
+    border-radius: 4px;
+    min-width: 28px;
+    padding: 3px 6px;
+    margin: 0 4px 4px 0;
+    font-size: 0.9rem;
+    line-height: 1.1;
+    cursor: pointer;
+}
+
+.dg-sym-chip:hover {
+    background: #ede9fe;
+    border-color: #7c3aed;
+}

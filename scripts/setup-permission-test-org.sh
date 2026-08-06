@@ -78,12 +78,18 @@ else
     if [[ -n "$INSTALL_VERSION" ]]; then
         ns_flag=(--no-namespace)
     fi
+    # ${arr[@]+"${arr[@]}"} not "${arr[@]}": macOS ships bash 3.2, where expanding an
+    # EMPTY array under `set -u` is an unbound-variable error. Default (namespaced) mode
+    # leaves ns_flag empty, so this line aborted every namespaced run on macOS with
+    # "ns_flag[@]: unbound variable" — meaning the one mode that reproduces LWS
+    # namespace-sandbox bugs could never start here, while --install mode worked because
+    # its branch populates the array.
     sf org create scratch \
         --definition-file "$DEF_FILE" \
         --alias "$ALIAS" \
         --duration-days "$DURATION" \
         --target-dev-hub "$DEVHUB" \
-        "${ns_flag[@]}" \
+        ${ns_flag[@]+"${ns_flag[@]}"} \
         --wait 30
 fi
 

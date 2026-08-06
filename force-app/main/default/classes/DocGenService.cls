@@ -656,6 +656,16 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String outputFormat = (String) dataMap.get('outputFormat');
         String templateType = (String) dataMap.get('templateType');
 
+        // A Canvas template's body IS an HTML document — the canvas editor is an
+        // authoring surface that serializes to absolutely-positioned boxes inside
+        // position:relative artboards. Normalising here rather than adding `||
+        // 'Canvas'` to the twelve downstream `templateType == 'HTML'` branches is
+        // deliberate: one of those twelve WOULD get missed, and the failure mode is a
+        // Canvas template silently taking the DOCX path and rendering as garbage.
+        if (templateType == 'Canvas') {
+            templateType = 'HTML';
+        }
+
         // Allow callers to force PDF output format
         if (outputFormatOverride != null) {
             outputFormat = outputFormatOverride;
@@ -5808,6 +5818,19 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return (negative ? '-' : '') + result + decPart;
     }
 
+    /**
+     * True for template types whose stored body is an HTML document.
+     *
+     * `Canvas` is an AUTHORING type, not a rendering one: the canvas editor serializes
+     * its artboards and boxes to ordinary HTML (absolutely positioned boxes inside
+     * position:relative artboards — see scripts/canvas-layout-model-probe.apex), so
+     * every downstream concern that cares "is the body HTML?" must answer yes for it.
+     * That covers body storage, clone image rewriting and the render fork.
+     */
+    public static Boolean isHtmlBacked(String templateType) {
+        return templateType == 'HTML' || templateType == 'Canvas';
+    }
+
     private static Boolean isNumericFormat(String fmt) {
         if (fmt == null) {
             return false;
@@ -6135,18 +6158,35 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
 
         List<Decimal> values = new List<Decimal>();
+        // Currency ISO of each contributing row, index-aligned with `values`. Only
+        // populated for currency-formatted aggregates in multi-currency orgs — see
+        // applyCurrencySemantics below.
+        List<String> rowIsos = new List<String>();
+        Boolean trackCurrency = DocGenCurrency.isCurrencyFormat(numberFormat) && DocGenCurrency.isMultiCurrency();
+        String isoSourceField = trackCurrency ? currencyIsoSourceField(numberFormat) : null;
+
         for (Object item : records) {
             if (item instanceof Map<String, Object>) {
-                Object fieldVal = resolveValue((Map<String, Object>) item, fieldName);
+                Map<String, Object> row = (Map<String, Object>) item;
+                Object fieldVal = resolveValue(row, fieldName);
                 if (fieldVal != null) {
                     try {
                         values.add(Decimal.valueOf(String.valueOf(fieldVal)));
+                        if (trackCurrency) {
+                            rowIsos.add(DocGenCurrency.isoOfRow(row, isoSourceField));
+                        }
                     } catch (Exception e) {
                         // Intentionally swallowed — non-numeric value, skip
                         String noop = e.getMessage(); // NOPMD UnusedLocalVariable — satisfies EmptyCatchBlock rule
                     }
                 }
             }
+        }
+
+        // Reject (or convert) mixed-currency row sets BEFORE aggregating — summing across
+        // currencies and stamping one symbol on the result is silently wrong output.
+        if (trackCurrency) {
+            values = applyCurrencySemantics(values, rowIsos, numberFormat, tagContent, data);
         }
 
         if (values.isEmpty()) {
@@ -6189,11 +6229,87 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             return null;
         }
 
-        // Apply format specifier if provided, otherwise strip trailing zeros
+        // Apply format specifier if provided, otherwise strip trailing zeros.
+        // `:convert` is an aggregation-time instruction, already applied above — strip it
+        // so the formatter sees the plain `currency:ISO[:locale]` grammar it understands.
         if (numberFormat != null && isNumericFormat(numberFormat)) {
-            return formatNumber(result, numberFormat, data);
+            return formatNumber(result, DocGenCurrency.stripConvertSegment(numberFormat), data);
         }
         return result.stripTrailingZeros().toPlainString();
+    }
+
+    /**
+     * The record field an aggregate's currency codes should be read from. Mirrors the
+     * formatter's `{…:currency:auto=Field__c}` grammar so a template that names a custom
+     * currency field for formatting uses that same field for the mixed-currency guard.
+     * Null → the standard `CurrencyIsoCode`.
+     */
+    private static String currencyIsoSourceField(String fmt) {
+        if (String.isBlank(fmt)) {
+            return null;
+        }
+        List<String> segs = fmt.trim().split(':');
+        if (segs.size() < 2) {
+            return null;
+        }
+        String spec = segs[1].trim();
+        return spec.toLowerCase().startsWith('auto=') ? spec.substring(spec.indexOf('=') + 1).trim() : null;
+    }
+
+    /**
+     * Applies currency semantics to an aggregate's contributing values.
+     *
+     * With `:convert`, every row is converted from its own currency into the tag's target
+     * currency, so the subsequent SUM/AVG/MIN/MAX operates on comparable numbers. Without
+     * it, a row set spanning more than one currency throws rather than producing a total
+     * that is arithmetically meaningless but looks authoritative.
+     *
+     * Rows with no ISO code (the field isn't in the Query Config) are left alone — we
+     * can't know what they are, and guessing is how the original bug happened.
+     */
+    private static List<Decimal> applyCurrencySemantics(
+        List<Decimal> values,
+        List<String> rowIsos,
+        String fmt,
+        String tagContent,
+        Map<String, Object> data
+    ) {
+        Set<String> distinct = new Set<String>();
+        for (String iso : rowIsos) {
+            if (String.isNotBlank(iso)) {
+                distinct.add(iso);
+            }
+        }
+        if (distinct.size() <= 1) {
+            return values;
+        }
+
+        if (!DocGenCurrency.wantsConversion(fmt)) {
+            // Names the tag and the offending codes — see DocGenCurrency.assertSingleCurrency.
+            DocGenCurrency.assertSingleCurrency(distinct, tagContent);
+        }
+
+        // Target currency: the explicitly named ISO, or for the `auto` forms the code the
+        // formatter will ultimately stamp on the result — read off the parent record.
+        String targetIso = DocGenCurrency.explicitTargetIso(fmt);
+        if (String.isBlank(targetIso)) {
+            targetIso = resolveCurrencyIso(data, currencyIsoSourceField(fmt));
+        }
+        if (String.isBlank(targetIso)) {
+            throw new DocGenException(
+                'Cannot convert {' +
+                    tagContent +
+                    '}: no target currency. Name one explicitly (e.g. currency:EUR:convert) ' +
+                    'or ensure the parent record has a currency field for the "auto" form.'
+            );
+        }
+
+        List<Decimal> converted = new List<Decimal>();
+        for (Integer i = 0; i < values.size(); i++) {
+            String fromIso = i < rowIsos.size() ? rowIsos[i] : null;
+            converted.add(String.isBlank(fromIso) ? values[i] : DocGenCurrency.convert(values[i], fromIso, targetIso));
+        }
+        return converted;
     }
 
     /** Extracts the child record list from the data map. */

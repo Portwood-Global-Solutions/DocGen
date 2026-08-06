@@ -18,13 +18,22 @@
     text-transform: uppercase;
     letter-spacing: 0.3px;
 }
-.badge-main { background: var(--slds-g-color-accent-1, #0176D3); color: var(--slds-g-color-surface-1, #fff); }
-.badge-related { background: var(--slds-g-color-palette-green-50, #2E844A); color: var(--slds-g-color-surface-1, #fff); }
-.badge-linked { background: var(--slds-g-color-border-warning-1, #FE9339); color: var(--slds-g-color-surface-1, #fff); }
+.badge-main {
+    background: var(--slds-g-color-accent-1, #0176d3);
+    color: var(--slds-g-color-surface-1, #fff);
+}
+.badge-related {
+    background: var(--slds-g-color-palette-green-50, #2e844a);
+    color: var(--slds-g-color-surface-1, #fff);
+}
+.badge-linked {
+    background: var(--slds-g-color-border-warning-1, #fe9339);
+    color: var(--slds-g-color-surface-1, #fff);
+}
 
 .active-tab {
-    color: var(--slds-g-color-accent-1, #0176D3);
-    border-bottom-color: var(--slds-g-color-border-accent-1, #0176D3) !important;
+    color: var(--slds-g-color-accent-1, #0176d3);
+    border-bottom-color: var(--slds-g-color-border-accent-1, #0176d3) !important;
 }
 .inactive-tab {
     color: var(--slds-g-color-on-surface-1, #706e6b);
@@ -53,7 +62,7 @@
 .bare-button:focus-visible {
     outline: 2px solid #0176d3;
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: var(--slds-g-radius-border-1, 4px);
 }
 
 /* Visual highlight for the keyboard-active option in any combobox-style

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Invoice</title>
+    <style>
+        @page { size: Letter portrait; margin: 0.75in; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 10.5pt; color: #1a1a1a; margin: 0; }
+        h1 { font-size: 20pt; margin: 0 0 2pt 0; color: #1f3a5f; }
+        h2 { font-size: 13pt; margin: 18pt 0 6pt 0; color: #1f3a5f; border-bottom: 2pt solid #1f3a5f; padding-bottom: 3pt; }
+        table { width: 100%; border-collapse: collapse; border-spacing: 0; }
+        tr { page-break-inside: avoid; }
+        td, th { padding: 5pt 7pt; vertical-align: top; }
+        .meta { color: #666666; font-size: 9pt; }
+        .label-cell { width: 35%; font-weight: bold; color: #444444; background: #f2f4f7; border-bottom: 1pt solid #ffffff; }
+        .value-cell { border-bottom: 1pt solid #eeeeee; }
+        .data-table th { background: #1f3a5f; color: #ffffff; text-align: left; font-size: 9.5pt; }
+        .data-table td { border-bottom: 0.75pt solid #dddddd; }
+        .footer-note { margin-top: 24pt; padding-top: 6pt; border-top: 1pt solid #cccccc; color: #888888; font-size: 8.5pt; }
+    </style>
+</head>
+<body>
+    <table>
+        <tr>
+            <td style="width: 110pt; vertical-align: middle">{%asset:logo:144x}</td>
+            <td>
+                <h1>INVOICE</h1>
+                <div class="meta">Your Company Name</div>
+            </td>
+            <td style="text-align: right" class="meta">
+                Date: {Today:MM/dd/yyyy}<br />
+                Reference: {Name}
+            </td>
+        </tr>
+    </table>
+
+    <h2>Billed To</h2>
+    <table>
+            <tr>
+                <td class="label-cell">Name</td>
+                <td class="value-cell">{Name}</td>
+            </tr>
+            <tr>
+                <td class="label-cell">Account Number</td>
+                <td class="value-cell">{AccountNumber}</td>
+            </tr>
+            <tr>
+                <td class="label-cell">Industry</td>
+                <td class="value-cell">{Industry}</td>
+            </tr>
+            <tr>
+                <td class="label-cell">Phone</td>
+                <td class="value-cell">{Phone}</td>
+            </tr>
+            <tr>
+                <td class="label-cell">Billing City</td>
+                <td class="value-cell">{BillingCity}</td>
+            </tr>
+    </table>
+
+    <h2>Line Items</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th style="text-align: right">Amount</th>
+                    <th>Stage Name</th>
+                    <th>Close Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="page-break-inside: avoid">
+                    <td>{#Opportunities}{Name}</td>
+                    <td style="text-align: right">{Amount:currency}</td>
+                    <td>{StageName}</td>
+                    <td>{CloseDate}{/Opportunities}</td>
+                </tr>
+            </tbody>
+        </table>
+    <table style="margin-top: 8pt">
+        <tr>
+            <td style="width: 70%"></td>
+            <td class="label-cell" style="text-align: right">Total</td>
+            <td class="value-cell" style="text-align: right; font-weight: bold">{SUM:Opportunities.Amount:currency}</td>
+        </tr>
+    </table>
+
+    <div class="footer-note">Payment due within 30 days &#8226; Generated {Today:MMMM d, yyyy} by {RunningUser.Name}</div>
+</body>
+</html>

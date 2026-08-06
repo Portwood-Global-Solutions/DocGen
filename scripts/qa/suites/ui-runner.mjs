@@ -1351,9 +1351,7 @@ export async function run({ org, headed }) {
                     const pillValues = (lockedControls.pills || []).map((p) => p.v).sort();
                     // 'both' (Save & Download) is a DESTINATION choice like the other
                     // two — it is the combination of them, not an output format.
-                    const onlyDestination = pillValues.every(
-                        (v) => v === 'download' || v === 'save' || v === 'both'
-                    );
+                    const onlyDestination = pillValues.every((v) => v === 'download' || v === 'save' || v === 'both');
                     add({
                         ...check(
                             'a template with Lock_Output_Format__c exposes no runtime file-format control',
@@ -2495,7 +2493,7 @@ export async function run({ org, headed }) {
                             ? `component is in its error state: ${shown.trim().slice(0, 200)}`
                             : errored === null
                               ? 'the action screen had already closed itself, which it only does after a ' +
-                                    'successful generate'
+                                'successful generate'
                               : 'no error state',
                         SEVERITY.MAJOR
                     )
@@ -2662,7 +2660,8 @@ export async function run({ org, headed }) {
                     .catch(() => false);
                 const url = r.page.url();
                 const onLoginPage = /\/login|secur\/login/i.test(url) || !authed;
-                const challenged = /verify|challenge|_ui\/identity/i.test(url) || (await r.page.title()).match(/Verify/i);
+                const challenged =
+                    /verify|challenge|_ui\/identity/i.test(url) || (await r.page.title()).match(/Verify/i);
                 // FIRST-LOGIN PASSWORD RESET. A user created by `sf org create
                 // user` is sent to "Change Your Password" the first time its
                 // front-door URL is opened. A session cookie IS set, so the
@@ -2686,10 +2685,10 @@ export async function run({ org, headed }) {
                                       'once by hand and this check runs.'
                                 : challenged
                                   ? 'the org challenged the restricted identity for verification, so the record ' +
-                                        `page was never reached (landed on ${url.slice(0, 120)}).`
+                                    `page was never reached (landed on ${url.slice(0, 120)}).`
                                   : `the restricted user's front-door URL did not establish a session — still on ` +
-                                        `${url.slice(0, 120)}. Re-authorise the alias: sf org create user --target-org ` +
-                                        `${org} --definition-file scripts/qa/fixtures/restricted-user.json`,
+                                    `${url.slice(0, 120)}. Re-authorise the alias: sf org create user --target-org ` +
+                                    `${org} --definition-file scripts/qa/fixtures/restricted-user.json`,
                             SEVERITY.MAJOR
                         )
                     );
@@ -2710,9 +2709,10 @@ export async function run({ org, headed }) {
                             runnerText
                         );
                     const blank = runnerText.trim().length === 0;
-                    const gotSomething = /permission|access|contact your administrator|not available|no templates/i.test(
-                        runnerText + ' ' + body
-                    );
+                    const gotSomething =
+                        /permission|access|contact your administrator|not available|no templates/i.test(
+                            runnerText + ' ' + body
+                        );
                     add(
                         check(
                             'a user without the DocGen permission set gets a clear message, not a broken UI',
@@ -2757,7 +2757,13 @@ export async function run({ org, headed }) {
             await openRecord(page, base, acctId, 15000);
             const packetTab = await locateByText(page, 'a, button, span', 'Document Packet');
             if (!packetTab.found) {
-                add(skip('a Document Packet contains every document it was built from', 'packet tab not found', SEVERITY.MAJOR));
+                add(
+                    skip(
+                        'a Document Packet contains every document it was built from',
+                        'packet tab not found',
+                        SEVERITY.MAJOR
+                    )
+                );
             } else {
                 await clickAt(page, packetTab, 2500);
                 // Move the first two available templates into the packet by
@@ -2902,7 +2908,14 @@ export async function run({ org, headed }) {
                             )
                         );
                     } else {
-                        add(check('building a Document Packet produces a file', true, `downloaded "${file.name}"`, SEVERITY.MAJOR));
+                        add(
+                            check(
+                                'building a Document Packet produces a file',
+                                true,
+                                `downloaded "${file.name}"`,
+                                SEVERITY.MAJOR
+                            )
+                        );
                         const { available: pdfOk, pdfText } = await import('../lib/pdf.mjs');
                         if (!(await pdfOk())) {
                             add(

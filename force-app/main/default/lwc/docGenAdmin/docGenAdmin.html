@@ -492,6 +492,54 @@
                                         </div>
                                     </template>
 
+                                    <!-- Canvas path: straight to the artboard -->
+                                    <template if:true={isAuthoringCanvas}>
+                                        <div class="slds-box slds-theme_shade" style="border-radius: 8px" role="note">
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:layout"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                You get a blank artboard at true page size. Drop boxes exactly where you
+                                                want them and they land there in the PDF, to the inch. A box can be
+                                                <b>pinned</b> — it stays put — or set to <b>flow</b>, so a line-item
+                                                loop can grow and spill onto as many pages as the data needs. Add more
+                                                pages from the left rail.
+                                            </p>
+                                        </div>
+                                        <template if:true={isRecordDataSource}>
+                                            <template if:true={newTemplateObject}>
+                                                <div class="slds-var-m-top_small">
+                                                    <lightning-record-picker
+                                                        label="Sample Record (optional)"
+                                                        object-api-name={newTemplateObject}
+                                                        value={newTemplateSampleRecordId}
+                                                        onchange={handleSampleRecordChange}
+                                                        placeholder="Pick a record to preview with real data..."
+                                                    >
+                                                    </lightning-record-picker>
+                                                </div>
+                                            </template>
+                                        </template>
+                                        <div class="slds-var-m-top_medium">
+                                            <lightning-button
+                                                variant="brand"
+                                                label="Create &amp; Open Canvas"
+                                                icon-name="utility:layout"
+                                                onclick={handleCreateAndDesign}
+                                                disabled={isAutoCreating}
+                                            ></lightning-button>
+                                            <template if:true={isAutoCreating}>
+                                                <lightning-spinner
+                                                    alternative-text="Creating..."
+                                                    size="small"
+                                                    class="slds-var-m-left_small"
+                                                ></lightning-spinner>
+                                            </template>
+                                        </div>
+                                    </template>
+
                                     <!-- File path: classic Type/Output Format pickers -->
                                     <template if:true={isAuthoringFile}>
                                         <lightning-combobox
@@ -513,18 +561,17 @@
                                                         size="x-small"
                                                         class="slds-var-m-right_x-small"
                                                     ></lightning-icon>
-                                                    Word templates are converted to HTML for PDF output — complex
-                                                    layouts (text boxes, floating images, unusual tables) may not
-                                                    convert exactly. Keep Output Format&nbsp;<strong
-                                                        >Native (.docx)</strong
-                                                    >&nbsp;for full fidelity, upload
-                                                    an&nbsp;<strong>HTML</strong>&nbsp;file for a pixel-perfect PDF, or
-                                                    use&nbsp;<strong>Start from a Design</strong>&nbsp;/&nbsp;<strong
-                                                        >Generate with AI</strong
-                                                    >&nbsp;/&nbsp;<strong>Start From Scratch</strong>.
+                                                    A Word template stays a Word file. Choosing Output
+                                                    Format&nbsp;<strong>Native (.docx)</strong>&nbsp;generates the
+                                                    document with full fidelity.
+                                                    Choosing&nbsp;<strong>PDF</strong>&nbsp;converts it to HTML first,
+                                                    and complex layouts (text boxes, floating images, unusual tables)
+                                                    may not convert exactly. If you need a pixel-perfect PDF, build it
+                                                    on&nbsp;<strong>a Blank Canvas</strong>&nbsp;instead, where what you
+                                                    place is what prints.
                                                     <strong>Excel</strong
-                                                    >&nbsp;and&nbsp;<strong>PowerPoint</strong>&nbsp;templates always
-                                                    generate in their native format — no conversion involved.
+                                                    >&nbsp;and&nbsp;<strong>PowerPoint</strong>&nbsp;always generate in
+                                                    their native format — no conversion involved.
                                                 </p>
                                             </div>
                                         </template>
@@ -572,6 +619,20 @@
                                                 field-level-help="One value applies to all sides; four values are Top,Right,Bottom,Left in inches. Range 0.1–3.0."
                                             ></lightning-input>
                                         </template>
+                                    </template>
+                                    <template if:true={showCanvasPageNote}>
+                                        <div class="slds-box slds-theme_shade slds-var-m-top_medium" role="status">
+                                            <p class="slds-text-body_small">
+                                                <lightning-icon
+                                                    icon-name="utility:info"
+                                                    size="x-small"
+                                                    class="slds-var-m-right_x-small"
+                                                ></lightning-icon>
+                                                Page size, orientation and margins are set on the canvas itself, under
+                                                <b>Page</b> in the toolbar. A new canvas starts Letter, portrait, with
+                                                no margins — so what you place is exactly where it prints.
+                                            </p>
+                                        </div>
                                     </template>
                                     <template if:true={showHtmlPageRuleNote}>
                                         <div class="slds-box slds-theme_shade slds-var-m-top_medium" role="status">
@@ -1625,14 +1686,28 @@
                             </template>
                             <template if:false={hasDesignerTemplates}>
                                 <p class="dg-designer-empty__hint">
-                                    You have no HTML templates yet. Build one from&nbsp;<strong>Create New</strong
-                                    >&nbsp;— or open a Word template under&nbsp;<strong>Your Templates</strong>&nbsp;and
-                                    switch it to HTML.
+                                    Nothing to design yet. Make one from&nbsp;<strong>Create New</strong
+                                    >&nbsp;&rarr;&nbsp;<strong>Start from a Blank Canvas</strong>. Word, Excel,
+                                    PowerPoint and PDF templates keep their own format and are edited as files rather
+                                    than designed here.
                                 </p>
                             </template>
                         </div>
                     </template>
-                    <template if:true={designerHasTemplate}>
+                    <template if:true={showCanvasDesignerTab}>
+                        <c-doc-gen-canvas
+                            template-id={editTemplateId}
+                            page-size={editTemplatePageSize}
+                            orientation={editTemplatePageOrientation}
+                            query-config={editTemplateQuery}
+                            base-object={editTemplateObject}
+                            sample-record-id={editTemplateTestRecordId}
+                            onedittemplate={handleEditTemplateFromDesigner}
+                            onqueryupdated={handleCanvasQueryUpdated}
+                            onback={handleCanvasBack}
+                        ></c-doc-gen-canvas>
+                    </template>
+                    <template if:true={showFlowDesignerTab}>
                         <div class={designerShellClass}>
                             <div class="dg-designer-toolbar">
                                 <div class="dg-designer-toolbar__title">
@@ -2215,7 +2290,15 @@
                                         placeholder="Paste your template HTML here — from your AI assistant, Google Docs (File → Download → Web Page), or hand-written. Merge tags like &#123;Name&#125; fill from your Query Config."
                                     ></textarea>
                                 </div>
-                                <template if:true={showHtmlBodyVisual}>
+                                <template lwc:if={showCanvasDesigner}>
+                                    <c-doc-gen-canvas
+                                        template-id={editTemplateId}
+                                        page-size={editTemplatePageSize}
+                                        orientation={editTemplatePageOrientation}
+                                        onback={handleCanvasBack}
+                                    ></c-doc-gen-canvas>
+                                </template>
+                                <template if:true={showFlowDesigner}>
                                     <div class="dg-format-bar" role="toolbar" aria-label="Text formatting">
                                         <button
                                             class={boldBtnClass}
@@ -3562,6 +3645,20 @@
                                         ></lightning-combobox>
                                     </div>
                                     <div class="slds-col slds-size_1-of-2">
+                                        <template if:true={showEditCanvasPageBanner}>
+                                            <div class="slds-box slds-theme_shade" role="status" aria-live="polite">
+                                                <p class="slds-text-body_small">
+                                                    <lightning-icon
+                                                        icon-name="utility:info"
+                                                        size="x-small"
+                                                        class="slds-var-m-right_x-small"
+                                                    ></lightning-icon>
+                                                    Page setup for a Canvas template lives on the canvas, under
+                                                    <b>Page</b> in the Designer toolbar — size, orientation and margins
+                                                    together, with the artboard resizing to match.
+                                                </p>
+                                            </div>
+                                        </template>
                                         <template if:true={showEditHtmlOwnsPageBanner}>
                                             <div class="slds-box slds-theme_shade" role="status" aria-live="polite">
                                                 <p class="slds-text-body_small">
@@ -5009,7 +5106,7 @@
                                     </div>
                                     <div class="slds-box slds-theme_shade" style="border-radius: 6px">
                                         <template if:false={isEditTypeHtml}>
-                                            <template if:true={showEditFileUpload}>
+                                            <template if:true={showEditFileUploadForType}>
                                                 <lightning-file-upload
                                                     label="Upload New Version"
                                                     name="fileUploaderEdit"
@@ -5084,36 +5181,34 @@
                                                                     title="Rendered preview of the converted HTML"
                                                                 ></div>
                                                             </template>
-                                                            <div class="slds-var-m-top_x-small">
-                                                                <lightning-button
-                                                                    variant="brand"
-                                                                    label="Switch to HTML Template"
-                                                                    icon-name="utility:change_record_type"
-                                                                    onclick={handleSwitchToHtmlTemplate}
-                                                                    disabled={isSwitchingToHtml}
-                                                                ></lightning-button>
-                                                                <template if:true={isSwitchingToHtml}>
-                                                                    <lightning-spinner
-                                                                        alternative-text="Converting"
-                                                                        size="small"
-                                                                        class="slds-var-m-left_small"
-                                                                    ></lightning-spinner>
-                                                                </template>
-                                                                <span
-                                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-left_small"
-                                                                >
-                                                                    Fine-tuned this HTML? Converting makes it the
-                                                                    template's real body (Type becomes HTML) so your
-                                                                    edits stick. Until then this view is regenerated
-                                                                    from the Word file on every upload.
-                                                                </span>
-                                                            </div>
+                                                            <!-- "Switch to HTML Template" removed. A Word template
+                                                                 stays a Word template: converting changed its Type
+                                                                 and threw away .docx output for good, in exchange for
+                                                                 a translation that was never going to be exact. This
+                                                                 view stays useful as a way to SEE what the engine
+                                                                 renders when diagnosing a Word layout. -->
                                                         </div>
                                                     </template>
                                                 </div>
                                             </template>
                                         </template>
 
+                                        <template if:true={isCanvasTemplate}>
+                                            <div class="slds-box slds-var-m-top_medium">
+                                                <p class="slds-text-body_small slds-var-m-bottom_x-small">
+                                                    This is a <b>Canvas</b> template. Its layout is authored on the
+                                                    canvas — boxes, tables, images, shapes and codes placed where they
+                                                    print.
+                                                </p>
+                                                <lightning-button
+                                                    variant="brand"
+                                                    label="Open Canvas Designer"
+                                                    icon-name="utility:brush"
+                                                    onclick={handleOpenDesignerFromModal}
+                                                    title="Full-screen canvas: drag boxes onto the page and see exactly what prints."
+                                                ></lightning-button>
+                                            </div>
+                                        </template>
                                         <template if:true={isEditTypeHtml}>
                                             <label class="slds-form-element__label">Upload New Version</label>
                                             <p class="slds-text-body_small slds-var-m-bottom_x-small">
@@ -5135,12 +5230,16 @@
                                                 disabled={isUploadingHtml}
                                             >
                                             </lightning-button>
+                                            <!-- Legacy, and no longer the brand action. New work goes on
+                                                 the canvas; this stays for the HTML templates that already
+                                                 exist, because their render path is supported forever even
+                                                 though this editor is not where anyone should start. -->
                                             <lightning-button
-                                                variant="brand"
-                                                label="Open Designer"
+                                                variant="neutral"
+                                                label="Legacy designer"
                                                 icon-name="utility:brush"
                                                 onclick={handleOpenDesignerFromModal}
-                                                title="Full-screen visual designer: edit the rendered page, drag in blocks, tags, and images."
+                                                title="The older visual designer. New templates are better built on a Canvas."
                                                 class="slds-var-m-left_x-small"
                                             >
                                             </lightning-button>

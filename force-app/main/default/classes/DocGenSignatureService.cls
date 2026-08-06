@@ -1954,7 +1954,7 @@ public without sharing class DocGenSignatureService {
             documentXml = DocGenSignatureSenderController.resentinelSignatureBody(documentXml);
 
             String html;
-            if (templateType == 'HTML') {
+            if (DocGenService.isHtmlBacked(templateType)) {
                 html = stampSignaturesInHtml(documentXml, placements);
             } else {
                 // Stamp typed-name signatures into merged XML
@@ -2170,7 +2170,7 @@ public without sharing class DocGenSignatureService {
                 documentXml = DocGenSignatureSenderController.resentinelSignatureBody(documentXml);
 
                 String docHtml;
-                if (templateType == 'HTML') {
+                if (DocGenService.isHtmlBacked(templateType)) {
                     docHtml = stampSignaturesInHtml(documentXml, docPlacements);
                 } else {
                     StampResult stamped = stampSignaturesInXml(

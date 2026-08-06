@@ -1,0 +1,1403 @@
+<template>
+    <div class="dg-canvas-shell">
+        <!-- Left rail: the tool picker. Canva's shape — icons here, depth to the right. -->
+        <div class="dg-rail">
+            <!--
+              Data-driven so a new tool cannot ship without an icon. Every entry
+              supplies its own glyph, and the SVG is inline rather than a
+              lightning-icon name: an icon name that does not exist in SLDS renders
+              NOTHING and fails silently, which is how Select, Shape and Code ended up
+              as unlabelled blank buttons.
+            -->
+            <template for:each={railTools} for:item="t">
+                <button
+                    key={t.id}
+                    class={t.cls}
+                    data-tool={t.id}
+                    data-action={t.action}
+                    onclick={handleRailClick}
+                    title={t.title}
+                >
+                    <svg
+                        class="dg-rail-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        focusable="false"
+                    >
+                        <path d={t.d}></path>
+                    </svg>
+                    <span class="dg-rail-label">{t.label}</span>
+                </button>
+            </template>
+        </div>
+
+        <!-- Panel: in-depth controls for whatever is selected. Draggable in X. -->
+        <div class="dg-panel" style={panelStyle}>
+            <template lwc:if={hasSelection}>
+                <h3 class="dg-panel-title">Box</h3>
+                <p class="dg-panel-hint">Drag to move. Handles on the right and bottom edges resize.</p>
+
+                <template lwc:if={canEditRichText}>
+                    <div class="dg-row dg-srctoggle">
+                        <button class={richModeClass} onclick={handleShowRich} title="Formatting toolbar">
+                            Rich text
+                        </button>
+                        <button class={sourceModeClass} onclick={handleShowSource} title="Edit the markup directly">
+                            HTML
+                        </button>
+                    </div>
+                </template>
+                <template lwc:if={showSourceEditor}>
+                    <!-- No value= binding: a textarea's content is its text child, so the
+                         attribute renders an empty box. Populated in renderedCallback. -->
+                    <textarea
+                        class="dg-source-edit"
+                        spellcheck="false"
+                        aria-label="Box HTML"
+                        onchange={handleSourceChange}
+                    ></textarea>
+                    <p class="dg-panel-note">
+                        The box's own markup. Tables, headings and links are all allowed — anything the PDF engine
+                        cannot render is stripped when you leave the field. A link is
+                        <b>&lt;a href="https://…"&gt;text&lt;/a&gt;</b> and comes out clickable in the PDF.
+                    </p>
+                </template>
+                <template lwc:if={showRichEditor}>
+                    <div class="dg-editor-wrap" style={editorStyle}>
+                        <lightning-input-rich-text
+                            label="Content"
+                            variant="label-stacked"
+                            value={richEditorValue}
+                            formats={richTextFormats}
+                            onchange={handleRichTextChange}
+                            message-when-bad-input="Content could not be read"
+                            placeholder="Type here. Merge tags work anywhere — pick one from Fields below."
+                        ></lightning-input-rich-text>
+                    </div>
+                    <div
+                        class="dg-editor-grip"
+                        onmousedown={handleEditorResizeStart}
+                        title="Drag to make the editor taller"
+                    ></div>
+                    <p class="dg-panel-note">
+                        Formatting applies to whatever you select, and the box on the page shows exactly what will
+                        print.
+                    </p>
+                </template>
+
+                <template lwc:if={canInsertLink}>
+                    <h4 class="dg-panel-sub">Table in this box</h4>
+                    <div class="dg-row">
+                        <label class="dg-prop-label">Rows</label>
+                        <input
+                            type="number"
+                            class="dg-panel-input dg-panel-input_sm"
+                            min="1"
+                            max="20"
+                            value={tableRows}
+                            onchange={handleTableRowsChange}
+                        />
+                        <label class="dg-prop-label">Cols</label>
+                        <input
+                            type="number"
+                            class="dg-panel-input dg-panel-input_sm"
+                            min="1"
+                            max="10"
+                            value={tableCols}
+                            onchange={handleTableColsChange}
+                        />
+                    </div>
+                    <button class="dg-panel-btn" onclick={handleInsertTable}>Add table</button>
+                    <p class="dg-panel-note">
+                        A fixed table inside this text. For a list that repeats over records, use the <b>Table</b> tool
+                        instead — it binds a relationship and totals.
+                    </p>
+
+                    <h4 class="dg-panel-sub">Symbols</h4>
+                    <div class="dg-field-chips">
+                        <template for:each={safeSymbols} for:item="sym">
+                            <button
+                                key={sym.key}
+                                class="dg-sym-chip"
+                                data-name={sym.name}
+                                onclick={handleInsertSymbol}
+                                title={sym.name}
+                            >
+                                {sym.label}
+                            </button>
+                        </template>
+                    </div>
+                    <p class="dg-panel-note">
+                        Inserted with the font that draws them, so they print whatever this box is set to. Typing
+                        &#10003; straight into the text does <b>not</b> work — the standard PDF fonts have no glyph for
+                        it and it comes out blank. Pick <b>Arial Unicode</b> as the box font for symbols, CJK, Greek or
+                        Cyrillic throughout.
+                    </p>
+
+                    <h4 class="dg-panel-sub">Link</h4>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={linkText}
+                        placeholder="Link text"
+                        onchange={handleLinkTextChange}
+                    />
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={linkUrl}
+                        placeholder="https://example.com"
+                        onchange={handleLinkUrlChange}
+                    />
+                    <p class="dg-panel-note">{linkUrlHint}</p>
+                    <button class="dg-panel-btn" onclick={handleInsertLink} disabled={linkInsertDisabled}>
+                        Add link
+                    </button>
+                </template>
+
+                <template lwc:if={hasPickableFields}>
+                    <h4 class="dg-panel-sub">Fields</h4>
+                    <p class="dg-panel-note">
+                        From this template's Query Config. Click to
+                        <template lwc:if={selectedIsTable}>add a column.</template>
+                        <template lwc:else>insert the tag.</template>
+                    </p>
+                    <div class="dg-field-chips">
+                        <template for:each={pickableFields} for:item="f">
+                            <button
+                                key={f.key}
+                                class="dg-field-chip"
+                                data-tag={f.tag}
+                                data-label={f.label}
+                                onclick={handlePickField}
+                                title={f.tag}
+                            >
+                                {f.label}
+                            </button>
+                        </template>
+                    </div>
+                </template>
+
+                <template lwc:if={showBoxTypography}>
+                    <lightning-combobox
+                        label="Font"
+                        variant="label-stacked"
+                        value={selFont}
+                        options={fontOptions}
+                        onchange={handleFontChange}
+                        field-level-help="Only these three resolve in the PDF engine. Named families like Arial or Georgia silently render as serif, so they are not offered."
+                    ></lightning-combobox>
+
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Size (pt)</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num"
+                            min="5"
+                            max="96"
+                            step="0.5"
+                            value={selSize}
+                            data-key="size"
+                            onchange={handleNumChange}
+                        />
+                    </div>
+
+                    <div class="dg-prop-row">
+                        <button class={boldClass} data-key="bold" onclick={handleStyleToggle} title="Bold">
+                            <b>B</b>
+                        </button>
+                        <button class={italicClass} data-key="italic" onclick={handleStyleToggle} title="Italic">
+                            <i>I</i>
+                        </button>
+                        <button
+                            class={underlineClass}
+                            data-key="underline"
+                            onclick={handleStyleToggle}
+                            title="Underline"
+                        >
+                            <u>U</u>
+                        </button>
+                        <span class="dg-prop-gap"></span>
+                        <button class={alignLeftClass} data-align="left" onclick={handleAlign} title="Align left">
+                            &#8676;
+                        </button>
+                        <button class={alignCenterClass} data-align="center" onclick={handleAlign} title="Centre">
+                            &#8596;
+                        </button>
+                        <button class={alignRightClass} data-align="right" onclick={handleAlign} title="Align right">
+                            &#8677;
+                        </button>
+                    </div>
+
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Text</label>
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selColor}
+                            data-key="color"
+                            onchange={handleColorChange}
+                        />
+                    </div>
+                </template>
+
+                <template lwc:if={showBoxChrome}>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Fill</label>
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selFill}
+                            data-key="fill"
+                            onchange={handleColorChange}
+                        />
+                        <button class="dg-sbtn" onclick={handleClearFill} title="No fill">&#8709;</button>
+                    </div>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Border</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="0"
+                            max="12"
+                            step="0.5"
+                            value={selBorderWidth}
+                            data-key="borderWidth"
+                            onchange={handleNumChange}
+                        />
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selBorderColor}
+                            data-key="borderColor"
+                            onchange={handleColorChange}
+                        />
+                        <label class="dg-prop-label">Pad</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="0"
+                            max="36"
+                            step="1"
+                            value={selPadding}
+                            data-key="padding"
+                            onchange={handleNumChange}
+                        />
+                    </div>
+                </template>
+
+                <template lwc:if={selectedIsTable}>
+                    <h4 class="dg-panel-sub">Table</h4>
+                    <template lwc:if={hasRelationshipChoices}>
+                        <lightning-combobox
+                            label="Repeat per"
+                            variant="label-stacked"
+                            value={selTableRel}
+                            options={relationshipChoices}
+                            onchange={handleRelPick}
+                            field-level-help="Only relationships this template's Query Config actually returns are offered — a typed name that isn't queried renders an empty table with no error."
+                        ></lightning-combobox>
+                    </template>
+                    <template lwc:else>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Repeat per</label>
+                            <input
+                                type="text"
+                                class="dg-prop-text"
+                                value={selTableRel}
+                                placeholder="e.g. Opportunities"
+                                onchange={handleTableRelChange}
+                            />
+                        </div>
+                        <p class="dg-panel-note">
+                            This template's query returns no child relationships yet. Type one, then use
+                            <b>Update the template's query</b> on the Canvas panel to add it.
+                        </p>
+                    </template>
+                    <template lwc:if={relationshipMissingFromQuery}>
+                        <p class="dg-panel-warn">
+                            <b>{selTableRel}</b> isn't in this template's query, so it will render empty. Deselect the
+                            box and choose <b>Update the template's query</b> to add it.
+                        </p>
+                    </template>
+                    <p class="dg-panel-note">
+                        The child relationship from your Query Config. Set it and one row is emitted per record, growing
+                        across pages. Leave it blank for a fixed table.
+                    </p>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">
+                            <input type="checkbox" checked={selTableHeader} onchange={handleTableHeaderToggle} />
+                            Header row (repeats on every page)
+                        </label>
+                    </div>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Header fill</label>
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selTableHeaderFill}
+                            data-key="headerFill"
+                            onchange={handleTableStyleChange}
+                        />
+                        <label class="dg-prop-label">
+                            <input
+                                type="checkbox"
+                                checked={selTableHeaderBold}
+                                data-key="headerBold"
+                                onchange={handleTableStyleChange}
+                            />
+                            Bold
+                        </label>
+                    </div>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Grid</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="0"
+                            max="6"
+                            step="0.25"
+                            value={selTableGridWidth}
+                            data-key="gridWidth"
+                            onchange={handleTableStyleChange}
+                        />
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selTableGridColor}
+                            data-key="gridColor"
+                            onchange={handleTableStyleChange}
+                        />
+                        <label class="dg-prop-label">Cell pad</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="0"
+                            max="24"
+                            step="1"
+                            value={selTableCellPadding}
+                            data-key="cellPadding"
+                            onchange={handleTableStyleChange}
+                        />
+                    </div>
+
+                    <lightning-combobox
+                        label="Lines"
+                        variant="label-stacked"
+                        value={selGridStyle}
+                        options={gridStyleOptions}
+                        data-key="gridStyle"
+                        onchange={handleTableStyleChange}
+                    ></lightning-combobox>
+                    <p class="dg-panel-note">
+                        Rules under rows reads as a document; a full grid reads as a spreadsheet.
+                    </p>
+
+                    <h4 class="dg-panel-sub">Header text</h4>
+                    <lightning-combobox
+                        label="Font"
+                        variant="label-stacked"
+                        value={selHeaderFont}
+                        options={fontOptions}
+                        data-which="header"
+                        data-key="font"
+                        onchange={handleRowTextChange}
+                    ></lightning-combobox>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Size</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="5"
+                            max="72"
+                            step="0.5"
+                            value={selHeaderText.size}
+                            data-which="header"
+                            data-key="size"
+                            onchange={handleRowTextChange}
+                        />
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selHeaderText.color}
+                            data-which="header"
+                            data-key="color"
+                            onchange={handleRowTextChange}
+                        />
+                        <button
+                            class={headerBoldClass}
+                            data-which="header"
+                            data-key="bold"
+                            onclick={handleRowTextChange}
+                        >
+                            <b>B</b>
+                        </button>
+                    </div>
+
+                    <h4 class="dg-panel-sub">Row text</h4>
+                    <lightning-combobox
+                        label="Font"
+                        variant="label-stacked"
+                        value={selRowFont}
+                        options={fontOptions}
+                        data-which="row"
+                        data-key="font"
+                        onchange={handleRowTextChange}
+                    ></lightning-combobox>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Size</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num dg-prop-num_sm"
+                            min="5"
+                            max="72"
+                            step="0.5"
+                            value={selRowText.size}
+                            data-which="row"
+                            data-key="size"
+                            onchange={handleRowTextChange}
+                        />
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selRowText.color}
+                            data-which="row"
+                            data-key="color"
+                            onchange={handleRowTextChange}
+                        />
+                        <button class={rowBoldClass} data-which="row" data-key="bold" onclick={handleRowTextChange}>
+                            <b>B</b>
+                        </button>
+                    </div>
+
+                    <h4 class="dg-panel-sub">Columns</h4>
+                    <template for:each={selTableColumns} for:item="col">
+                        <div key={col.idx} class="dg-col-row">
+                            <div class="dg-col-num">{col.num}</div>
+                            <input
+                                type="text"
+                                class="dg-prop-text dg-col-label"
+                                value={col.label}
+                                data-idx={col.idx}
+                                data-key="label"
+                                onchange={handleColumnChange}
+                                placeholder="Heading"
+                            />
+                            <input
+                                type="text"
+                                class="dg-prop-text dg-col-tag"
+                                value={col.tag}
+                                data-idx={col.idx}
+                                data-key="tag"
+                                onchange={handleColumnChange}
+                                placeholder={tagPlaceholder}
+                            />
+                            <input
+                                type="text"
+                                class="dg-prop-text dg-col-w"
+                                value={col.width}
+                                data-idx={col.idx}
+                                data-key="width"
+                                onchange={handleColumnChange}
+                                placeholder="auto"
+                            />
+                            <button
+                                class="dg-sbtn"
+                                data-idx={col.idx}
+                                onclick={handleRemoveColumn}
+                                title="Remove column"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                    </template>
+                    <button class="dg-panel-btn" onclick={handleAddColumn}>Add column</button>
+
+                    <template lwc:if={selTableTotals}>
+                        <h4 class="dg-panel-sub">Totals row style</h4>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Fill</label>
+                            <input
+                                type="color"
+                                class="dg-prop-color"
+                                value={selTotalsFill}
+                                data-key="totalsFill"
+                                onchange={handleTableStyleChange}
+                            />
+                            <label class="dg-prop-label">Text</label>
+                            <input
+                                type="color"
+                                class="dg-prop-color"
+                                value={selTotalsText.color}
+                                data-which="totals"
+                                data-key="color"
+                                onchange={handleRowTextChange}
+                            />
+                        </div>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Size</label>
+                            <input
+                                type="number"
+                                class="dg-prop-num"
+                                min="5"
+                                max="72"
+                                step="0.5"
+                                value={selTotalsText.size}
+                                data-which="totals"
+                                data-key="size"
+                                onchange={handleRowTextChange}
+                            />
+                            <button
+                                class={totalsBoldClass}
+                                data-which="totals"
+                                data-key="bold"
+                                onclick={handleRowTextChange}
+                                title="Bold"
+                            >
+                                <b>B</b>
+                            </button>
+                            <button
+                                class="dg-sbtn"
+                                data-which="totals"
+                                data-key="align"
+                                data-align="right"
+                                onclick={handleTotalsAlign}
+                                title="Align the totals right"
+                            >
+                                &#8677;
+                            </button>
+                            <button
+                                class="dg-sbtn"
+                                data-which="totals"
+                                data-key="align"
+                                data-align="left"
+                                onclick={handleTotalsAlign}
+                                title="Align the totals left"
+                            >
+                                &#8676;
+                            </button>
+                        </div>
+                    </template>
+
+                    <h4 class="dg-panel-sub">Nested rows</h4>
+                    <p class="dg-panel-note">
+                        A second list under each row — an opportunity's line items, say. Leave blank for none.
+                    </p>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selSubRel}
+                        placeholder="OpportunityLineItems"
+                        onchange={handleSubRelChange}
+                    />
+                    <template lwc:if={hasSubRel}>
+                        <template for:each={selSubColumns} for:item="sc">
+                            <div key={sc.idx} class="dg-col-block">
+                                <div class="dg-row-head">
+                                    <span class="dg-col-num">Cell {sc.num}</span>
+                                    <button
+                                        class="dg-sbtn dg-row-del"
+                                        data-idx={sc.idx}
+                                        onclick={handleRemoveSubColumn}
+                                        title="Remove this cell"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                                <input
+                                    type="text"
+                                    class="dg-prop-text"
+                                    value={sc.tag}
+                                    data-idx={sc.idx}
+                                    data-key="tag"
+                                    placeholder={columnTagPlaceholder}
+                                    onchange={handleSubColumnChange}
+                                />
+                            </div>
+                        </template>
+                        <button class="dg-panel-btn" onclick={handleAddSubColumn}>Add nested cell</button>
+                        <template lwc:if={hasSubPickableFields}>
+                            <p class="dg-panel-note">Fields on the nested record — click to add a cell.</p>
+                            <div class="dg-field-chips">
+                                <template for:each={subPickableFields} for:item="sf">
+                                    <button
+                                        key={sf.key}
+                                        class="dg-field-chip"
+                                        data-tag={sf.tag}
+                                        data-label={sf.label}
+                                        onclick={handlePickSubField}
+                                        title={sf.tag}
+                                    >
+                                        {sf.label}
+                                    </button>
+                                </template>
+                            </div>
+                        </template>
+                        <p class="dg-panel-note">
+                            Tags read from the nested record. Fewer cells than the table has columns is fine — the last
+                            one stretches to fill.
+                        </p>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Fill</label>
+                            <input
+                                type="color"
+                                class="dg-prop-color"
+                                value={selSubFill}
+                                data-key="subFill"
+                                onchange={handleTableStyleChange}
+                            />
+                            <label class="dg-prop-label">Text</label>
+                            <input
+                                type="color"
+                                class="dg-prop-color"
+                                value={selSubText.color}
+                                data-which="sub"
+                                data-key="color"
+                                onchange={handleRowTextChange}
+                            />
+                        </div>
+                        <div class="dg-prop-row">
+                            <label class="dg-prop-label">Size</label>
+                            <input
+                                type="number"
+                                class="dg-prop-num"
+                                min="5"
+                                max="72"
+                                step="0.5"
+                                value={selSubText.size}
+                                data-which="sub"
+                                data-key="size"
+                                onchange={handleRowTextChange}
+                            />
+                            <label class="dg-prop-label">Indent</label>
+                            <input
+                                type="number"
+                                class="dg-prop-num"
+                                min="0"
+                                max="72"
+                                step="2"
+                                value={selSubIndent}
+                                data-key="subIndent"
+                                onchange={handleTableStyleChange}
+                            />
+                        </div>
+                    </template>
+
+                    <h4 class="dg-panel-sub">Extra rows</h4>
+                    <p class="dg-panel-note">Literal rows, appended after the repeating ones.</p>
+                    <template for:each={selTableRows} for:item="row">
+                        <div key={row.idx} class="dg-row-block">
+                            <div class="dg-row-head">
+                                <span class="dg-col-num">Row {row.num}</span>
+                                <button
+                                    class="dg-sbtn dg-row-del"
+                                    data-idx={row.idx}
+                                    onclick={handleRemoveRow}
+                                    title="Delete this row"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                            <template for:each={row.cells} for:item="c">
+                                <div key={c.key} class="dg-cell-row">
+                                    <span class="dg-cell-label">{c.label}</span>
+                                    <input
+                                        type="text"
+                                        class="dg-prop-text dg-cell-input"
+                                        value={c.value}
+                                        data-idx={c.idx}
+                                        data-col={c.col}
+                                        onchange={handleRowChange}
+                                    />
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    <button class="dg-panel-btn" onclick={handleAddRow}>Add row</button>
+
+                    <h4 class="dg-panel-sub">Totals row</h4>
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">
+                            <input type="checkbox" checked={selTableTotals} onchange={handleTotalsToggle} />
+                            Show a totals row
+                        </label>
+                    </div>
+                    <template lwc:if={selTableTotals}>
+                        <p class="dg-panel-note">
+                            Suggested from each column's field and the relationship above. Lands once at the end, not on
+                            every page.
+                        </p>
+                        <template for:each={selTableTotalsCells} for:item="tc">
+                            <div key={tc.idx} class="dg-col-row">
+                                <div class="dg-col-num">{tc.idx}</div>
+                                <input
+                                    type="text"
+                                    class="dg-prop-text"
+                                    value={tc.value}
+                                    data-idx={tc.idx}
+                                    onchange={handleTotalsCellChange}
+                                    placeholder={totalsPlaceholder}
+                                />
+                            </div>
+                        </template>
+                    </template>
+                </template>
+
+                <template lwc:if={selectedIsImage}>
+                    <h4 class="dg-panel-sub">Image</h4>
+                    <button class="dg-sbtn" onclick={handleRefreshAssets}>Refresh assets</button>
+                    <p class="dg-panel-note">
+                        Drag the handles to size it. The picture prints at exactly the size of the box.
+                    </p>
+
+                    <template lwc:if={hasImageChoices}>
+                        <label class="dg-panel-label">Portwood assets</label>
+                        <div class="dg-imggrid">
+                            <template for:each={imageChoices} for:item="a">
+                                <button
+                                    key={a.id}
+                                    class={a.cls}
+                                    data-key={a.assetKey}
+                                    data-url={a.previewUrl}
+                                    data-name={a.name}
+                                    onclick={handlePickImage}
+                                    title={a.mergeTag}
+                                >
+                                    <img src={a.previewUrl} alt={a.name} class="dg-imgthumb" />
+                                    <span class="dg-imgname">{a.name}</span>
+                                </button>
+                            </template>
+                        </div>
+                        <p class="dg-panel-note">
+                            Referenced by key, so replacing an asset on the <b>Assets</b> tab updates every document
+                            that uses it.
+                        </p>
+                    </template>
+                    <template lwc:else>
+                        <p class="dg-panel-warn">
+                            No active assets with a file yet. Add images on the <b>Portwood Assets</b> tab, then reopen
+                            this panel.
+                        </p>
+                    </template>
+
+                    <label class="dg-panel-label">Or from a field on the record</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selImage.tag}
+                        placeholder={imageTagPlaceholder}
+                        onchange={handleImageTagChange}
+                    />
+                    <p class="dg-panel-note">
+                        A field holding a file or an image. It prints whatever that record points at, so there is
+                        nothing to preview here.
+                    </p>
+
+                    <label class="dg-panel-check">
+                        <input type="checkbox" checked={selImageKeepRatio} onchange={handleImageRatioToggle} />
+                        Keep the original proportions
+                    </label>
+                    <template lwc:if={selImageHasSource}>
+                        <button class="dg-panel-btn" onclick={handleImageClear}>Remove the picture</button>
+                    </template>
+                </template>
+
+                <template lwc:if={selectedIsCode}>
+                    <h4 class="dg-panel-sub">QR / barcode</h4>
+                    <lightning-combobox
+                        label="Type"
+                        variant="label-stacked"
+                        value={selCode.type}
+                        options={codeTypeOptions}
+                        data-key="type"
+                        onchange={handleCodeChange}
+                    ></lightning-combobox>
+                    <label class="dg-panel-label">Reads this field</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selCode.field}
+                        placeholder="AccountNumber"
+                        data-key="field"
+                        onchange={handleCodeChange}
+                    />
+                    <p class="dg-panel-note">Or click a field below to bind it.</p>
+
+                    <template lwc:if={selCodeIsQr}>
+                        <label class="dg-panel-label">Size (px)</label>
+                        <input
+                            type="number"
+                            class="dg-panel-input dg-panel-input_sm"
+                            min="48"
+                            max="600"
+                            step="8"
+                            value={selCode.size}
+                            data-key="size"
+                            onchange={handleCodeChange}
+                        />
+                        <p class="dg-panel-note">
+                            QR is square. The box resizes to match, so you can lay out around it.
+                        </p>
+                    </template>
+                    <template lwc:else>
+                        <label class="dg-panel-label">Width x height (px)</label>
+                        <div class="dg-row">
+                            <input
+                                type="number"
+                                class="dg-panel-input dg-panel-input_sm"
+                                min="96"
+                                max="900"
+                                step="8"
+                                value={selCode.size}
+                                data-key="size"
+                                onchange={handleCodeChange}
+                            />
+                            <input
+                                type="number"
+                                class="dg-panel-input dg-panel-input_sm"
+                                min="32"
+                                max="400"
+                                step="8"
+                                value={selCode.height}
+                                data-key="height"
+                                onchange={handleCodeChange}
+                            />
+                        </div>
+                        <p class="dg-panel-note">
+                            The height is exact. The final <b>width</b> follows the encoded value — the engine widens a
+                            symbol that would otherwise be too fine to scan — so treat the box as the space you asked
+                            for, and leave a little room beside it.
+                        </p>
+                    </template>
+                    <p class="dg-panel-note">Footprint: {codeSizeLabel}</p>
+                </template>
+
+                <template lwc:if={selectedIsSignature}>
+                    <h4 class="dg-panel-sub">Signature</h4>
+                    <lightning-combobox
+                        label="What is collected"
+                        variant="label-stacked"
+                        value={selSignature.type}
+                        options={signatureTypeOptions}
+                        data-key="type"
+                        onchange={handleSignatureChange}
+                    ></lightning-combobox>
+                    <label class="dg-panel-label">Who signs it</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selSignature.role}
+                        placeholder="Signer"
+                        data-key="role"
+                        onchange={handleSignatureChange}
+                    />
+                    <p class="dg-panel-note">
+                        A role, not a person — "Customer", "Account Manager". Each distinct role becomes a signer on the
+                        request.
+                    </p>
+                    <label class="dg-panel-label">Signing order</label>
+                    <input
+                        type="number"
+                        class="dg-panel-input dg-panel-input_sm"
+                        min="1"
+                        max="20"
+                        step="1"
+                        value={selSignature.order}
+                        data-key="order"
+                        onchange={handleSignatureChange}
+                    />
+                    <label class="dg-panel-check">
+                        <input
+                            type="checkbox"
+                            checked={selSignature.inline}
+                            data-key="inline"
+                            onchange={handleSignatureChange}
+                        />
+                        Compact mark, in place
+                    </label>
+                    <p class="dg-panel-note">Writes {signatureTagPreview}</p>
+                    <p class="dg-panel-warn">
+                        Signing tags are removed from an ordinary document, so <b>Preview shows nothing here</b> — by
+                        design, a generated PDF must never print a raw signing tag. It appears when the template is sent
+                        for signature.
+                    </p>
+                </template>
+
+                <template lwc:if={selectedIsShape}>
+                    <h4 class="dg-panel-sub">Shape</h4>
+                    <lightning-combobox
+                        label="Shape"
+                        variant="label-stacked"
+                        value={selShape.type}
+                        options={shapeOptions}
+                        data-key="type"
+                        onchange={handleShapeChange}
+                    ></lightning-combobox>
+                    <template lwc:if={selShapeIsRect}>
+                        <label class="dg-panel-label">Fill</label>
+                        <div class="dg-row">
+                            <input
+                                type="color"
+                                class="dg-panel-color"
+                                value={selShape.fill}
+                                data-key="fill"
+                                onchange={handleShapeChange}
+                            />
+                            <button class="dg-sbtn" onclick={handleShapeFillNone}>No fill</button>
+                        </div>
+                    </template>
+                    <label class="dg-panel-label">Line</label>
+                    <div class="dg-row">
+                        <input
+                            type="number"
+                            class="dg-panel-input dg-panel-input_sm"
+                            min="0"
+                            max="12"
+                            step="0.5"
+                            value={selShape.borderWidth}
+                            data-key="borderWidth"
+                            onchange={handleShapeChange}
+                        />
+                        <input
+                            type="color"
+                            class="dg-panel-color"
+                            value={selShape.borderColor}
+                            data-key="borderColor"
+                            onchange={handleShapeChange}
+                        />
+                    </div>
+                    <p class="dg-panel-note">
+                        Rectangles and lines only. Circles and rounded corners are not drawn by the PDF engine — it
+                        would print a plain rectangle and the page would not match this canvas.
+                    </p>
+                </template>
+
+                <h4 class="dg-panel-sub">Show only when</h4>
+                <input
+                    class="dg-panel-input"
+                    type="text"
+                    value={selCondition}
+                    placeholder={conditionPlaceholder}
+                    onchange={handleConditionChange}
+                />
+                <p class="dg-panel-note">
+                    Leave blank to always show it. The whole box disappears when the test fails — the field is added to
+                    the query for you.
+                </p>
+
+                <h4 class="dg-panel-sub">Arrange</h4>
+                <div class="dg-row">
+                    <button class="dg-sbtn" data-dir="up" onclick={handleZStep} title="Bring forward">Forward</button>
+                    <button class="dg-sbtn" data-dir="down" onclick={handleZStep} title="Send backward">Back</button>
+                    <button class="dg-sbtn" onclick={handleZFront} title="Bring to front">Front</button>
+                    <button class="dg-sbtn" onclick={handleZBack} title="Send to back">Bottom</button>
+                </div>
+                <p class="dg-panel-note">Layer {selZ}. Higher sits on top.</p>
+
+                <button class="dg-panel-btn" onclick={handleModeToggle}>
+                    <template lwc:if={selectedIsFlow}>Make it pinned</template>
+                    <template lwc:else>Let it flow across pages</template>
+                </button>
+                <p class="dg-panel-note">
+                    <template lwc:if={selectedIsFlow}>
+                        <b>Flows.</b> Content can grow and spill onto the next page — this is where a line-item loop
+                        goes.
+                    </template>
+                    <template lwc:else>
+                        <b>Pinned.</b> Lands exactly where you put it. Does not repeat on continuation pages — use a
+                        running header/footer for that.
+                    </template>
+                </p>
+                <button class="dg-panel-btn dg-panel-btn_danger" onclick={handleDelete}>Delete box</button>
+            </template>
+            <template lwc:else>
+                <h3 class="dg-panel-title">Canvas</h3>
+                <p class="dg-panel-hint">
+                    Pick the Text tool, then click the page to place a box. Boxes land in the PDF exactly where you put
+                    them.
+                </p>
+
+                <h4 class="dg-panel-sub">Data</h4>
+                <p class="dg-panel-note">
+                    Fields come from the <b>Data</b> tool in the left rail. Pick them there rather than writing a query.
+                </p>
+            </template>
+        </div>
+
+        <!-- Drag to widen the panel. Its own cell so it cannot be clipped by either
+             neighbour's overflow. -->
+        <div class="dg-splitter" onmousedown={handlePanelResizeStart} title="Drag to resize the panel"></div>
+
+        <!-- Stage -->
+        <div class="dg-stage">
+            <template lwc:if={saveError}>
+                <div class="dg-save-error">
+                    {saveError}
+                    <button class="dg-sbtn" onclick={handleDismissError}>Dismiss</button>
+                </div>
+            </template>
+            <div class="dg-quickbar">
+                <span
+                    class="dg-beta-chip"
+                    title="The canvas designer is in beta. Documents it produces are real and supported — the editor itself is still changing."
+                    >BETA</span
+                >
+                <button class="dg-qb-btn dg-qb-back" onclick={handleBack} title="Back to your templates">
+                    <svg
+                        class="dg-qb-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        focusable="false"
+                    >
+                        <path d="M15 5l-7 7 7 7"></path>
+                    </svg>
+                    Templates
+                </button>
+                <button class={undoClass} onclick={handleUndo} disabled={undoDisabled} title="Undo (Ctrl/Cmd+Z)">
+                    <svg
+                        class="dg-qb-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        focusable="false"
+                    >
+                        <path d="M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-1"></path>
+                    </svg>
+                </button>
+                <button class={redoClass} onclick={handleRedo} disabled={redoDisabled} title="Redo (Ctrl/Cmd+Shift+Z)">
+                    <svg
+                        class="dg-qb-icon"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                        focusable="false"
+                    >
+                        <path d="M15 7l5 5-5 5M20 12H9a5 5 0 0 0 0 10h1"></path>
+                    </svg>
+                </button>
+                <button class="dg-qb-btn" data-dir="out" onclick={handleZoom}>&minus;</button>
+                <span class="dg-qb-zoom">{zoomPercent}</span>
+                <button class="dg-qb-btn" data-dir="in" onclick={handleZoom}>+</button>
+                <span class="dg-qb-sep"></span>
+                <template lwc:if={hasVersions}>
+                    <span class="dg-qb-sep"></span>
+                    <lightning-combobox
+                        class="dg-qb-version"
+                        variant="label-hidden"
+                        value={activeVersionId}
+                        options={versionOptions}
+                        onchange={handleVersionChange}
+                        title="Switch the active version — the canvas reloads from it"
+                    ></lightning-combobox>
+                </template>
+                <span class="dg-qb-sep"></span>
+                <button class="dg-qb-btn dg-qb-wide" onclick={handleEditTemplate} title="Open this template's settings">
+                    Template
+                </button>
+                <button
+                    class="dg-qb-btn dg-qb-wide"
+                    onclick={handlePreview}
+                    disabled={isPreviewing}
+                    title="Save, then generate a real PDF from the sample record"
+                >
+                    <template lwc:if={isPreviewing}>Generating…</template>
+                    <template lwc:else>Preview</template>
+                </button>
+                <button
+                    class="dg-qb-btn dg-qb-wide"
+                    onclick={triggerImport}
+                    title="Convert an existing HTML template into this canvas"
+                >
+                    Import HTML
+                </button>
+                <input type="file" accept=".html,.htm,text/html" class="dg-import-input" onchange={handleImportFile} />
+                <button class="dg-qb-save" onclick={handleSave} disabled={isSaving}>
+                    <template lwc:if={isSaving}>Saving…</template>
+                    <template lwc:else>Save</template>
+                </button>
+                <span class="dg-qb-status">{statusText}</span>
+            </div>
+
+            <template lwc:if={hasImportReport}>
+                <div class="dg-import-report">
+                    <div class="dg-import-head">
+                        {importSummary}
+                        <button class="dg-sbtn" onclick={handleDismissImport}>Dismiss</button>
+                    </div>
+                    <template lwc:if={importDropped.length}>
+                        <p class="dg-panel-warn">Could not be brought across:</p>
+                        <ul class="dg-import-list">
+                            <template for:each={importDropped} for:item="d">
+                                <li key={d.key}>{d.text}</li>
+                            </template>
+                        </ul>
+                    </template>
+                    <template lwc:if={importNotes.length}>
+                        <ul class="dg-import-list dg-import-list_note">
+                            <template for:each={importNotes} for:item="n">
+                                <li key={n.key}>{n.text}</li>
+                            </template>
+                        </ul>
+                    </template>
+                </div>
+            </template>
+
+            <template lwc:if={showPageSetup}>
+                <div class="dg-data-wrap">
+                    <div class="dg-data-bar">
+                        Page setup
+                        <button class="dg-sbtn" onclick={handleClosePageSetup}>Done</button>
+                    </div>
+                    <div class="dg-pagesetup">
+                        <lightning-combobox
+                            label="Page size"
+                            value={canvasPageSize}
+                            options={pageSizeOptions}
+                            onchange={handlePageSizeChange}
+                        ></lightning-combobox>
+                        <template lwc:if={isCustomPage}>
+                            <div class="dg-margin-grid">
+                                <label class="dg-panel-label">Page size (inches)</label>
+                                <div class="dg-row">
+                                    <input
+                                        type="number"
+                                        class="dg-panel-input dg-panel-input_sm"
+                                        min="1"
+                                        max="200"
+                                        step="0.05"
+                                        value={customPageW}
+                                        data-key="w"
+                                        onchange={handleCustomPageChange}
+                                        title="Width"
+                                    />
+                                    <span class="dg-panel-label">x</span>
+                                    <input
+                                        type="number"
+                                        class="dg-panel-input dg-panel-input_sm"
+                                        min="1"
+                                        max="200"
+                                        step="0.05"
+                                        value={customPageH}
+                                        data-key="h"
+                                        onchange={handleCustomPageChange}
+                                        title="Height"
+                                    />
+                                </div>
+                                <p class="dg-panel-note">
+                                    Width x height. Orientation does not apply to a custom size.
+                                </p>
+                            </div>
+                        </template>
+                        <template lwc:else>
+                            <lightning-combobox
+                                label="Orientation"
+                                value={canvasOrientation}
+                                options={orientationOptions}
+                                onchange={handleOrientationChange}
+                            ></lightning-combobox>
+                        </template>
+                        <div class="dg-margin-grid">
+                            <label class="dg-panel-label">Margins (inches)</label>
+                            <div class="dg-row">
+                                <input
+                                    type="number"
+                                    class="dg-panel-input dg-panel-input_sm"
+                                    min="0"
+                                    max="3"
+                                    step="0.05"
+                                    value={marginTop}
+                                    data-key="top"
+                                    onchange={handleMarginChange}
+                                    title="Top"
+                                />
+                                <input
+                                    type="number"
+                                    class="dg-panel-input dg-panel-input_sm"
+                                    min="0"
+                                    max="3"
+                                    step="0.05"
+                                    value={marginRight}
+                                    data-key="right"
+                                    onchange={handleMarginChange}
+                                    title="Right"
+                                />
+                                <input
+                                    type="number"
+                                    class="dg-panel-input dg-panel-input_sm"
+                                    min="0"
+                                    max="3"
+                                    step="0.05"
+                                    value={marginBottom}
+                                    data-key="bottom"
+                                    onchange={handleMarginChange}
+                                    title="Bottom"
+                                />
+                                <input
+                                    type="number"
+                                    class="dg-panel-input dg-panel-input_sm"
+                                    min="0"
+                                    max="3"
+                                    step="0.05"
+                                    value={marginLeft}
+                                    data-key="left"
+                                    onchange={handleMarginChange}
+                                    title="Left"
+                                />
+                            </div>
+                            <p class="dg-panel-note">Top, right, bottom, left. {pageAreaLabel}.</p>
+                            <div class="dg-row">
+                                <button class="dg-sbtn" onclick={handleMarginZero}>None</button>
+                                <button class="dg-sbtn" data-all="0.5" onclick={handleMarginPreset}>Narrow 0.5"</button>
+                                <button class="dg-sbtn" data-all="0.75" onclick={handleMarginPreset}>
+                                    Normal 0.75"
+                                </button>
+                                <button class="dg-sbtn" data-all="1" onclick={handleMarginPreset}>Wide 1"</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <template lwc:if={showData}>
+                <div class="dg-data-wrap">
+                    <div class="dg-data-bar">
+                        Pick the fields and related lists this document uses
+                        <button class="dg-sbtn" onclick={handleCloseData}>Done</button>
+                        <button class="dg-sbtn" onclick={handleUseGenerated}>Use what the canvas needs</button>
+                    </div>
+                    <template lwc:if={hasBaseObject}>
+                        <div class="dg-sample-pick">
+                            <lightning-record-picker
+                                label="Preview with this record"
+                                placeholder="Search records…"
+                                object-api-name={baseObject}
+                                value={effectiveSampleRecordId}
+                                onchange={handleSampleRecordChange}
+                            ></lightning-record-picker>
+                            <p class="dg-panel-note">
+                                Preview renders a real PDF from this record. Changing it here saves it on the template
+                                as the sample record.
+                            </p>
+                        </div>
+                    </template>
+                    <template lwc:if={hasBaseObject}>
+                        <c-doc-gen-tree-builder
+                            selected-object={baseObject}
+                            query-config={queryText}
+                            onconfigchange={handleBuilderConfigChange}
+                        ></c-doc-gen-tree-builder>
+                    </template>
+                    <template lwc:else>
+                        <p class="dg-panel-warn">
+                            This template has no <b>Base Object</b> yet, so there are no fields to pick. Set one under
+                            <b>Template</b> in the toolbar, then come back.
+                        </p>
+                    </template>
+                </div>
+            </template>
+
+            <div class="dg-scroll">
+                <template for:each={renderedBoards} for:item="board">
+                    <div key={board.id} class="dg-board-wrap">
+                        <div class="dg-board-label">
+                            Page {board.index}
+                            <button
+                                class="dg-page-dup"
+                                data-board-id={board.id}
+                                onclick={handleDuplicateArtboard}
+                                title="Copy this page and everything on it — the way to reuse a header or letterhead"
+                            >
+                                Duplicate page
+                            </button>
+                            <template lwc:if={board.canDelete}>
+                                <button
+                                    class="dg-page-del"
+                                    data-board-id={board.id}
+                                    onclick={handleDeleteArtboard}
+                                    title="Delete this page"
+                                >
+                                    Delete page
+                                </button>
+                            </template>
+                        </div>
+                        <!-- The PAPER, with the margin area shaded around the artboard. The
+                             artboard is the printable area, so a box cannot land in a margin
+                             by construction — but without seeing the paper an author has no
+                             idea how much room is left outside what they are arranging. -->
+                        <div class="dg-paper" style={paperStyle}>
+                            <div
+                                class="dg-board"
+                                data-board-id={board.id}
+                                style={boardStyle}
+                                onclick={handleBoardClick}
+                            >
+                                <template for:each={renderedGuides} for:item="g">
+                                    <div key={g.key} class="dg-guide" style={g.style}></div>
+                                </template>
+                                <template for:each={board.boxes} for:item="box">
+                                    <div
+                                        key={box.id}
+                                        class={box.cls}
+                                        data-id={box.id}
+                                        style={box.style}
+                                        onmousedown={handleBoxMouseDown}
+                                    >
+                                        <div class="dg-cbox-body" data-id={box.id} lwc:dom="manual"></div>
+                                        <template lwc:if={box.isSelected}>
+                                            <span class="dg-cbox-readout">{box.readout} · {box.modeLabel}</span>
+                                            <span class="dg-h dg-h_e" data-handle="e"></span>
+                                            <span class="dg-h dg-h_s" data-handle="s"></span>
+                                            <span class="dg-h dg-h_se" data-handle="se"></span>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Layers. The way back to a box that something else is sitting on top of.
+             Off by default: it is worth its width only when boxes overlap. -->
+        <template lwc:if={showLayers}>
+            <div class="dg-layers">
+                <div class="dg-layers-head">
+                    Elements
+                    <button class="dg-layers-close" onclick={handleToggleLayers} title="Hide the element list">
+                        &times;
+                    </button>
+                </div>
+                <template lwc:if={hasLayers}>
+                    <template for:each={layerItems} for:item="l">
+                        <button key={l.id} class={l.cls} data-id={l.id} onclick={handleLayerClick} title={l.label}>
+                            <span class="dg-layer-kind">{l.kindLabel}</span>
+                            <span class="dg-layer-name">{l.label}</span>
+                        </button>
+                    </template>
+                </template>
+                <template lwc:else>
+                    <p class="dg-layers-empty">Nothing placed yet.</p>
+                </template>
+            </div>
+        </template>
+    </div>
+</template>

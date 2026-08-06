@@ -21,8 +21,9 @@ import {
     buildBlockPalette,
     splitRegions,
     joinRegions,
-    stripRegionMarkers
-} from './docGenAuthoringKit';
+    stripRegionMarkers,
+    buildBlankCanvasBody
+} from 'c/docGenAuthoringKit';
 
 // Each predesigned starter carries its natural object — the wizard's starter
 // path never asks for one (Advanced options exposes the picker for overrides).
@@ -123,6 +124,7 @@ import testRecordFilter from '@salesforce/apex/DocGenController.testRecordFilter
 // 1.61 — HTML zip sidesteps File Upload Security via client-side unzip + per-part upload
 import saveHtmlTemplateImage from '@salesforce/apex/DocGenController.saveHtmlTemplateImage';
 import saveHtmlTemplateBody from '@salesforce/apex/DocGenController.saveHtmlTemplateBody';
+import saveAndPublishHtmlBody from '@salesforce/apex/DocGenController.saveAndPublishHtmlBody';
 // Agentforce authoring: same prompt as Copy AI Prompt, but it never leaves the org.
 import isAiAvailable from '@salesforce/apex/DocGenAiTemplateController.isAiAvailable';
 import generateTemplateBody from '@salesforce/apex/DocGenAiTemplateController.generateTemplateBody';
@@ -405,7 +407,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     _newApiNameEdited = false;
     newTemplateCategory = '';
     // HTML-first: the wizard's default authoring path (starter) creates HTML templates.
-    @track newTemplateType = 'HTML';
+    @track newTemplateType = 'Canvas';
     @track newTemplateOutputFormat = 'PDF';
     @track newTemplatePageOrientation = 'Portrait';
     @track newTemplatePageSize = 'Letter';
@@ -416,7 +418,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     newTemplateQuery = '';
     // HTML-first authoring path. 'starter' (recommended) and 'ai' both create
     // HTML templates; 'file' exposes the classic Type picker for uploads.
-    @track newAuthoringMode = 'file';
+    // A blank canvas is the default. Nothing to choose before you can start.
+    @track newAuthoringMode = 'canvas';
     @track newStarterKey = 'report';
     // One-click create: auto-built query + optional company logo asset
     @track isAutoCreating = false;
@@ -441,7 +444,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     editTemplateName;
     editTemplateCategory;
     @track editTemplateType;
-    editTemplateObject;
+    // @track so children re-render when it arrives. The canvas mounts before the
+    // template record finishes loading, and without this the Data picker was handed
+    // undefined for the base object and rendered nothing at all.
+    @track editTemplateObject;
     @track editTemplateOutputFormat;
     @track editTemplatePageOrientation = 'Portrait';
     @track editTemplatePageSize = 'Letter';
@@ -1495,6 +1501,36 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * "/" hotkey fired while the user was typing in the visual canvas, then
      * insert the "/" they typed. See the key-trap comment in renderedCallback.
      */
+    /**
+     * True when Lightning's global search input currently holds focus.
+     *
+     * Matched several ways on purpose: the class name has changed across releases, and
+     * a detector that silently stops matching turns this whole recovery back off
+     * without anything failing loudly — which is how it came to be broken in the first
+     * place.
+     */
+    _isGlobalSearchFocused() {
+        try {
+            const ae = document.activeElement;
+            if (!ae) {
+                return false;
+            }
+            const cls = String(ae.className || '');
+            if (cls.indexOf('saInput') !== -1 || cls.indexOf('slds-lookup__search-input') !== -1) {
+                return true;
+            }
+            if (
+                ae.closest &&
+                ae.closest('.forceSearchAssistantInput, .slds-global-header__item_search, one-global-search')
+            ) {
+                return true;
+            }
+            return (ae.getAttribute && ae.getAttribute('placeholder') === 'Search...') || false;
+        } catch (e) {
+            return false;
+        }
+    }
+
     _recoverStolenSlash() {
         // The search dialog keeps re-grabbing focus asynchronously while it
         // opens, so a single focus() call loses the race — retry until the
@@ -1810,6 +1846,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             if (e.key && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter')) {
                                 this._lastCanvasKeyTs = Date.now();
                             }
+                            // Tracked so the focusout recovery can tell "Lightning stole
+                            // this" from "the user tabbed out on purpose".
+                            this._lastCanvasKey = e.key;
                             e.stopPropagation();
                         });
                         // Lightning's "/" global-search hotkey preempts us
@@ -1822,17 +1861,44 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                         // was mid-typing with no mouse involved. On that
                         // signature, steal focus back, restore the caret, and
                         // type the "/" the user actually pressed.
-                        pv.addEventListener('focusout', (e) => {
+                        pv.addEventListener('focusout', () => {
                             this._canvasFocused = false;
                             this._canvasBlurTs = Date.now();
-                            const rt = e.relatedTarget;
-                            const toSearchBox = rt && String(rt.className || '').indexOf('saInput') !== -1;
-                            const typedRecently = this._lastCanvasKeyTs && Date.now() - this._lastCanvasKeyTs < 1500;
+                            // Do NOT gate on "typed recently".
+                            //
+                            // The original condition required a keystroke within 1500ms,
+                            // but the stolen key never reaches this component — Lightning
+                            // consumes it at window capture — so it does not update
+                            // _lastCanvasKeyTs. Press "/" as the FIRST key after clicking
+                            // into the canvas and the timestamp is still unset, the guard
+                            // reads false, and the recovery never runs. That is the common
+                            // path, not an edge case.
+                            //
+                            // Losing focus straight from the canvas to global search with
+                            // no mouse involved is already the signature; the mouse check
+                            // is what separates theft from someone deliberately clicking
+                            // into search, and Tab is excluded because that is a legitimate
+                            // way to leave the canvas by keyboard.
                             const mousedRecently = this._lastDocMouseTs && Date.now() - this._lastDocMouseTs < 150;
-                            if (toSearchBox && typedRecently && !mousedRecently) {
-                                // eslint-disable-next-line @lwc/lwc/no-async-operation
-                                setTimeout(() => this._recoverStolenSlash(), 120);
+                            const leftByTab = this._lastCanvasKey === 'Tab';
+                            if (mousedRecently || leftByTab) {
+                                return;
                             }
+                            // Ask document.activeElement, NOT event.relatedTarget.
+                            //
+                            // relatedTarget is null on focusout whenever focus lands in a
+                            // different tree — which is precisely this case, since global
+                            // search lives outside our shadow root. So the old
+                            // `rt.className.indexOf('saInput')` test was false EVERY time
+                            // and the recovery below never once ran. The search input is in
+                            // the document's light DOM, so activeElement resolves to it
+                            // properly; it just has to be read after the focus settles.
+                            // eslint-disable-next-line @lwc/lwc/no-async-operation
+                            setTimeout(() => {
+                                if (this._isGlobalSearchFocused()) {
+                                    this._recoverStolenSlash();
+                                }
+                            }, 60);
                         });
                         // Distinguishes hotkey focus-theft from a deliberate
                         // click into global search (document listeners DO fire
@@ -1843,6 +1909,37 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             };
                             document.addEventListener('mousedown', this._onDocMouseDown, true);
                             this._docMouseListenerAdded = true;
+                        }
+                        // PREVENT the theft where we can, rather than only recovering.
+                        //
+                        // Document-capture listeners DO reach component code (the mousedown
+                        // above proves it); it is window-capture that LWS withholds. So this
+                        // wins outright whenever Lightning's hotkey is bound at document
+                        // level or registered after ours, and costs nothing when it is not —
+                        // the focusout recovery still catches that case. Scoped hard: only a
+                        // bare "/" with no modifiers, and only while the canvas actually has
+                        // focus, so it can never swallow a slash the user typed elsewhere.
+                        if (!this._docKeyListenerAdded) {
+                            this._onDocKeyDown = (e) => {
+                                if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) {
+                                    return;
+                                }
+                                if (!this._canvasFocused) {
+                                    return;
+                                }
+                                e.preventDefault();
+                                e.stopImmediatePropagation();
+                                try {
+                                    document.execCommand('insertText', false, '/');
+                                    this.htmlEditorDirty = true;
+                                    this._maybePillifyTyped();
+                                    this._maybeOpenSlashMenu();
+                                } catch (err) {
+                                    /* if the insert fails the recovery path still applies */
+                                }
+                            };
+                            document.addEventListener('keydown', this._onDocKeyDown, true);
+                            this._docKeyListenerAdded = true;
                         }
                         // Land ready-to-type: focus the page with the caret at
                         // the first text block so the cursor is never a hunt.
@@ -2216,41 +2313,40 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     get isAuthoringScratch() {
         return this.newAuthoringMode === 'scratch';
     }
+    get isAuthoringCanvas() {
+        return this.newAuthoringMode === 'canvas';
+    }
 
+    /**
+     * Two ways in: bring a document, or draw one.
+     *
+     * Starters are gone. Every one was a layout somebody still had to understand and
+     * then edit, and a wizard that asks which of five designs you want before you have
+     * seen the editor is asking a question too early. A blank canvas is a shorter path
+     * to the same place, and the editor is now good enough to make it the honest one.
+     *
+     * 'starter', 'scratch' (the legacy blank designer) and 'ai' (Agentforce) are
+     * deliberately absent rather than deleted, so a template already created any of
+     * those ways still opens normally. They are simply not somewhere the wizard sends
+     * anyone.
+     */
     get authoringCards() {
         const defs = [
             {
-                mode: 'starter',
-                title: 'Start from a Design',
-                badge: 'Recommended',
-                icon: 'utility:brush',
-                desc: 'Pick a professional starter layout — your fields are dropped in automatically and the template renders on the first click. Creates an HTML template, the most reliable path to pixel-perfect PDFs.'
-            },
-            {
-                mode: 'ai',
-                title: 'Generate with AI',
-                badge: this.isAgentforceAvailable ? 'Agentforce' : null,
-                icon: 'utility:einstein',
-                // Both routes send the identical prompt; the only difference is
-                // whether it leaves the org. Say that, rather than describing
-                // copy-paste as the only option once Agentforce is available.
-                desc: this.isAgentforceAvailable
-                    ? "We assemble a prompt with your fields and Portwood's tag syntax. Generate it right here with Agentforce, or copy the prompt into Claude, ChatGPT, or Copilot and paste the HTML back. Either way you land in the designer."
-                    : "We assemble a ready-to-paste prompt with your fields and Portwood's tag syntax. Paste it into Claude, ChatGPT, or Copilot, then paste the HTML it returns straight into the template editor."
-            },
-            {
-                mode: 'scratch',
-                title: 'Start From Scratch',
-                badge: null,
-                icon: 'utility:edit',
-                desc: 'A blank page in the visual designer. Click anywhere and type, drag in blocks and merge tags, or hit ` for the insert menu — build the document your way.'
-            },
-            {
                 mode: 'file',
-                title: 'I Have an Existing File',
+                title: 'Bring an Existing Template',
                 badge: null,
                 icon: 'utility:upload',
-                desc: 'Upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain. Word documents are converted to HTML for PDF output — complex layouts may not convert exactly.'
+                desc: 'Upload a Word, PowerPoint, Excel, fillable PDF, or HTML file you already maintain. Each keeps its own format — Word generates .docx, Excel .xlsx, PowerPoint .pptx. An HTML file can also be imported onto a canvas from the editor.'
+            },
+            {
+                mode: 'canvas',
+                title: 'Start from a Blank Canvas',
+                // Beta, and said out loud. Subscribers should know which parts of the
+                // product are still moving before they build on them.
+                badge: 'Beta',
+                icon: 'utility:layout',
+                desc: 'An empty artboard. Drop text, tables, images, shapes, codes and signature blocks exactly where you want them and they land there in the PDF, to the inch. Lists still flow onto as many pages as the data needs.'
             }
         ];
         return defs.map((d) => ({
@@ -2281,7 +2377,19 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             return;
         }
         this.newAuthoringMode = mode;
-        if (mode === 'starter' || mode === 'ai' || mode === 'scratch') {
+        if (mode === 'canvas') {
+            // Canvas is its own template TYPE, not an HTML template authored
+            // differently — the editor, the stored body shape and the round-trip all
+            // differ. It still RENDERS through the HTML path (DocGenService.isHtmlBacked).
+            this.newTemplateType = 'Canvas';
+            this.newTemplateOutputFormat = 'PDF';
+        } else if (mode === 'starter') {
+            // Starters are converted to canvas documents on the way in, so the author
+            // lands in the editor they will keep using rather than in an HTML body they
+            // would have to migrate later.
+            this.newTemplateType = 'Canvas';
+            this.newTemplateOutputFormat = 'PDF';
+        } else if (mode === 'ai' || mode === 'scratch') {
             this.newTemplateType = 'HTML';
             this.newTemplateOutputFormat = 'PDF';
         } else {
@@ -2395,9 +2503,13 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             if (this.dataSourceMode === 'record' && !(this.newTemplateQuery || '').trim()) {
                 // Scratch builds get the RICH query — the author picks fields
                 // from the palette, so all usable fields must be available.
+                // Canvas gets the RICH query for the same reason Scratch does: the
+                // author picks fields from a palette rather than writing a query, so a
+                // six-field default leaves them with almost nothing to drop onto the
+                // artboard.
                 this.newTemplateQuery = await this._buildDefaultQueryConfig(
                     this.newTemplateObject,
-                    this.isAuthoringScratch
+                    this.isAuthoringScratch || this.isAuthoringCanvas
                 );
             }
             await this.createTemplate();
@@ -4383,7 +4495,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Until the wire resolves (and if it errors) keep the historical hardcoded
         // list so the wizard is never empty.
         const values = this._orgTypeValues && this._orgTypeValues.length ? this._orgTypeValues : fallback;
-        return values.map((v) => ({ label: v, value: v }));
+        // Canvas is omitted: this picker only appears on the upload path, and there is
+        // no file that makes a Canvas template. It is reached by choosing "Start from a
+        // Blank Canvas" instead.
+        return values.filter((v) => v !== 'Canvas').map((v) => ({ label: v, value: v }));
     }
 
     /**
@@ -4417,7 +4532,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (type === 'Excel') {
             return [{ label: 'Native (.xlsx)', value: 'Native' }];
         }
-        if (type === 'HTML' || type === 'PDF') {
+        // Canvas belongs here: it renders through the HTML path, which sets PDF
+        // unconditionally. Offering "Native (.docx)" was offering a format the engine
+        // will never produce for it.
+        if (type === 'HTML' || type === 'PDF' || type === 'Canvas') {
             return [{ label: 'PDF', value: 'PDF' }];
         }
         return [
@@ -4432,6 +4550,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (type === 'Excel') return ['.xlsx'];
         if (type === 'HTML') return ['.html', '.htm', '.zip'];
         if (type === 'PDF') return ['.pdf'];
+        // A Canvas body is authored, never uploaded. Falling through to .docx invited
+        // someone to drop a Word file onto a template that cannot hold one.
+        if (type === 'Canvas') return [];
         return ['.docx'];
     }
 
@@ -4473,8 +4594,22 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // Portrait/Letter/Default and makes users feel they're a required choice).
     // After the template is created and the body is uploaded, the edit modal
     // re-evaluates and shows them only if the uploaded HTML lacks @page.
+    /**
+     * Page layout belongs to the DOCUMENT for HTML and Canvas, not to the record.
+     *
+     * Both render through an @page CSS rule the body carries, and the engine defers to
+     * a source @page — so these fields are read by nothing on those types. Collecting
+     * them anyway asks for a decision that is then silently discarded, which is how
+     * someone picks A4 in the wizard and spends the afternoon wondering why the PDF is
+     * Letter. Canvas additionally owns page setup in its own editor.
+     */
     get showNewPageLayoutFields() {
-        return this.showPageOrientation && this.newTemplateType !== 'HTML';
+        return this.showPageOrientation && this.newTemplateType !== 'HTML' && this.newTemplateType !== 'Canvas';
+    }
+
+    /** Explains where page setup went for a Canvas template, rather than leaving a gap. */
+    get showCanvasPageNote() {
+        return this.newTemplateType === 'Canvas';
     }
 
     get isCreatingHtmlPdf() {
@@ -4483,11 +4618,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     /** Show Custom Margins text field only when "Custom" preset is selected. */
     get showNewCustomMargins() {
-        return this.showPageOrientation && this.newTemplatePageMargins === 'Custom';
+        return this.showNewPageLayoutFields && this.newTemplatePageMargins === 'Custom';
     }
 
     get showEditCustomMargins() {
-        return this.showPageOrientation && this.editTemplatePageMargins === 'Custom';
+        // Tied to the page-layout block rather than to output format alone: with a
+        // Canvas template (or an HTML body that owns its @page) the rest of the block
+        // is hidden, and this input was left behind on its own, editing a value
+        // nothing reads.
+        return this.showEditPageLayoutFields && this.editTemplatePageMargins === 'Custom';
+    }
+
+    /**
+     * A Canvas template has no file to replace — its body is authored on the canvas and
+     * versioned by saving there. The upload widget was showing on every type, so a
+     * Canvas template offered "Upload New Version" against a .docx filter.
+     */
+    get showEditFileUploadForType() {
+        return this.showEditFileUpload && !this.isCanvasTemplate;
     }
 
     get isEditTypeHtml() {
@@ -4501,12 +4649,25 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     // v1.90 — page-layout fields are dead inputs when the HTML body owns @page.
     // The engine ignores them and they only confuse authors, so hide them and
     // show an explanatory banner in their place.
+    /**
+     * A Canvas body ALWAYS carries its own @page rule — the canvas serializes one on
+     * every save — so these fields are read by nothing. The editHtmlBodyOwnsPageRule
+     * flag does not cover it: that is only raised when a body is uploaded or pasted in
+     * this session, not when an existing template is opened, so a Canvas template
+     * showed live-looking Page Size / Orientation / Margins controls that changed
+     * nothing about the document.
+     */
     get showEditPageLayoutFields() {
-        return this.showPageOrientation && !this.editHtmlBodyOwnsPageRule;
+        return this.showPageOrientation && !this.editHtmlBodyOwnsPageRule && !this.isCanvasTemplate;
     }
 
     get showEditHtmlOwnsPageBanner() {
         return this.isEditTypeHtml && this.editHtmlBodyOwnsPageRule;
+    }
+
+    /** Says where page setup actually lives for a Canvas template. */
+    get showEditCanvasPageBanner() {
+        return this.isCanvasTemplate;
     }
 
     // --- Create Logic ---
@@ -4563,6 +4724,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         // Snapshot authoring-path inputs before resetForm() clears them — the
         // starter body is built and attached after the modal opens.
         const authoringMode = this.newAuthoringMode;
+        // Snapshot the TYPE too. resetForm() runs before the starter body is attached
+        // and puts newTemplateType back to 'Word', so reading it later reported the
+        // wizard's default rather than the template just created — every starter wrote
+        // the HTML body and none wrote the canvas one.
+        const wantsCanvas = this.newTemplateType === 'Canvas';
         const starterKey = this.newStarterKey;
         const starterShape =
             authoringMode === 'starter' ? extractQueryShape(this.newTemplateQuery, this.newTemplateObject) : null;
@@ -4610,7 +4776,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             await this.openEditModal(newRow, 'document');
             if (authoringMode === 'starter') {
                 await this._ensureLogoAsset(record.id);
-                await this._applyStarterBody(record.id, starterKey, starterShape, chosenLogoTag);
+                await this._applyStarterBody(record.id, starterKey, starterShape, chosenLogoTag, wantsCanvas);
                 // Land straight in the full-screen designer with the starter open.
                 this.isEditModalOpen = false;
                 await this._openDesignerSurface();
@@ -4621,6 +4787,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 if (aiPastedHtml) {
                     await this._applyPastedBody(record.id, aiPastedHtml, newRow.Name);
                 }
+                this.isEditModalOpen = false;
+                await this._openDesignerSurface();
+            } else if (authoringMode === 'canvas') {
+                // Seed one empty artboard so the canvas opens on a real page rather
+                // than an empty void with nothing to drop onto.
+                await this._applyPastedBody(record.id, buildBlankCanvasBody(), newRow.Name);
                 this.isEditModalOpen = false;
                 await this._openDesignerSurface();
             } else if (authoringMode === 'scratch') {
@@ -4676,8 +4848,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * fields and attach it as the template body, so the very first "Save as
      * New Version" click produces a working v1 that renders on Generate.
      */
-    async _applyStarterBody(templateId, starterKey, shape, logoTag) {
+    async _applyStarterBody(templateId, starterKey, shape, logoTag, wantsCanvas) {
         try {
+            // A Canvas template gets a CANVAS-native starter — boxes already placed,
+            // each one draggable and editable with the tool that owns it. Running the
+            // HTML starter through the importer instead would be lossless on content
+            // but would land as a couple of large blocks: a page of prose is one text
+            // box, and an authored table stays markup because reshaping an arbitrary
+            // table into the table model was measured to drop merge tags. Right for
+            // someone else's document; wrong for a starting point.
             let html = buildStarterHtml(starterKey, shape);
             // Starter bodies carry SIZED {%asset:logo:Nx} slots (144x header
             // logos, 120x on the agreement); an existing asset picked in the
@@ -4690,7 +4869,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 });
             }
             const fileName = (this.selectedStarterLabelFor(starterKey) || 'Starter').replace(/[^\w]+/g, '_') + '.html';
-            const bodyResult = await saveHtmlTemplateBody({ templateId, fileName, htmlContent: html });
+            // PUBLISHED as the active version, not left as a loose body CV.
+            //
+            // The canvas reads the active version's body — deliberately, so the editor
+            // and the renderer look at the same bytes. A starter written only as a loose
+            // CV is therefore invisible to it, and the author lands on a blank artboard
+            // over a template that does have content. Publishing makes the thing just
+            // written the thing that opens, and the thing that generates.
+            const bodyResult = wantsCanvas
+                ? await saveAndPublishHtmlBody({ templateId, fileName, htmlContent: html, newVersion: true })
+                : await saveHtmlTemplateBody({ templateId, fileName, htmlContent: html });
             this.currentFileId = bodyResult.contentDocumentId;
             this.uploadedContentVersionId = bodyResult.contentVersionId;
             this.uploadedFileName = fileName;
@@ -4789,13 +4977,17 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } else if (actionName === 'edit') {
             this.openEditModal(row, 'details');
         } else if (actionName === 'design') {
-            if (row[F.Type] === 'HTML') {
+            // Canvas counts. openDesignerForRow already routes it to the canvas surface
+            // rather than the legacy one — the gate here just never let it through, so
+            // the row action on a Canvas template answered "Designer is for HTML
+            // templates" about a template whose whole point is the designer.
+            if (row[F.Type] === 'HTML' || row[F.Type] === 'Canvas') {
                 this.openDesignerForRow(row);
             } else {
                 this.showToast(
                     'Designer is for HTML templates',
                     row[F.Type] === 'Word'
-                        ? 'Open Edit → Document & History → View Converted HTML, and use "Switch to HTML Template" to bring this Word template into the designer.'
+                        ? 'Open Edit → Document & History → View Converted HTML to see exactly what the PDF engine renders from this Word file.'
                         : 'This template type is file-based — use Edit to manage its document.',
                     'info'
                 );
@@ -6617,6 +6809,23 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                 this._applyCanvasDimensions(pv);
             }
         }
+    }
+
+    /**
+     * Canvas templates get the canvas editor; everything else keeps the flow designer.
+     * Two mutually exclusive getters rather than one negated in the markup, so the
+     * template reads as "which editor" instead of "the designer, unless…".
+     */
+    get isCanvasTemplate() {
+        return this.editTemplateType === 'Canvas';
+    }
+
+    get showCanvasDesigner() {
+        return this.showHtmlBodyVisual && this.isCanvasTemplate;
+    }
+
+    get showFlowDesigner() {
+        return this.showHtmlBodyVisual && !this.isCanvasTemplate;
     }
 
     get codeSplitClass() {
@@ -12306,7 +12515,24 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     // --- Designer tab (full-screen editing surface) ---
     get designerHasTemplate() {
-        return !!this.editTemplateId && this.editTemplateType === 'HTML';
+        // Canvas counts too — it opens the canvas surface rather than the flow shell.
+        // Gating on HTML alone meant clicking a Canvas template in the picker did
+        // nothing at all: the tab switched, this getter reported no template, and the
+        // picker just re-rendered. A dead click with no error is the worst version.
+        return !!this.editTemplateId && (this.editTemplateType === 'HTML' || this.editTemplateType === 'Canvas');
+    }
+
+    get isCanvasTemplate() {
+        return this.editTemplateType === 'Canvas';
+    }
+
+    /** The Designer tab's two surfaces — which editor, not "designer unless…". */
+    get showCanvasDesignerTab() {
+        return this.designerHasTemplate && this.isCanvasTemplate;
+    }
+
+    get showFlowDesignerTab() {
+        return this.designerHasTemplate && !this.isCanvasTemplate;
     }
 
     get designerTitle() {
@@ -12970,7 +13196,11 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     /** Every template the designer can open, most recently modified first. */
     _designerCandidates() {
-        const rows = (this.templates || []).filter((t) => t[F.Type] === 'HTML');
+        // Canvas templates open too — into the canvas editor rather than the flow
+        // designer (see showCanvasDesigner). Filtering to HTML alone made a Canvas
+        // template creatable and renderable but impossible to reopen, which is a dead
+        // end the author can only escape by rebuilding it.
+        const rows = (this.templates || []).filter((t) => t[F.Type] === 'HTML' || t[F.Type] === 'Canvas');
         return rows.sort((a, b) => String(b.LastModifiedDate || '').localeCompare(String(a.LastModifiedDate || '')));
     }
 
@@ -13073,6 +13303,16 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
 
     async _openDesignerSurface() {
         this.activeMainTab = 'design';
+        if (this.isCanvasTemplate) {
+            // The canvas owns its own load and serialize cycle, so NONE of the flow
+            // designer's setup applies. Bailing out before it rather than after also
+            // skips _loadBodyIntoEditor, which staged the canvas body into the HTML
+            // textarea — a second, divergent copy of a document the canvas is about to
+            // load itself, and the exact shape of the two-bodies bug this editor exists
+            // to avoid.
+            this._loadWizardAssets();
+            return;
+        }
         this.showHtmlBodyEditor = true;
         this.showBlockPanel = true;
         this.showTagPanel = true;
@@ -13093,6 +13333,15 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._enterVisualMode(body);
     }
 
+    /**
+     * The canvas saved a new Query Config. Mirror it locally so the field picker
+     * reflects it immediately — without this the author saves a query and the chips
+     * keep offering the old fields until the whole tab is reloaded.
+     */
+    handleCanvasQueryUpdated(event) {
+        this.editTemplateQuery = (event.detail && event.detail.query) || this.editTemplateQuery;
+    }
+
     /** Designer → this template's full edit modal, no list-hunting. */
     handleEditTemplateFromDesigner() {
         if (this.showHtmlBodyVisual) {
@@ -13104,6 +13353,32 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this.activeMainTab = 'list';
         this.activeEditTab = 'document';
         this.isEditModalOpen = true;
+    }
+
+    /**
+     * Canvas "Templates" button. Routes through the SAME exit as the flow designer so
+     * there is one definition of what leaving the designer means — a second path would
+     * drift, and the one that skipped a cleanup step would be the one nobody noticed.
+     * The canvas has already confirmed any unsaved changes before dispatching.
+     */
+    /**
+     * Canvas "Templates" — back to the DESIGNER's own picker, not out to the list.
+     *
+     * Leaving the designer entirely was the wrong destination: the button sits in the
+     * designer's toolbar next to a template name, so it reads as "show me the other
+     * templates", and closing the whole surface to reach the record list made picking
+     * a second template a four-click round trip. Clearing the selection is enough —
+     * designerHasTemplate goes false and the tab renders its picker.
+     */
+    handleCanvasBack() {
+        if (this.showHtmlBodyVisual) {
+            this._exitVisualMode();
+        }
+        this.handleClosePdfPreview();
+        this.activePanel = null;
+        this.editTemplateId = null;
+        this.editTemplateType = null;
+        this.activeMainTab = 'design';
     }
 
     handleCloseDesigner() {
@@ -13846,6 +14121,43 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
      * is one (chips keep it alive via mousedown-preventDefault), otherwise
      * appended at the end of whichever surface owns it.
      */
+    /**
+     * Parks the caret immediately AFTER a just-inserted node.
+     *
+     * Range.insertNode leaves the range positioned before the content it inserted, so
+     * without this the caret sits to the left of a freshly inserted merge tag and the
+     * next keystroke types in front of it. Same job the type-to-pill and pill-edit
+     * paths already do for themselves — a merge-tag pill is contenteditable=false, so
+     * "next to it" is the only sane resting place.
+     *
+     * Also refreshes the REMEMBERED caret (#240 made inserts prefer `_caret` over the
+     * live selection). Leaving it on the pre-insert position would send the next insert
+     * back to where this one started, stacking tags in reverse order.
+     */
+    _parkCaretAfter(node, pv) {
+        if (!node || !node.parentNode) {
+            return;
+        }
+        try {
+            const doc = (pv && pv.ownerDocument) || document;
+            const r = doc.createRange();
+            r.setStartAfter(node);
+            r.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(r);
+            if (pv && pv.focus) {
+                pv.focus();
+            }
+            this._lastCanvasRange = r.cloneRange();
+            // Recompute from the selection just set so _caret's block/cell context and
+            // the active-block highlight follow the caret instead of going stale.
+            this._recordCaret(r.startContainer, pv);
+        } catch (e) {
+            /* caret parking is best-effort — the insert itself already succeeded */
+        }
+    }
+
     _insertIntoVisualPage(markup) {
         const pv = this._insertTargetSurface();
         if (!pv) {
@@ -13861,6 +14173,12 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         this._pillifyTags(tpl.content);
         // Capture BEFORE insertion — insertNode empties the fragment.
         const firstEl = tpl.content.firstElementChild;
+        // Same reason, but for the caret: after Range.insertNode the range still starts
+        // BEFORE the inserted content (that is what the DOM spec says it does), so the
+        // caret ends up to the LEFT of the tag that was just inserted and the next
+        // keystroke types in front of it. Remember the last node so the caret can be
+        // parked after it once the fragment has been spliced in.
+        const lastNode = tpl.content.lastChild;
         let inserted = false;
         // #240 — prefer the REMEMBERED caret over the live selection. Clicking a chip in
         // the rail moves focus out of the canvas, so by the time this runs the live
@@ -13901,6 +14219,9 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         if (!inserted) {
             pv.appendChild(tpl.content);
         }
+        // Both routes land here: type-after-the-tag is what an author expects whether
+        // the insert went to the caret or was appended.
+        this._parkCaretAfter(lastNode, pv);
         // Report what ACTUALLY happened — the old toast said "added at the end"
         // unconditionally, which misreported every successful caret insert.
         this._lastInsertWasAppended = !inserted;
@@ -14200,9 +14521,33 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         );
     }
 
-    /** Purple insertion caret that tracks the pointer while dragging. */
+    /**
+     * Block-level elements the landing box can outline. A caret alone answers
+     * "between which characters"; authors dragging a tag want "into which cell /
+     * which paragraph", which is a different question and the one that actually
+     * decides whether the drop was right.
+     */
+    static get DROP_ZONE_BLOCKS() {
+        return 'td,th,li,p,h1,h2,h3,h4,h5,h6,blockquote,pre';
+    }
+
+    /**
+     * Purple insertion caret plus a translucent landing box, both tracking the
+     * pointer while dragging.
+     *
+     * The box carries `dg-drop-marker` in ADDITION to its own class on purpose. Four
+     * separate places strip editor chrome out of the serialized body by that class
+     * name (the save path, the Source view, the preview scrub and the region walker).
+     * Giving the box a brand-new class would have meant finding all four and adding it
+     * to each — and missing one leaks `<div class="dg-drop-zone">` into a customer's
+     * saved template. Sharing the class means every existing stripper already handles
+     * it, and the smoke suite's "no editor chrome leaks into the serialized body" check
+     * covers it for free.
+     */
     _showDropMarker(event, pv) {
-        let marker = pv.querySelector('.dg-drop-marker');
+        // :not(.dg-drop-zone) — both elements answer to .dg-drop-marker now, so the
+        // caret lookup has to exclude the box or it styles the wrong node.
+        let marker = pv.querySelector('.dg-drop-marker:not(.dg-drop-zone)');
         if (!marker) {
             marker = document.createElement('span');
             marker.className = 'dg-drop-marker';
@@ -14212,20 +14557,41 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             pv.style.position = 'relative';
             pv.appendChild(marker);
         }
+        let zone = pv.querySelector('.dg-drop-zone');
+        if (!zone) {
+            zone = document.createElement('div');
+            zone.className = 'dg-drop-marker dg-drop-zone';
+            zone.setAttribute('contenteditable', 'false');
+            // z-index below the caret so the precise insertion point stays readable
+            // on top of the box.
+            zone.style.cssText =
+                'position: absolute; pointer-events: none; z-index: 98; border: 2px dashed rgba(124, 58, 237, 0.75); border-radius: 4px; background: rgba(124, 58, 237, 0.10); box-sizing: border-box;';
+            pv.style.position = 'relative';
+            pv.appendChild(zone);
+        }
         let rect = null;
+        let blockRect = null;
         try {
             const range = document.caretRangeFromPoint(event.clientX, event.clientY);
             if (range && pv.contains(range.startContainer)) {
                 const rects = range.getClientRects();
                 rect = rects && rects.length ? rects[0] : null;
+                const el =
+                    range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
                 if (!rect) {
-                    const el =
-                        range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
                     rect = el ? el.getBoundingClientRect() : null;
+                }
+                // The landing box outlines the block that will RECEIVE the drop.
+                // Bounded to inside the canvas: closest() would happily walk out to the
+                // editor chrome and outline the whole page.
+                const block = el && el.closest ? el.closest(DocGenAdmin.DROP_ZONE_BLOCKS) : null;
+                if (block && pv.contains(block) && block !== pv) {
+                    blockRect = block.getBoundingClientRect();
                 }
             }
         } catch (e) {
             rect = null;
+            blockRect = null;
         }
         if (rect) {
             const pvRect = pv.getBoundingClientRect();
@@ -14241,12 +14607,30 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         } else {
             marker.style.display = 'none';
         }
+        if (blockRect) {
+            const pvRect2 = pv.getBoundingClientRect();
+            const z2 = this.designerZoom || 1;
+            // Same unscaling as the caret (#244): the box is a child of the scaled
+            // canvas but getBoundingClientRect reports scaled screen pixels, so without
+            // dividing z back out the outline drifts off the block as you zoom.
+            zone.style.left = (blockRect.left - pvRect2.left) / z2 + 'px';
+            zone.style.top = (blockRect.top - pvRect2.top) / z2 + 'px';
+            zone.style.width = blockRect.width / z2 + 'px';
+            zone.style.height = blockRect.height / z2 + 'px';
+            zone.style.display = 'block';
+        } else {
+            // Between blocks, or over empty canvas — the caret alone is the honest
+            // answer. An outline with nothing to outline would be a guess.
+            zone.style.display = 'none';
+        }
         pv.style.boxShadow = '0 0 0 3px rgba(124, 58, 237, 0.35)';
     }
 
     _hideDropMarker(pv) {
-        const marker = pv.querySelector('.dg-drop-marker');
-        if (marker) {
+        // querySelectorAll, not querySelector: the caret and the landing box BOTH carry
+        // dg-drop-marker, and removing only the first left the other one painted on the
+        // canvas after the drop finished.
+        for (const marker of pv.querySelectorAll('.dg-drop-marker')) {
             marker.remove();
         }
         pv.style.boxShadow = '';

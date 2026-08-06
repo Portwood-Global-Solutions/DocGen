@@ -56,7 +56,7 @@ public with sharing class DocGenMergeJob implements Queueable {
                 WITH SYSTEM_MODE
                 LIMIT 1
             ];
-            Boolean isHtmlTemplate = job.Template__r != null && job.Template__r.Type__c == 'HTML';
+            Boolean isHtmlTemplate = job.Template__r != null && DocGenService.isHtmlBacked(job.Template__r.Type__c);
 
             // Concatenate snippets. For DOCX-source snippets, naive concat of
             // full HTML documents works (Flying Saucer tolerates nested <html>

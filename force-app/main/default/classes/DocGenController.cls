@@ -1018,7 +1018,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ];
             String documentXml = null;
 
-            if (template.Type__c == 'HTML') {
+            if (DocGenService.isHtmlBacked(template.Type__c)) {
                 // HTML-type: read the active version's body CV directly. The body has
                 // already been rewritten at upload time (image src → /sfc/ URLs).
                 if (!activeVersions.isEmpty() && String.isNotBlank(activeVersions[0].Content_Version_Id__c)) {
@@ -1393,7 +1393,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             ];
             String documentXml = null;
 
-            if (templateType == 'HTML') {
+            if (DocGenService.isHtmlBacked(templateType)) {
                 if (!activeVersions.isEmpty() && String.isNotBlank(activeVersions[0].Content_Version_Id__c)) {
                     Id bodyCvId = (Id) activeVersions[0].Content_Version_Id__c;
                     DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
@@ -3229,8 +3229,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (tpls.isEmpty()) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
-        if (tpls[0].Type__c != 'HTML') {
-            throw new DocGenException('saveHtmlTemplateImage is for HTML-type templates only.');
+        if (!DocGenService.isHtmlBacked(tpls[0].Type__c)) {
+            throw new DocGenException('saveHtmlTemplateImage is for HTML-backed templates only.');
         }
 
         String base = fileName.substringAfterLast('/');
@@ -3384,8 +3384,10 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (tpls.isEmpty()) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
-        if (tpls[0].Type__c != 'HTML') {
-            throw new DocGenException('saveHtmlTemplateBody is for HTML-type templates only.');
+        // Canvas bodies ARE HTML documents — the canvas editor serializes artboards
+        // and boxes to the CANVAS_CSS contract. Same storage, same read path.
+        if (!DocGenService.isHtmlBacked(tpls[0].Type__c)) {
+            throw new DocGenException('saveHtmlTemplateBody is for HTML-backed templates only.');
         }
 
         // Refuse to overwrite a real body with an empty one.
@@ -3445,6 +3447,228 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     }
 
     /**
+     * Returns a specific version's stored body.
+     *
+     * The canvas reads this rather than the loose `docgen_html_body_*` CV, so the
+     * editor and the RENDERER are looking at the same bytes. Reading the loose body
+     * while generation read the version's is exactly how a template came to show five
+     * boxes on screen and render two, with nothing reporting a problem.
+     *
+     * Version-scoped so "go back to the version from Tuesday" can actually restore
+     * that canvas, rather than restoring whatever was saved most recently.
+     */
+    @AuraEnabled
+    public static String getVersionBody(Id versionId) {
+        if (versionId == null) {
+            throw new DocGenException('Version ID is required.');
+        }
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template_Version__c.sObjectType,
+            new Set<String>{ 'Content_Version_Id__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> vs = [
+            SELECT Content_Version_Id__c
+            FROM DocGen_Template_Version__c
+            WHERE Id = :versionId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (vs.isEmpty() || String.isBlank(vs[0].Content_Version_Id__c)) {
+            return null;
+        }
+        Id cvId = (Id) vs[0].Content_Version_Id__c;
+        DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'VersionData' });
+        // SYSTEM_MODE: template-internal CVs carry Visibility=InternalUsers links,
+        // which USER_MODE reads silently drop (#114).
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<ContentVersion> cvs = [
+            SELECT VersionData
+            FROM ContentVersion
+            WHERE Id = :cvId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        return cvs.isEmpty() ? null : cvs[0].VersionData.toString();
+    }
+
+    /**
+     * Saves an HTML/Canvas body AND points the active version at it, so what was just
+     * saved is what will render.
+     *
+     * A template carries TWO bodies. `docgen_html_body_<templateId>` is what the
+     * editors read and write; the active DocGen_Template_Version__c's
+     * Content_Version_Id__c is what the RENDER path loads. saveHtmlTemplateBody only
+     * writes the first, which is correct for the flow designer — it has an explicit
+     * "Save as New Version" step that publishes.
+     *
+     * The canvas has no such step and should not need one: you arrange a page, you
+     * press Save, and the document you get must be the page you arranged. Without this
+     * the two bodies drift and generation quietly renders an older canvas — measured
+     * on a real template as 5 boxes stored versus 2 boxes rendered, with no error
+     * anywhere. That is the worst kind of bug: everything reports success and the
+     * output is simply wrong.
+     */
+    @AuraEnabled
+    // Single signature, no overload: @AuraEnabled methods cannot be overloaded, and a
+    // second one fails the deploy rather than shadowing quietly.
+    public static Map<String, Object> saveAndPublishHtmlBody(
+        Id templateId,
+        String fileName,
+        String htmlContent,
+        Boolean newVersion
+    ) {
+        Map<String, Object> saved = saveHtmlTemplateBody(templateId, fileName, htmlContent);
+        Id cvId = (Id) saved.get('contentVersionId');
+
+        // Every authoring field, not just the body pointer. A new version has to be a
+        // COPY of the one it supersedes — see the insert below.
+        Set<String> versionFields = new Set<String>{
+            'Template__c',
+            'Is_Active__c',
+            'Content_Version_Id__c',
+            'Query_Config__c',
+            'Base_Object_API__c',
+            'Category__c',
+            'Description__c',
+            'Type__c',
+            'Output_Format__c',
+            'Document_Title_Format__c',
+            'Header_Html__c',
+            'Footer_Html__c',
+            'Page_Size__c',
+            'Page_Orientation__c',
+            'Page_Margins__c',
+            'Custom_Margins__c',
+            'Watermark_Image_CV_Id__c'
+        };
+        DocGenFlsGuard.assertAccessible(DocGen_Template_Version__c.sObjectType, versionFields);
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template_Version__c> active = [
+            SELECT
+                Id,
+                Content_Version_Id__c,
+                Query_Config__c,
+                Base_Object_API__c,
+                Category__c,
+                Description__c,
+                Type__c,
+                Output_Format__c,
+                Document_Title_Format__c,
+                Header_Html__c,
+                Footer_Html__c,
+                Page_Size__c,
+                Page_Orientation__c,
+                Page_Margins__c,
+                Custom_Margins__c,
+                Watermark_Image_CV_Id__c
+            FROM DocGen_Template_Version__c
+            WHERE Template__c = :templateId AND Is_Active__c = TRUE
+            WITH SYSTEM_MODE
+            ORDER BY CreatedDate DESC
+            LIMIT 1
+        ];
+
+        DocGenFlsGuard.assertAccessible(DocGen_Template__c.sObjectType, new Set<String>{ 'Type__c' });
+        /* code-analyzer-suppress ApexFlsViolation */
+        DocGen_Template__c tpl = [
+            SELECT Type__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+
+        // A save creates a NEW version and makes it active, rather than repointing the
+        // current one. Repointing meant every save overwrote the only record of what
+        // the document used to be, so the version picker could never take you back to
+        // anything — which is the entire reason it exists. Versions are cheap; a lost
+        // layout is not.
+        if (newVersion) {
+            // Deactivate EVERY active version, not just the one read above.
+            //
+            // That read is LIMIT 1, so deactivating only it would leave any other
+            // active rows active and the template would end up with several. The
+            // renderer picks its active version with LIMIT 1 and NO ORDER BY
+            // (DocGenTemplateManager.getTemplateFileContent), so which body prints
+            // becomes arbitrary — a save appears to do nothing because the PDF is
+            // built from some older version. Sweeping them all also self-heals a
+            // template that already drifted into that state.
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template_Version__c.sObjectType,
+                new Set<String>{ 'Template__c', 'Is_Active__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template_Version__c> allActive = [
+                SELECT Id, Is_Active__c
+                FROM DocGen_Template_Version__c
+                WHERE Template__c = :templateId AND Is_Active__c = TRUE
+                WITH SYSTEM_MODE
+            ];
+            for (DocGen_Template_Version__c prior : allActive) {
+                prior.Is_Active__c = false;
+            }
+            if (!allActive.isEmpty()) {
+                DocGenFlsGuard.assertUpdateable(allActive, new Set<String>{ 'Is_Active__c' });
+                /* code-analyzer-suppress ApexFlsViolation */
+                Database.update(allActive, AccessLevel.SYSTEM_MODE);
+            }
+            // CLONE the version being superseded, then repoint the body.
+            //
+            // A version carries the whole authoring config — query, base object, page
+            // size, margins, header/footer, output format — and activateVersion pushes
+            // those fields BACK onto the template. So a new version built from scratch
+            // with only a body pointer does not merely lose its own settings: activating
+            // it wipes the template's query config and page setup. Cloning means a save
+            // changes exactly one thing, which is what a save should do.
+            DocGen_Template_Version__c fresh;
+            if (!active.isEmpty()) {
+                fresh = active[0].clone(false, true, false, false);
+            } else {
+                fresh = new DocGen_Template_Version__c(Template__c = templateId, Type__c = tpl.Type__c);
+            }
+            fresh.Template__c = templateId;
+            fresh.Content_Version_Id__c = cvId;
+            fresh.Is_Active__c = true;
+            if (String.isBlank(fresh.Type__c)) {
+                fresh.Type__c = tpl.Type__c;
+            }
+            DocGenFlsGuard.assertCreateable(fresh, versionFields);
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.insert(fresh, AccessLevel.SYSTEM_MODE);
+            saved.put('versionId', fresh.Id);
+            saved.put('versionCreated', true);
+            return saved;
+        }
+
+        if (active.isEmpty()) {
+            // No active version yet — a template created outside the wizard. Make one
+            // rather than saving into a void the renderer will never read.
+            DocGen_Template_Version__c v = new DocGen_Template_Version__c(
+                Template__c = templateId,
+                Content_Version_Id__c = cvId,
+                Is_Active__c = true,
+                Type__c = tpl.Type__c
+            );
+            DocGenFlsGuard.assertCreateable(
+                v,
+                new Set<String>{ 'Template__c', 'Content_Version_Id__c', 'Is_Active__c', 'Type__c' }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.insert(v, AccessLevel.SYSTEM_MODE);
+            saved.put('versionCreated', true);
+        } else {
+            DocGen_Template_Version__c v = active[0];
+            v.Content_Version_Id__c = cvId;
+            DocGenFlsGuard.assertUpdateable(v, new Set<String>{ 'Content_Version_Id__c' });
+            /* code-analyzer-suppress ApexFlsViolation */
+            Database.update(v, AccessLevel.SYSTEM_MODE);
+            saved.put('versionUpdated', true);
+        }
+        return saved;
+    }
+
+    /**
      * HTML template body read-back for the admin editor (paste-back surface).
      *
      * Returns the most recent docgen_html_body_* ContentVersion attached to
@@ -3478,8 +3702,8 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         if (tpls.isEmpty()) {
             throw DocGenService.ahe('Template not found or access denied.');
         }
-        if (tpls[0].Type__c != 'HTML') {
-            throw new DocGenException('getHtmlTemplateBody is for HTML-type templates only.');
+        if (!DocGenService.isHtmlBacked(tpls[0].Type__c)) {
+            throw new DocGenException('getHtmlTemplateBody is for HTML-backed templates only.');
         }
 
         // Scope the read by the template's linked documents, NOT by a bare Title LIKE.
@@ -7260,7 +7484,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                         // For HTML templates, the body bytes are HTML text containing
                         // shepherd URLs that reference inline-image CVs — capture the
                         // text so we can scan it for asset IDs below.
-                        if (tmpl.Type__c == 'HTML') {
+                        if (DocGenService.isHtmlBacked(tmpl.Type__c)) {
                             htmlBodyText = cvs[0].VersionData.toString();
                         }
                     }
@@ -7283,7 +7507,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             // URLs missed images that were uploaded but not (yet) placed, or placed via
             // a URL form the regex doesn't match — so a clone silently lost them and the
             // author had to re-upload. Same title convention listHtmlTemplateImages uses.
-            if (tmpl.Type__c == 'HTML') {
+            if (DocGenService.isHtmlBacked(tmpl.Type__c)) {
                 String imgPrefix = 'docgen_html_img_' + templateId + '%';
                 DocGenFlsGuard.assertAccessible(ContentVersion.sObjectType, new Set<String>{ 'Title', 'IsLatest' });
                 /* code-analyzer-suppress ApexFlsViolation */
@@ -7512,7 +7736,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 // tmpl.Name meant an imported/cloned HTML template rendered fine but opened
                 // with a BLANK Designer canvas — and the first Save wrote that blank back
                 // over the real body.
-                cv.Title = tmpl.Type__c == 'HTML'
+                cv.Title = DocGenService.isHtmlBacked(tmpl.Type__c)
                     ? 'docgen_html_body_' + tmpl.Id + '_' + Datetime.now().getTime()
                     : tmpl.Name;
                 cv.PathOnClient = tmpl.Name + '.' + (String) fileData.get('fileExtension');
@@ -7522,7 +7746,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 // post-insert). Word/Excel/PowerPoint templates carry their
                 // image references inside docx-internal relationships, not
                 // shepherd URLs, so they pass through untouched.
-                if (tmpl.Type__c == 'HTML' && !cvIdMap.isEmpty()) {
+                if (DocGenService.isHtmlBacked(tmpl.Type__c) && !cvIdMap.isEmpty()) {
                     String htmlBody = bodyBytes.toString();
                     String rewrittenBody = rewriteShepherdCvIds(htmlBody, cvIdMap);
                     if (rewrittenBody != htmlBody) {

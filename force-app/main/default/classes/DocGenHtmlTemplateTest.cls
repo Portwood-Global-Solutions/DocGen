@@ -338,7 +338,13 @@ private class DocGenHtmlTemplateTest {
             DocGenController.getHtmlTemplateBody(tmpl.Id);
         } catch (Exception e) {
             threw = true;
-            System.assert(e.getMessage().contains('HTML-type'), 'Error should mention HTML-type: ' + e.getMessage());
+            // "HTML-backed", not "HTML-type": these guards accept Canvas as well as
+            // HTML, since a Canvas body IS an HTML document. The behaviour under test
+            // is unchanged — a Word template is still refused.
+            System.assert(
+                e.getMessage().contains('HTML-backed'),
+                'Error should mention HTML-backed: ' + e.getMessage()
+            );
         }
         System.assert(threw, 'Should refuse non-HTML templates');
     }
@@ -433,7 +439,13 @@ private class DocGenHtmlTemplateTest {
             DocGenController.saveHtmlTemplateImage(tmpl.Id, 'a.png', 'AAAA');
         } catch (Exception e) {
             threw = true;
-            System.assert(e.getMessage().contains('HTML-type'), 'Error should mention HTML-type: ' + e.getMessage());
+            // "HTML-backed", not "HTML-type": these guards accept Canvas as well as
+            // HTML, since a Canvas body IS an HTML document. The behaviour under test
+            // is unchanged — a Word template is still refused.
+            System.assert(
+                e.getMessage().contains('HTML-backed'),
+                'Error should mention HTML-backed: ' + e.getMessage()
+            );
         }
         System.assert(threw, 'Should refuse non-HTML templates');
     }
