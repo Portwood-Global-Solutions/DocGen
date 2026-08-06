@@ -221,9 +221,10 @@ const checks = [
     // reported it.
     ['rich-text html is what gets serialized', html.includes('<b>Rich</b>')],
     ['merge tags typed in rich text survive', html.includes('{Owner.Name}')],
-    // A brace that comes back from an editor as &#123; produces a tag the engine never
-    // matches, and the reader gets {Name} printed literally.
-    ['brace entities are decoded back to real braces', !/&#0*123;/.test(html)],
+    // Escaped braces stay escaped: the starters use `&#123;…&#125;` as documentation
+    // showing what a format suffix looks like, and decoding it would turn the example
+    // into a live merge tag that prints the record's data.
+    ['escaped braces are NOT turned into live tags', /&#123;braced&#125;|&amp;#123;/.test(html)],
 
     // --- Images ------------------------------------------------------------
     // Flying Saucer computes a replaced element's size ONCE PER URL, so the same image

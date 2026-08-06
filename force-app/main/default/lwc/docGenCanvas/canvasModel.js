@@ -884,7 +884,22 @@ export function snapBox(box, others, geo) {
  *                              spills, and the next artboard then paints its pinned
  *                              boxes on top of the overflow
  */
-export function buildCanvasCss(geo) {
+/**
+ * Delimits the DOCUMENT's own stylesheet from the canvas contract above it, so a
+ * reload can tell the two apart and hand the author's CSS back unchanged.
+ */
+export const IMPORTED_CSS_MARK = '/* --- imported document css --- */';
+
+/**
+ * `minimal` drops the element-level defaults and keeps only the layout contract.
+ *
+ * Those defaults — a border and padding on every td/th, a margin under every p, the
+ * list rules — are right for boxes an author drew here and WRONG for an imported
+ * document, which arrives with its own stylesheet and its own opinions. Imposing them
+ * drew borders on tables that had none and added space under every paragraph, which
+ * pushed the Business Letter starter from one page to two.
+ */
+export function buildCanvasCss(geo, minimal) {
     const m = normalizeMargins(geo && geo.margins);
     return (
         '@page { size: ' +
@@ -899,54 +914,58 @@ export function buildCanvasCss(geo) {
         m.left +
         'in; }\n' +
         'body { font-family: Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a1a; margin: 0; }\n' +
+        // min-height moved to the artboards that NEED it (see serialize). It exists so a
+        // page with pinned boxes occupies its full height; on a flow-only artboard it
+        // pinned the block to exactly the content height, and a document that nearly
+        // filled the page tipped onto a second one — measured on the Business Letter
+        // starter, one page before conversion and two after, purely from this rule.
         '.dg-artboard { position: relative; width: ' +
         geo.w +
-        'in; min-height: ' +
-        geo.h +
         'in; }\n' +
         '.dg-artboard_break { page-break-before: always; }\n' +
         '.dg-pin { position: absolute; }\n' +
         '.dg-flow { position: relative; }\n' +
-        'table { border-collapse: collapse; width: 100%; -fs-table-paginate: paginate; }\n' +
         'thead { display: table-header-group; }\n' +
-        'td, th { border: 0.5pt solid #999; padding: 2pt 4pt; }\n' +
+        (minimal
+            ? ''
+            : 'table { border-collapse: collapse; width: 100%; -fs-table-paginate: paginate; }\n' +
+              'td, th { border: 0.5pt solid #999; padding: 2pt 4pt; }\n') +
         // Lists, stated explicitly and IDENTICALLY to the canvas rules in
         // docGenCanvas.css. Left to their defaults the two disagreed: the browser
         // suppresses markers under SLDS's reset while the engine applies its own
         // indent and spacing, so a list looked like plain lines while authoring and
         // came out numbered and loosely spaced in the PDF. One contract, both surfaces.
-        'ol { list-style: decimal outside; margin: 0 0 0 1.5em; padding: 0; }\n' +
-        'ul { list-style: disc outside; margin: 0 0 0 1.5em; padding: 0; }\n' +
-        // Per-level markers, matching what the rich-text editor draws. Without these
-        // every level numbered 1. 2. 3. again, so a nested item read as a new list
-        // rather than a sub-point. Measured against a real render: 1. / 2. / a. /
-        // i. / 3., with the indent accumulating per level.
-        'ol ol { list-style: lower-alpha outside; }\n' +
-        'ol ol ol { list-style: lower-roman outside; }\n' +
-        'ul ul { list-style: circle outside; }\n' +
-        'ul ul ul { list-style: square outside; }\n' +
-        'li { display: list-item; margin: 0; padding: 0; }\n' +
-        // The editor wraps each block in <p>. An engine paragraph margin then opens a
-        // gap between list items that the canvas does not show.
-        'p { margin: 0 0 0.06in 0; }\n'
+        (minimal ? '' : LIST_AND_PARAGRAPH_CSS)
     );
 }
+
+const LIST_AND_PARAGRAPH_CSS =
+    'ol { list-style: decimal outside; margin: 0 0 0 1.5em; padding: 0; }\n' +
+    'ul { list-style: disc outside; margin: 0 0 0 1.5em; padding: 0; }\n' +
+    // Per-level markers, matching what the rich-text editor draws. Without these
+    // every level numbered 1. 2. 3. again, so a nested item read as a new list
+    // rather than a sub-point. Measured against a real render: 1. / 2. / a. /
+    // i. / 3., with the indent accumulating per level.
+    'ol ol { list-style: lower-alpha outside; }\n' +
+    'ol ol ol { list-style: lower-roman outside; }\n' +
+    'ul ul { list-style: circle outside; }\n' +
+    'ul ul ul { list-style: square outside; }\n' +
+    'li { display: list-item; margin: 0; padding: 0; }\n' +
+    // The editor wraps each block in <p>. An engine paragraph margin then opens a
+    // gap between list items that the canvas does not show.
+    'p { margin: 0 0 0.06in 0; }\n';
 
 /** Box styling as inline CSS. Only properties the engine honours are emitted. */
 function styleCss(box) {
     const st = { ...DEFAULT_STYLE, ...(box.style || {}) };
-    let css =
-        'font-family: ' +
-        st.font +
-        '; font-size: ' +
-        st.size +
-        'pt; color: ' +
-        st.color +
-        '; text-align: ' +
-        st.align +
-        '; padding: ' +
-        st.padding +
-        'pt;';
+    // A null property means "the document already says this" — emitting it would
+    // override the source's own stylesheet with a canvas default.
+    let css = '';
+    if (st.font) css += 'font-family: ' + st.font + '; ';
+    if (st.size) css += 'font-size: ' + st.size + 'pt; ';
+    if (st.color) css += 'color: ' + st.color + '; ';
+    if (st.align) css += 'text-align: ' + st.align + '; ';
+    css += 'padding: ' + (st.padding || 0) + 'pt;';
     if (st.bold) css += ' font-weight: bold;';
     if (st.italic) css += ' font-style: italic;';
     if (st.underline) css += ' text-decoration: underline;';
@@ -1238,6 +1257,9 @@ const SAFE_STYLE = [
     'font-size',
     'font-family',
     'text-align',
+    // Margin is how a document spaces its own paragraphs. Stripping it flattened every
+    // imported block against its neighbour and changed where text wrapped.
+    'margin',
     'width',
     'border',
     'padding',
@@ -1271,17 +1293,39 @@ function healSplitTags(html) {
 }
 
 /**
- * Braces must survive verbatim or the merge tag is not a merge tag.
+ * Escaped braces are LEFT ESCAPED, deliberately.
  *
- * Rich-text editors normalize freely, and a `{` that comes back as `&#123;` produces a
- * tag the engine never matches — the reader gets `{Name}` printed literally and nothing
- * anywhere reports a problem. Decoding the brace entities is safe because a brace has
- * no structural meaning in markup, so there is nothing it could break out of.
+ * There was a decodeBraces() step here that turned `&#123;` back into `{` on the theory
+ * that a rich-text editor might normalise a brace and break a merge tag. It was added
+ * speculatively and never proven, and the import fidelity harness caught what it
+ * actually did: the shipped starters write `&#123;CloseDate:MMMM d, yyyy&#125;` as
+ * DOCUMENTATION — text showing an author what a format suffix looks like — and decoding
+ * turned that example into a live merge tag that would print the record's close date.
+ *
+ * An escaped brace is someone asking for a literal brace. Activating it is silent
+ * corruption of the exact kind this editor keeps finding. If an editor is ever proven
+ * to mangle a real tag, fix it where that is demonstrated, not by rewriting every
+ * brace in the document.
  */
-function decodeBraces(html) {
+// A brace is a plain character in HTML, so parsing `&#123;` into a DOM and reading it
+// back yields `{` — the entity is normalised away by the browser, not by us. Escaped
+// braces therefore cannot survive a round trip unless they are hidden from the parser
+// first. These sentinels use characters that cannot appear in authored markup.
+const LB_SENTINEL = '\u0001DGLB\u0001';
+const RB_SENTINEL = '\u0001DGRB\u0001';
+
+function hideEscapedBraces(html) {
     return String(html == null ? '' : html)
-        .replace(/&#0*123;|&#x0*7b;|&lbrace;/gi, '{')
-        .replace(/&#0*125;|&#x0*7d;|&rbrace;/gi, '}');
+        .replace(/&#0*123;|&#x0*7b;|&lbrace;/gi, LB_SENTINEL)
+        .replace(/&#0*125;|&#x0*7d;|&rbrace;/gi, RB_SENTINEL);
+}
+
+function restoreEscapedBraces(html) {
+    return String(html == null ? '' : html)
+        .split(LB_SENTINEL)
+        .join('&#123;')
+        .split(RB_SENTINEL)
+        .join('&#125;');
 }
 
 export function sanitizeInline(html) {
@@ -1289,7 +1333,7 @@ export function sanitizeInline(html) {
     // Heal first, then parse: stripping tags out of the braces can leave an orphan
     // closing tag, and the parser is what tidies that up.
     // eslint-disable-next-line @lwc/lwc/no-inner-html
-    tpl.innerHTML = healSplitTags(decodeBraces(html));
+    tpl.innerHTML = healSplitTags(hideEscapedBraces(html));
     const walk = (node) => {
         for (const child of [...node.childNodes]) {
             if (child.nodeType === 3) {
@@ -1328,7 +1372,7 @@ export function sanitizeInline(html) {
     // READ of this function's own just-sanitized output, off a detached <template>.
     // Nothing is written to a live document here.
     // eslint-disable-next-line @lwc/lwc/no-inner-html
-    return tpl.innerHTML;
+    return restoreEscapedBraces(tpl.innerHTML);
 }
 
 /**
@@ -1400,7 +1444,7 @@ function textToHtml(box) {
         // a serializer that only runs in a browser cannot be checked before it ships.
         // The html was already sanitized on the way IN (handleRichTextChange) and again
         // on load, so the brace repair is what actually has to happen here.
-        return typeof document === 'undefined' ? decodeBraces(box.html) : sanitizeInline(box.html);
+        return typeof document === 'undefined' ? box.html : sanitizeInline(box.html);
     }
     return expandMarks(esc(box.text == null ? '' : box.text)).replace(/\n/g, '<br />');
 }
@@ -1605,12 +1649,27 @@ export function serialize(doc, geo) {
                 return out;
             });
             const inner = [...pinned.map((x) => boxToHtml(x, 0)), ...flowHtml].join('\n  ');
-            return '<div class="' + cls + '" data-dg-artboard="' + (i + 1) + '">\n  ' + inner + '\n</div>';
+            // A page holding pinned boxes must occupy its full height, or an absolute
+            // box near the bottom has nothing to be absolute within. Flow-only pages
+            // take their height from their content, exactly as the source document did.
+            const needsHeight = pinned.length > 0;
+            const heightCss = needsHeight ? ' style="min-height: ' + geo.h + 'in;"' : '';
+            return (
+                '<div class="' + cls + '" data-dg-artboard="' + (i + 1) + '"' + heightCss + '>\n  ' + inner + '\n</div>'
+            );
         })
         .join('\n');
+    // The document's own stylesheet, kept AFTER the canvas contract so an imported
+    // rule can restyle its own content but cannot redefine .dg-pin/.dg-flow out from
+    // under the layout. Dropping it entirely was losing every class-based and
+    // element-level rule an imported template had — body typography included, which is
+    // why imported text re-wrapped at different words than the original.
+    const imported = !!(doc && doc.css);
+    const extraCss = imported ? '\n' + IMPORTED_CSS_MARK + '\n' + doc.css + '\n' : '';
     return (
         '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8" />\n<style>\n' +
-        buildCanvasCss(geo) +
+        buildCanvasCss(geo, imported) +
+        extraCss +
         '</style>\n</head>\n<body>\n' +
         boards +
         '\n</body>\n</html>\n'
@@ -1806,7 +1865,13 @@ export function deserialize(html) {
     if (!boards.length) {
         return null;
     }
+    const styleEl = tpl.content.querySelector('style');
+    const styleText = styleEl ? styleEl.textContent || '' : '';
+    const markAt = styleText.indexOf(IMPORTED_CSS_MARK);
+    const carriedCss = markAt === -1 ? '' : styleText.slice(markAt + IMPORTED_CSS_MARK.length).trim();
+
     return {
+        css: carriedCss,
         artboards: boards.map((boardEl) => {
             const board = newArtboard();
             board.boxes = [...boardEl.querySelectorAll('.dg-pin, .dg-flow')].map((el) => {
@@ -1891,6 +1956,352 @@ export function deserialize(html) {
             return board;
         })
     };
+}
+
+// ---------------------------------------------------------------------------
+// Import — an existing HTML document, re-described as canvas boxes
+// ---------------------------------------------------------------------------
+
+/**
+ * Converts an HTML template body into a canvas document.
+ *
+ * STRUCTURAL, not geometric. Each top-level block becomes a FLOW box carrying its own
+ * markup, in document order; only elements whose CSS already says `position: absolute`
+ * become pinned boxes. Nothing is measured and nothing is re-laid-out.
+ *
+ * That choice is the whole reason this is safe. A canvas document IS an HTML document
+ * rendered by the same engine, so re-describing the blocks emits near-identical markup
+ * and the PDF barely moves. The alternative — rendering the source in the browser,
+ * measuring every element with getBoundingClientRect and pinning boxes at those
+ * coordinates — would bake the BROWSER's layout into a document that Flying Saucer
+ * renders, and the two do not agree. It would look right in the editor and drift in the
+ * output, which is the failure this editor exists to prevent.
+ *
+ * One way. The caller must write the result to a NEW template: flow content that used
+ * to be one continuous document becomes discrete boxes, and there is no route back.
+ *
+ * Returns { doc, page, report } — report lists what could not be carried over, because
+ * a conversion that silently drops a running header is worse than one that refuses.
+ */
+export function htmlToCanvas(html) {
+    const report = { dropped: [], notes: [], boxes: 0 };
+    if (!html || typeof document === 'undefined') {
+        return { doc: blankDocument(), page: null, report };
+    }
+
+    // The stylesheet is lifted from the RAW markup, and <head> is removed before the
+    // parse. A <template> drops the html/head/body wrappers, and <title> is a RAWTEXT
+    // element — so its text arrived as a bare text node among the real blocks and
+    // imported as a visible box printing the document's title at the top of the page.
+    // Skipping the <title> ELEMENT did not help, because by then there was no element.
+    const styleBlocks = (html.match(/<style[^>]*>[\s\S]*?<\/style>/gi) || [])
+        .map((b) => b.replace(/<\/?style[^>]*>/gi, ''))
+        .join('\n');
+    const bodyOnly = html
+        .replace(/<head[\s\S]*?<\/head>/gi, '')
+        .replace(/<title[\s\S]*?<\/title>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+
+    const tpl = document.createElement('template');
+    // Escaped braces are hidden BEFORE this parse, not later: the browser decodes
+    // `&#123;` the moment the markup enters a DOM, so by the time a block's outerHTML
+    // is read the entity is already gone. The starters use escaped braces as
+    // documentation ("format dates with &#123;CloseDate:MMMM d, yyyy&#125;"), and
+    // decoding turns that example into a live merge tag printing the record's date.
+    // Parsed into a DETACHED <template>: its content is inert, so nothing runs or loads.
+    // eslint-disable-next-line @lwc/lwc/no-inner-html
+    tpl.innerHTML = hideEscapedBraces(bodyOnly);
+
+    // --- page setup from the source's own @page rule ----------------------
+    const page = readPageFromCss(html, report);
+
+    // --- what cannot come across ------------------------------------------
+    // Said plainly rather than discovered later in a customer's PDF.
+    if (/@page\s*[^{]*\{[^}]*@(top|bottom)-(left|center|right)/i.test(html)) {
+        report.dropped.push('Running header/footer (@page margin boxes) — the canvas has no equivalent yet.');
+    }
+    if (/column-count|column-width|-moz-columns|-webkit-columns/i.test(html)) {
+        report.dropped.push('Multi-column layout — boxes are single-column; place two boxes side by side instead.');
+    }
+    if (/<script/i.test(html)) {
+        report.dropped.push('Script tags — never rendered by the PDF engine, removed.');
+    }
+    if (/position\s*:\s*fixed/i.test(html)) {
+        report.dropped.push('position: fixed elements — converted as ordinary pinned boxes on page 1.');
+    }
+
+    // The source's own stylesheet, minus the parts the canvas owns. @page is read into
+    // page setup separately, and a rule targeting .dg-* would fight the layout contract.
+    const sheets = styleBlocks
+        .replace(/@page[^{]*\{[^}]*\}/gi, '')
+        .replace(/^[^{}]*\.dg-[^{}]*\{[^}]*\}/gim, '')
+        .trim();
+    if (sheets) {
+        report.notes.push("The document's own stylesheet was carried across, so class-based styling still applies.");
+    }
+
+    const body = tpl.content.querySelector('body') || tpl.content;
+    const board = newArtboard();
+    const geo = page ? pageGeometry(page.size, page.orientation, page.margins) : pageGeometry('Letter', 'Portrait');
+
+    // Consecutive flow blocks are grouped into ONE box.
+    //
+    // A box per block breaks CSS margin collapsing: adjacent block margins normally
+    // collapse to the larger of the two, but once each block sits in its own wrapper
+    // they stop being adjacent and every margin adds. Measured on the Business Letter
+    // starter — same page size, every word present, and it grew from one page to two.
+    //
+    // Grouping keeps the run of prose exactly as the browser and the engine laid it
+    // out, and costs only that a paragraph is not individually draggable. Tables and
+    // positioned elements still get their own box, which is what an author actually
+    // reaches for.
+    let cursorIn = 0;
+    let run = [];
+    const flushRun = () => {
+        if (!run.length) {
+            return;
+        }
+        const html = run.join('');
+        run = [];
+        if (isEmptyBlockHtml(html)) {
+            return;
+        }
+        const box = newTextBox(0, cursorIn, geo.w, 0.35);
+        box.mode = 'flow';
+        box.style = importedStyle();
+        box.text = '';
+        box.html = html;
+        board.boxes.push(box);
+        cursorIn = round3(box.y + box.h);
+    };
+
+    for (const node of [...body.childNodes]) {
+        const groupable = isGroupableFlowNode(node);
+        if (groupable !== null) {
+            run.push(groupable);
+            continue;
+        }
+        flushRun();
+        const box = blockToBox(node, geo, cursorIn, report);
+        if (!box) {
+            continue;
+        }
+        board.boxes.push(box);
+        if (box.mode === 'flow') {
+            cursorIn = round3(box.y + box.h);
+        }
+    }
+    flushRun();
+
+    if (!board.boxes.length) {
+        report.notes.push('No block content found — starting from an empty page.');
+    }
+    report.boxes = board.boxes.length;
+    return { doc: { css: sheets, artboards: [board] }, page, report };
+}
+
+/** Reads page size, orientation and margins out of the source's @page rule. */
+function readPageFromCss(html, report) {
+    const rule = /@page\s*\{([^}]*)\}/.exec(html || '');
+    if (!rule) {
+        report.notes.push('No @page rule found — using Letter portrait with no margins.');
+        return null;
+    }
+    const out = { size: 'Letter', orientation: 'Portrait', margins: { ...DEFAULT_MARGINS } };
+    const custom = /size:\s*([0-9.]+)in\s+([0-9.]+)in/i.exec(rule[1]);
+    const named = custom ? null : /size:\s*([A-Za-z0-9]+)\s*(portrait|landscape)?/i.exec(rule[1]);
+    if (named) {
+        const match = ['Letter', 'A4', 'Legal'].find((n) => n.toLowerCase() === named[1].toLowerCase());
+        if (match) out.size = match;
+        out.orientation = (named[2] || 'portrait').toLowerCase() === 'landscape' ? 'Landscape' : 'Portrait';
+    } else if (custom) {
+        out.size = 'Custom';
+        out.custom = { w: parseFloat(custom[1]), h: parseFloat(custom[2]) };
+    }
+    const marg = /margin:\s*([^;]+)/i.exec(rule[1]);
+    if (marg) {
+        const parts = marg[1]
+            .trim()
+            .split(/\s+/)
+            .map((v) => parseFloat(v))
+            .filter((v) => !isNaN(v));
+        if (parts.length === 1) {
+            out.margins = normalizeMargins({ top: parts[0], right: parts[0], bottom: parts[0], left: parts[0] });
+        } else if (parts.length === 2) {
+            out.margins = normalizeMargins({ top: parts[0], right: parts[1], bottom: parts[0], left: parts[1] });
+        } else if (parts.length === 4) {
+            out.margins = normalizeMargins({ top: parts[0], right: parts[1], bottom: parts[2], left: parts[3] });
+        }
+    }
+    return out;
+}
+
+/** Block-level tags that become their own box. Everything else is inline content. */
+const BLOCK_TAGS = new Set(['P', 'DIV', 'TABLE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'HR', 'SECTION']);
+
+/**
+ * One source block to one box.
+ *
+ * A <table> keeps its own markup rather than being reshaped into the table model. The
+ * table tool describes a specific shape — a header, one looping row, extras, totals —
+ * and forcing an arbitrary authored table into it would silently rewrite the document.
+ * Carried as markup it renders EXACTLY as before; the report says it is not editable
+ * with the table tool, which is an honest trade the author can act on.
+ */
+/**
+ * True when a converted block would print nothing.
+ *
+ * Worth checking because newTextBox seeds `text: 'Text'` as a placeholder for a box the
+ * author is about to type into, and the serializer falls back to `text` when `html` is
+ * empty. An empty block in the source therefore imported as a box that prints the word
+ * "Text" — content the original document never had, appearing in someone's document.
+ */
+function isEmptyBlockHtml(html) {
+    const structural = /<(img|table|hr|svg)\b/i.test(html || '');
+    if (structural) {
+        return false;
+    }
+    return (
+        String(html || '')
+            .replace(/<[^>]*>/g, '')
+            .replace(/&nbsp;|&#160;|\s/g, '') === ''
+    );
+}
+
+/**
+ * An imported box adds NO chrome of its own.
+ *
+ * readStyle falls back to DEFAULT_STYLE, which carries 2pt of padding — sensible for a
+ * box an author drew, wrong for one describing existing markup. The padding narrowed
+ * the text area by 4pt and the source's paragraphs re-wrapped at different words. The
+ * markup being carried across already has whatever padding and margins its author gave
+ * it; this box is a container, not a restyling.
+ */
+/**
+ * The wrapper carries GEOMETRY ONLY.
+ *
+ * The block's markup is kept inside the box, styling and all, so copying its border and
+ * padding onto the wrapper too applied both TWICE — the certificate's frame drew a
+ * second time and the doubled padding narrowed the text until it wrapped at different
+ * words. The wrapper's job is to place the block, not to restyle it.
+ */
+function importedStyle() {
+    // Geometry only — every visual property is left unset so the document's own CSS
+    // decides. DEFAULT_STYLE would otherwise stamp 11pt sans over a body that says
+    // 10.5pt Helvetica, and text would wrap at different words than the original.
+    return {
+        font: null,
+        size: null,
+        color: null,
+        align: null,
+        fill: '',
+        padding: 0,
+        borderWidth: 0,
+        borderColor: DEFAULT_STYLE.borderColor,
+        bold: false,
+        italic: false,
+        underline: false
+    };
+}
+
+/**
+ * The markup for a node that can join a run of flow content, or null when it needs a
+ * box of its own (a table, or anything already positioned).
+ */
+function isGroupableFlowNode(node) {
+    if (node.nodeType === 3) {
+        const text = (node.textContent || '').trim();
+        return text ? esc(text) : '';
+    }
+    if (node.nodeType !== 1) {
+        return '';
+    }
+    const tag = node.tagName.toUpperCase();
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TITLE' || tag === 'META' || tag === 'LINK') {
+        return '';
+    }
+    if (tag === 'TABLE') {
+        return null;
+    }
+    const style = node.getAttribute('style') || '';
+    if (/position\s*:\s*(absolute|fixed)/i.test(style)) {
+        return null;
+    }
+    // eslint-disable-next-line @lwc/lwc/no-inner-html
+    return sanitizeInline(node.outerHTML);
+}
+
+function blockToBox(node, geo, cursorIn, report) {
+    if (node.nodeType === 3) {
+        const text = (node.textContent || '').trim();
+        if (!text) {
+            return null;
+        }
+        const box = newTextBox(0, cursorIn, geo.w, 0.3);
+        box.mode = 'flow';
+        box.style = { ...DEFAULT_STYLE, padding: 0, borderWidth: 0 };
+        box.html = esc(text);
+        box.text = '';
+        return box;
+    }
+    if (node.nodeType !== 1) {
+        return null;
+    }
+    const tag = node.tagName.toUpperCase();
+    // Head content, not document content. A parsed <template> drops the html/head/body
+    // wrappers, so <title> arrives as a sibling of the real blocks — and it imported as
+    // a visible box printing the document's title at the top of the page, text the
+    // original never showed.
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TITLE' || tag === 'META' || tag === 'LINK') {
+        return null;
+    }
+
+    const style = node.getAttribute('style') || '';
+    const absolute = /position\s*:\s*(absolute|fixed)/i.test(style);
+
+    // An element that is already positioned keeps its coordinates — that is exactly
+    // what a pinned box is.
+    if (absolute) {
+        const box = newTextBox(
+            readInches(style, 'left') || 0,
+            readInches(style, 'top') || 0,
+            readInches(style, 'width') || 2.5,
+            readInches(style, 'height') || 0.5
+        );
+        box.mode = 'pinned';
+        box.style = importedStyle();
+        // eslint-disable-next-line @lwc/lwc/no-inner-html
+        box.html = sanitizeInline(node.innerHTML);
+        box.text = '';
+        return isEmptyBlockHtml(box.html) ? null : box;
+    }
+
+    if (!BLOCK_TAGS.has(tag)) {
+        // An inline element at the top level still has to land somewhere.
+        const box = newTextBox(0, cursorIn, geo.w, 0.3);
+        box.mode = 'flow';
+        box.style = { ...DEFAULT_STYLE, padding: 0, borderWidth: 0 };
+        box.html = sanitizeInline(node.outerHTML);
+        box.text = '';
+        return isEmptyBlockHtml(box.html) ? null : box;
+    }
+
+    const box = newTextBox(0, cursorIn, readInches(style, 'width') || geo.w, 0.35);
+    box.mode = 'flow';
+    box.style = importedStyle();
+    box.text = '';
+    if (tag === 'TABLE') {
+        report.notes.push(
+            'A table was carried across as markup — it renders as before, but the table tool cannot edit it.'
+        );
+        box.h = 1;
+        // eslint-disable-next-line @lwc/lwc/no-inner-html
+        box.html = sanitizeInline(node.outerHTML);
+        return box;
+    }
+    // eslint-disable-next-line @lwc/lwc/no-inner-html
+    box.html = sanitizeInline(node.outerHTML);
+    return isEmptyBlockHtml(box.html) ? null : box;
 }
 
 // ---------------------------------------------------------------------------
