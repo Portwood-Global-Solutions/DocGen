@@ -805,3 +805,34 @@ textarea.dg-cbox-text {
     color: var(--slds-g-color-on-surface-3, #6b7280);
     padding: 0 2px;
 }
+
+/* Hidden: the visible control is the toolbar button, which calls click() on this. */
+.dg-import-input {
+    display: none;
+}
+
+.dg-import-report {
+    padding: 8px 12px;
+    background: #fffbea;
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid #e6d9a8;
+    font-size: 0.76rem;
+}
+
+.dg-import-head {
+    font-weight: var(--slds-g-font-weight-7, 700);
+    margin-bottom: 4px;
+}
+
+.dg-import-list {
+    margin: 2px 0 4px 18px;
+    list-style: disc outside;
+}
+
+.dg-import-list li {
+    display: list-item;
+    margin: 1px 0;
+}
+
+.dg-import-list_note {
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+}

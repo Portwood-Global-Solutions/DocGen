@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Business Letter</title>
+    <style>
+        @page { size: Letter portrait; margin: 0.75in; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 10.5pt; color: #1a1a1a; margin: 0; }
+        h1 { font-size: 20pt; margin: 0 0 2pt 0; color: #1f3a5f; }
+        h2 { font-size: 13pt; margin: 18pt 0 6pt 0; color: #1f3a5f; border-bottom: 2pt solid #1f3a5f; padding-bottom: 3pt; }
+        table { width: 100%; border-collapse: collapse; border-spacing: 0; }
+        tr { page-break-inside: avoid; }
+        td, th { padding: 5pt 7pt; vertical-align: top; }
+        .meta { color: #666666; font-size: 9pt; }
+        .label-cell { width: 35%; font-weight: bold; color: #444444; background: #f2f4f7; border-bottom: 1pt solid #ffffff; }
+        .value-cell { border-bottom: 1pt solid #eeeeee; }
+        .data-table th { background: #1f3a5f; color: #ffffff; text-align: left; font-size: 9.5pt; }
+        .data-table td { border-bottom: 0.75pt solid #dddddd; }
+        .footer-note { margin-top: 24pt; padding-top: 6pt; border-top: 1pt solid #cccccc; color: #888888; font-size: 8.5pt; }
+    </style>
+</head>
+<body>
+    <table>
+        <tr>
+            <td style="width: 110pt; vertical-align: middle">{%asset:logo:144x}</td>
+            <td>
+                <h1 style="font-size: 14pt">Your Company Name</h1>
+                <div class="meta">123 Your Street &#8226; Your City, ST 00000 &#8226; (555) 555-0100</div>
+            </td>
+            <td style="text-align: right" class="meta">{Today:MMMM d, yyyy}</td>
+        </tr>
+    </table>
+
+    <p style="margin-top: 28pt">{Name}</p>
+
+    <p style="margin-top: 18pt">Dear {Name},</p>
+
+    <p>
+        Replace this paragraph with your letter body. Any field from your Query Config drops in with a merge
+        tag &#8212; for example, this record is {Name}. Format dates and money with suffixes like
+        &#123;CloseDate:MMMM d, yyyy&#125; and &#123;Amount:currency&#125;.
+    </p>
+
+    <p>
+        A second paragraph of your letter. Conditional blocks let you include text only when a field has a
+        value, and loops repeat a block for every child record.
+    </p>
+
+    <p style="margin-top: 30pt">
+        Sincerely,<br /><br /><br />
+        {RunningUser.Name}<br />
+        <span class="meta">{RunningUser.Title}</span>
+    </p>
+</body>
+</html>

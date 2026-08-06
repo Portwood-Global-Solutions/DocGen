@@ -44,7 +44,9 @@ import {
     CODE_TYPES,
     newSignatureBox,
     signatureBoxSize,
-    SIGNATURE_TYPES
+    SIGNATURE_TYPES,
+    htmlToCanvas,
+    normalizeCustomPage as normalizeCustom
 } from './canvasModel';
 
 /**
@@ -459,6 +461,92 @@ export default class DocGenCanvas extends LightningElement {
         const zs = this.layerItems.filter((l) => l.id !== box.id).map((l) => l.z);
         this.applyToBox(box.id, { z: zs.length ? Math.min(...zs) - 1 : -1 });
         this.statusText = 'Sent to back';
+    }
+
+    // ---- Import an existing HTML document ---------------------------------
+    @track importReport = null;
+
+    get hasImportReport() {
+        return !!this.importReport;
+    }
+
+    get importDropped() {
+        return ((this.importReport || {}).dropped || []).map((d, i) => ({ key: 'd' + i, text: d }));
+    }
+
+    get importNotes() {
+        return ((this.importReport || {}).notes || []).map((n, i) => ({ key: 'n' + i, text: n }));
+    }
+
+    get importSummary() {
+        const r = this.importReport || {};
+        return 'Imported ' + (r.boxes || 0) + ' element(s).';
+    }
+
+    handleDismissImport() {
+        this.importReport = null;
+    }
+
+    triggerImport() {
+        const input = this.template.querySelector('.dg-import-input');
+        if (input) {
+            input.click();
+        }
+    }
+
+    /**
+     * Converts an HTML file into this canvas.
+     *
+     * Nothing is destroyed by this. The existing layout goes onto the undo stack first,
+     * and a canvas only reaches the template when it is SAVED — which writes a new
+     * version, leaving the previous body intact and restorable from the version picker.
+     * The one thing it must never do is change an HTML template into a Canvas one in
+     * place, and it cannot: the file is read here and written to whichever Canvas
+     * template is already open.
+     */
+    async handleImportFile(event) {
+        const file = (event.target.files || [])[0];
+        // Cleared immediately so re-picking the same file fires change again.
+        const input = event.target;
+        if (!file) {
+            return;
+        }
+        try {
+            const text = await file.text();
+            if (this.boxCount > 0) {
+                const go = await LightningConfirm.open({
+                    message:
+                        'Replace what is on this canvas with the imported document? ' +
+                        'Undo restores it, and saving creates a new version rather than overwriting the old one.',
+                    label: 'Replace this canvas?',
+                    theme: 'warning'
+                });
+                if (!go) {
+                    input.value = null;
+                    return;
+                }
+            }
+            this.pushHistory('import');
+            const { doc, page, report } = htmlToCanvas(text);
+            if (page) {
+                this.canvasPageSize = page.size;
+                this.canvasOrientation = page.orientation;
+                this.margins = { ...page.margins };
+                if (page.custom) {
+                    this.customPage = normalizeCustom(page.custom);
+                }
+            }
+            this.doc = doc;
+            this.selectedId = null;
+            this.importReport = report;
+            this.statusText = 'Imported ' + file.name;
+            // Assets may be referenced by the imported markup.
+            this.loadImageLibrary().then(() => this.hydrateImageSources());
+        } catch (e) {
+            this.saveError = 'Could not import that file — ' + this.errText(e);
+        } finally {
+            input.value = null;
+        }
     }
 
     // ---- Undo / redo -----------------------------------------------------

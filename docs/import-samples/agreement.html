@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Agreement</title>
+    <style>
+        @page { size: Letter portrait; margin: 0.75in; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 10.5pt; color: #1a1a1a; margin: 0; }
+        h1 { font-size: 20pt; margin: 0 0 2pt 0; color: #1f3a5f; }
+        h2 { font-size: 13pt; margin: 18pt 0 6pt 0; color: #1f3a5f; border-bottom: 2pt solid #1f3a5f; padding-bottom: 3pt; }
+        table { width: 100%; border-collapse: collapse; border-spacing: 0; }
+        tr { page-break-inside: avoid; }
+        td, th { padding: 5pt 7pt; vertical-align: top; }
+        .meta { color: #666666; font-size: 9pt; }
+        .label-cell { width: 35%; font-weight: bold; color: #444444; background: #f2f4f7; border-bottom: 1pt solid #ffffff; }
+        .value-cell { border-bottom: 1pt solid #eeeeee; }
+        .data-table th { background: #1f3a5f; color: #ffffff; text-align: left; font-size: 9.5pt; }
+        .data-table td { border-bottom: 0.75pt solid #dddddd; }
+        .footer-note { margin-top: 24pt; padding-top: 6pt; border-top: 1pt solid #cccccc; color: #888888; font-size: 8.5pt; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center">Agreement</h1>
+    <p class="meta" style="text-align: center">Effective {Today:MMMM d, yyyy}</p>
+
+    <p style="margin-top: 20pt">
+        This Agreement is entered into between <strong>Your Company Name</strong> ("Company") and
+        <strong>{Name}</strong> ("Customer").
+    </p>
+
+    <h2>1. Scope</h2>
+    <p>Describe the goods or services covered by this agreement. Merge any field from your Query Config, e.g. {Name}.</p>
+
+    <h2>2. Term</h2>
+    <p>This agreement begins on {Today:MMMM d, yyyy} and continues until terminated by either party.</p>
+
+    <h2>3. Signatures</h2>
+    <p>Signed and agreed by the parties below.</p>
+
+    <table style="margin-top: 30pt">
+        <tr>
+            <td style="width: 48%">
+                {@Signature_Customer:1:Full}
+                <div style="border-top: 1pt solid #333333; margin-top: 4pt; padding-top: 3pt" class="meta">
+                    Customer &#8226; Date: {@Signature_Customer:1:Date}
+                </div>
+            </td>
+            <td style="width: 4%"></td>
+            <td style="width: 48%">
+                {@Signature_Company_Representative:2:Full}
+                <div style="border-top: 1pt solid #333333; margin-top: 4pt; padding-top: 3pt" class="meta">
+                    Company Representative &#8226; Date: {@Signature_Company_Representative:2:Date}
+                </div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

@@ -980,12 +980,44 @@
                     <template lwc:if={isPreviewing}>Generating…</template>
                     <template lwc:else>Preview</template>
                 </button>
+                <button
+                    class="dg-qb-btn dg-qb-wide"
+                    onclick={triggerImport}
+                    title="Convert an existing HTML template into this canvas"
+                >
+                    Import HTML
+                </button>
+                <input type="file" accept=".html,.htm,text/html" class="dg-import-input" onchange={handleImportFile} />
                 <button class="dg-qb-save" onclick={handleSave} disabled={isSaving}>
                     <template lwc:if={isSaving}>Saving…</template>
                     <template lwc:else>Save</template>
                 </button>
                 <span class="dg-qb-status">{statusText}</span>
             </div>
+
+            <template lwc:if={hasImportReport}>
+                <div class="dg-import-report">
+                    <div class="dg-import-head">
+                        {importSummary}
+                        <button class="dg-sbtn" onclick={handleDismissImport}>Dismiss</button>
+                    </div>
+                    <template lwc:if={importDropped.length}>
+                        <p class="dg-panel-warn">Could not be brought across:</p>
+                        <ul class="dg-import-list">
+                            <template for:each={importDropped} for:item="d">
+                                <li key={d.key}>{d.text}</li>
+                            </template>
+                        </ul>
+                    </template>
+                    <template lwc:if={importNotes.length}>
+                        <ul class="dg-import-list dg-import-list_note">
+                            <template for:each={importNotes} for:item="n">
+                                <li key={n.key}>{n.text}</li>
+                            </template>
+                        </ul>
+                    </template>
+                </div>
+            </template>
 
             <template lwc:if={showPageSetup}>
                 <div class="dg-data-wrap">
