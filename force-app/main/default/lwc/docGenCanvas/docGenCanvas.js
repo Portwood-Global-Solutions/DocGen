@@ -424,6 +424,14 @@ export default class DocGenCanvas extends LightningElement {
         const win = window.open('', '_blank');
         try {
             await this.handleSave();
+            if (!this._saveOk) {
+                // Generating anyway would render the LAST SAVED body and present it as
+                // a preview of what is on screen — the most misleading thing this
+                // button could do. The save banner already says what went wrong.
+                this.statusText = '';
+                if (win) win.close();
+                return;
+            }
             const res = await generatePdf({
                 templateId: this.templateId,
                 recordId: this.sampleRecordId,
@@ -975,6 +983,7 @@ export default class DocGenCanvas extends LightningElement {
     async handleSave() {
         if (!this.templateId) {
             this.saveError = 'No template id — cannot save.';
+            this._saveOk = false;
             return;
         }
         // Catch the empty case HERE, with an explanation. The server refuses to
@@ -984,12 +993,14 @@ export default class DocGenCanvas extends LightningElement {
         // likely cause is that it opened without loading them, and saving would be the
         // destructive move.
         if (this.boxCount === 0) {
+            this._saveOk = false;
             this.saveError =
                 'Nothing to save — this canvas has no boxes. If the template had content, it did not load: ' +
                 'close and reopen it rather than saving over it.';
             return;
         }
         this.saveError = null;
+        this._saveOk = false;
         this.isSaving = true;
         try {
             const html = serialize(this.doc, this.geo);
@@ -999,12 +1010,14 @@ export default class DocGenCanvas extends LightningElement {
                 htmlContent: html
             });
             this.statusText = 'Saved';
+            this._saveOk = true;
             this.dispatchEvent(new CustomEvent('saved', { detail: { html } }));
         } catch (e) {
             // Surfaced as a banner, not a status line: a save that silently did not
             // happen is the single worst thing this editor can do.
             this.saveError = 'Save failed — ' + (e.body ? e.body.message : e.message);
             this.statusText = '';
+            this._saveOk = false;
         } finally {
             this.isSaving = false;
         }

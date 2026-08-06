@@ -554,10 +554,32 @@ function dropUnsafeStyle(value) {
     return /rgba?\(|hsla?\(|var\(|calc\(/i.test(value || '');
 }
 
+/**
+ * Repairs merge tags that inline formatting has cut in half.
+ *
+ * Select the middle of {Description}, press italic, and the editor emits
+ * `{De<i>scription}</i>` — the tag now spans an element boundary, so the merge engine
+ * never sees `{Description}` and the reader gets the braces printed literally. It is
+ * silent: nothing errors, the tag simply does not resolve.
+ *
+ * This is the same failure Word has had for years (issue #130, tags split across runs
+ * by character formatting), arriving on the canvas by a different route. The fix is
+ * the same shape: a tag is an atom, so any markup INSIDE the braces is dropped and the
+ * formatting around it survives. Losing italic on one word beats shipping a document
+ * with {De scription} printed in it.
+ */
+function healSplitTags(html) {
+    return String(html == null ? '' : html).replace(/\{[^{}]*\}/g, (tag) =>
+        tag.indexOf('<') === -1 ? tag : tag.replace(/<[^>]*>/g, '')
+    );
+}
+
 export function sanitizeInline(html) {
     const tpl = document.createElement('template');
+    // Heal first, then parse: stripping tags out of the braces can leave an orphan
+    // closing tag, and the parser is what tidies that up.
     // eslint-disable-next-line @lwc/lwc/no-inner-html
-    tpl.innerHTML = String(html == null ? '' : html);
+    tpl.innerHTML = healSplitTags(html);
     const walk = (node) => {
         for (const child of [...node.childNodes]) {
             if (child.nodeType === 3) {
