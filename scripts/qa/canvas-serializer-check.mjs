@@ -65,6 +65,11 @@ logo.image.src = '/sfc/servlet.shepherd/version/download/068000000000001';
 logo.image.keepRatio = true;
 doc.artboards[0].boxes.push(logo);
 
+const assetLogo = m.newImageBox(3, 0.2, 1.5, 0.75);
+assetLogo.image.assetKey = 'company-logo';
+assetLogo.image.keepRatio = true;
+doc.artboards[0].boxes.push(assetLogo);
+
 const fieldImg = m.newImageBox(5, 0.2, 1, 1);
 fieldImg.image.tag = '{%Logo__c}';
 doc.artboards[0].boxes.push(fieldImg);
@@ -75,6 +80,14 @@ doc.artboards[0].boxes.push(rect);
 const rule = m.newShapeBox(0.5, 6.8, 6, 0.02);
 rule.shape.type = 'hline';
 doc.artboards[0].boxes.push(rule);
+
+const qr = m.newCodeBox(4.5, 6);
+qr.code = { field: 'Name', type: 'qr', size: 192, height: 80 };
+doc.artboards[0].boxes.push(qr);
+
+const bar = m.newCodeBox(0.5, 7.6);
+bar.code = { field: 'AccountNumber', type: 'code128', size: 288, height: 96 };
+doc.artboards[0].boxes.push(bar);
 
 const a4Geo = m.pageGeometry('A4', 'Landscape', { top: 1, right: 0.75, bottom: 1, left: 0.75 });
 const a4Html = m.serialize(doc, a4Geo);
@@ -163,6 +176,11 @@ const checks = [
     ['images carry the size-keyed cache-bust', /dgsz=w144/.test(html)],
     ['keep-ratio images size by width and let height follow', /width: 144px; height: auto/.test(html)],
     ['a field-bound image emits the engine token, not styled markup', html.includes('{%Logo__c:')],
+    // An asset is referenced by KEY. Baking the ContentVersion Id in would pin the
+    // document to whichever version was current the day it was authored, and replacing
+    // the asset would silently not reach it.
+    ['a Portwood asset emits {%asset:key}, never a baked CV id', html.includes('{%asset:company-logo:144}')],
+    ['no asset image is serialized as a raw shepherd URL', !/<img[^>]*company-logo/.test(html)],
 
     // --- Shapes ------------------------------------------------------------
     ['shapes are marked so they read back as shapes', /data-dg-shape="rect"/.test(html)],
@@ -176,6 +194,17 @@ const checks = [
     // margins. A4 landscape is 11.69 x 8.27in of paper.
     ['the artboard is paper minus margins', a4Geo.w === 10.19 && a4Geo.h === 6.27],
     ['page setup round-trips through the saved @page', /size: A4 landscape/.test(a4Html)],
+    // --- QR / barcode ------------------------------------------------------
+    // The engine replaces the whole tag with the drawn symbol, so a code box emits the
+    // tag and nothing else — markup wrapped around it would describe a box that no
+    // longer exists.
+    ['a QR box emits the engine tag with its size', html.includes('{*Name:qr:192}')],
+    ['a 1D barcode emits width x height', html.includes('{*AccountNumber:code128:288x96}')],
+    // The tag alone cannot be read back into a type and a size, so the authoring
+    // settings ride along as data attributes the engine ignores.
+    ['code settings round-trip as data attributes', /data-dg-code-type="qr"[^>]*data-dg-code-field="Name"/.test(html)],
+    ['a QR box is square at the requested pixel size', m.codeBoxSize({ type: 'qr', size: 192 }).w === 2],
+
     ['a custom size emits two lengths', /@page \{ size: 5.5in 8.5in;/.test(customHtml)],
     // Zero margins are what make the canvas and the page share an origin.
     ['margins default to zero', /margin: 0in 0in 0in 0in/.test(customHtml)],

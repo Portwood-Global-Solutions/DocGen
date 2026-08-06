@@ -269,6 +269,15 @@ export function newImageBox(xIn, yIn, wIn, hIn) {
         mode: 'pinned',
         style: { ...DEFAULT_STYLE, padding: 0 },
         image: {
+            // A Portwood ASSET KEY, not a file URL. `{%asset:<key>}` resolves at
+            // generation time to that asset's latest version, so replacing the logo in
+            // the Assets tab updates every document that uses it. Baking a
+            // ContentVersion Id into the body instead would pin each template to the
+            // version that happened to be current the day it was authored, and there
+            // would be nothing to indicate the document had gone stale.
+            assetKey: '',
+            // Preview only — the canvas has to draw something, and this URL never
+            // reaches the saved document.
             src: '',
             tag: '',
             fileName: '',
@@ -343,6 +352,13 @@ function imageToHtml(box) {
     const img = box.image || {};
     const wPx = inToCssPx(box.w);
     const hPx = inToCssPx(box.h);
+    const sizeToken = img.keepRatio ? String(wPx) : wPx + 'x' + hPx;
+    const assetKey = String(img.assetKey || '').trim();
+    if (assetKey) {
+        // The engine expands this to a full <img> through the same pipeline every other
+        // image tag uses, so sizing tokens and all output formats come for free.
+        return '{%asset:' + assetKey + ':' + sizeToken + '}';
+    }
     const tag = String(img.tag || '').trim();
     if (tag) {
         // Hand the sizing to the engine's own {%Field:WxH} token rather than wrapping
@@ -400,11 +416,17 @@ function shapeToHtml(box) {
 }
 
 /** Reads an <img> back into the model, dropping the size-keyed cache-bust. */
+function readImageTag(el) {
+    const m = /\{%asset:([A-Za-z0-9_-]+)(?::[^}]*)?\}/i.exec(el.textContent || '');
+    return m ? { assetKey: m[1], src: '', tag: '', fileName: '', keepRatio: true } : null;
+}
+
 function readImage(imgEl) {
     const raw = imgEl.getAttribute('src') || '';
     const src = raw.replace(/[?&]dgsz=[^&]*/, '').replace(/\?$/, '');
     const style = imgEl.getAttribute('style') || '';
     return {
+        assetKey: '',
         src: src,
         tag: '',
         fileName: imgEl.getAttribute('alt') || '',
@@ -425,6 +447,99 @@ function readShape(el, boxStyle) {
     const fill = readCss(style, 'background');
     sh.fill = type === 'rect' ? fill || '' : '';
     return sh;
+}
+
+/**
+ * QR and barcode types the engine can actually draw (BarcodeGenerator.getPattern).
+ * Anything else returns a null pattern and the tag prints its raw value instead.
+ */
+export const CODE_TYPES = [
+    { label: 'QR code', value: 'qr' },
+    { label: 'Barcode (Code 128)', value: 'code128' },
+    { label: 'Barcode (Code 39)', value: 'code39' }
+];
+
+export const DEFAULT_CODE = { field: '', type: 'qr', size: 200, height: 80 };
+
+/**
+ * The box size a code will occupy, in inches.
+ *
+ * QR is square and sized in CSS px. A 1D barcode is sized WxH in px, which the renderer
+ * converts to points at 3/4 — so the HEIGHT is exact, and that is the number an author
+ * lays out against.
+ *
+ * The 1D WIDTH is a best estimate, and deliberately so: the engine picks the module
+ * width from the encoded pattern (which depends on the record's value, unknown here)
+ * and will widen a symbol that would otherwise fall below the scanner-readable floor.
+ * Sizing the box to the request is the useful answer — it is what the author asked for
+ * and what they are building around — but the panel says the final width follows the
+ * data rather than pretending to a precision this cannot have.
+ */
+export function codeBoxSize(code) {
+    const c = { ...DEFAULT_CODE, ...(code || {}) };
+    const size = Math.max(24, parseFloat(c.size) || DEFAULT_CODE.size);
+    if (c.type === 'qr') {
+        return { w: round3(size / PX_PER_IN), h: round3(size / PX_PER_IN) };
+    }
+    const h = Math.max(24, parseFloat(c.height) || DEFAULT_CODE.height);
+    return { w: round3(size / PX_PER_IN), h: round3(h / PX_PER_IN) };
+}
+
+export function newCodeBox(xIn, yIn) {
+    const size = codeBoxSize(DEFAULT_CODE);
+    return {
+        id: nextId('box'),
+        kind: 'code',
+        mode: 'pinned',
+        style: { ...DEFAULT_STYLE, padding: 0 },
+        code: { ...DEFAULT_CODE },
+        x: round3(xIn),
+        y: round3(yIn),
+        w: size.w,
+        h: size.h
+    };
+}
+
+/**
+ * A code box serializes to the engine's own barcode tag, `{*Field:type:size}` — the
+ * engine replaces the whole tag with the drawn symbol, so there is no markup to wrap it
+ * in. The authoring settings ride along as data attributes because the tag alone cannot
+ * be read back into a type and a size once a size has been normalised away.
+ */
+function codeToHtml(box) {
+    const c = { ...DEFAULT_CODE, ...(box.code || {}) };
+    const field = String(c.field || '')
+        .trim()
+        .replace(/^\{\*?|\}$/g, '');
+    if (!field) {
+        return '';
+    }
+    const size = c.type === 'qr' ? String(c.size) : c.size + 'x' + c.height;
+    return '{*' + field + ':' + c.type + ':' + size + '}';
+}
+
+function codeAttrs(box) {
+    const c = { ...DEFAULT_CODE, ...(box.code || {}) };
+    return (
+        ' data-dg-code-type="' +
+        c.type +
+        '" data-dg-code-field="' +
+        esc(c.field) +
+        '" data-dg-code-size="' +
+        c.size +
+        '" data-dg-code-height="' +
+        c.height +
+        '"'
+    );
+}
+
+function readCode(el) {
+    return {
+        type: el.getAttribute('data-dg-code-type') || DEFAULT_CODE.type,
+        field: el.getAttribute('data-dg-code-field') || '',
+        size: parseFloat(el.getAttribute('data-dg-code-size')) || DEFAULT_CODE.size,
+        height: parseFloat(el.getAttribute('data-dg-code-height')) || DEFAULT_CODE.height
+    };
 }
 
 /** Field names that plausibly hold a number worth totalling. */
@@ -1026,6 +1141,13 @@ function flowMarginTop(box, cursor) {
  * documents saved under the old rules. Flying Saucer ignores unknown attributes.
  */
 function authoringAttrs(box) {
+    if (box.kind === 'code') {
+        return baseAuthoringAttrs(box) + codeAttrs(box);
+    }
+    return baseAuthoringAttrs(box);
+}
+
+function baseAuthoringAttrs(box) {
     return (
         ' data-dg-x="' +
         box.x +
@@ -1051,6 +1173,8 @@ function boxToHtml(box, cursor) {
         inner = imageToHtml(box);
     } else if (box.kind === 'shape') {
         inner = shapeToHtml(box);
+    } else if (box.kind === 'code') {
+        inner = codeToHtml(box);
     } else {
         inner = textToHtml(box);
     }
@@ -1305,6 +1429,8 @@ export function deserialize(html) {
                 box.style = readStyle(style);
                 const tableEl = el.querySelector('table');
                 const imgEl = el.querySelector('img');
+                const shapeEl = el.querySelector('[data-dg-shape]');
+                const assetImg = readImageTag(el);
                 if (tableEl) {
                     box.kind = 'table';
                     box.table = readTable(el, tableEl);
@@ -1312,7 +1438,16 @@ export function deserialize(html) {
                 } else if (imgEl) {
                     box.kind = 'image';
                     box.image = readImage(imgEl);
-                } else if (el.hasAttribute('data-dg-shape')) {
+                } else if (assetImg) {
+                    box.kind = 'image';
+                    box.image = assetImg;
+                } else if (el.hasAttribute('data-dg-code-type')) {
+                    box.kind = 'code';
+                    box.code = readCode(el);
+                } else if (shapeEl) {
+                    // The marker sits on the INNER div, not on the wrapper — testing
+                    // the wrapper meant a shape read back as an empty text box and lost
+                    // its fill, border and kind on every reload.
                     box.kind = 'shape';
                     box.shape = readShape(el, style);
                 } else {

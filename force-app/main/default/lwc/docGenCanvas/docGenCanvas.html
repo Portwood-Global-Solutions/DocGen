@@ -18,6 +18,10 @@
                 <lightning-icon icon-name="utility:image" size="small"></lightning-icon>
                 <span class="dg-rail-label">Image</span>
             </button>
+            <button class={toolCodeClass} data-tool="code" onclick={handleToolSelect} title="Add a QR code or barcode">
+                <lightning-icon icon-name="utility:qrcode" size="small"></lightning-icon>
+                <span class="dg-rail-label">Code</span>
+            </button>
             <button class={toolShapeClass} data-tool="shape" onclick={handleToolSelect} title="Add a shape or a line">
                 <lightning-icon icon-name="utility:shape_alt" size="small"></lightning-icon>
                 <span class="dg-rail-label">Shape</span>
@@ -448,30 +452,39 @@
 
                 <template lwc:if={selectedIsImage}>
                     <h4 class="dg-panel-sub">Image</h4>
+                    <button class="dg-sbtn" onclick={handleRefreshAssets}>Refresh assets</button>
                     <p class="dg-panel-note">
                         Drag the handles to size it. The picture prints at exactly the size of the box.
                     </p>
 
-                    <label class="dg-panel-label">Upload</label>
-                    <input type="file" accept="image/*" class="dg-file" onchange={handleImageUpload} />
-
                     <template lwc:if={hasImageChoices}>
-                        <label class="dg-panel-label">Or pick one already in this org</label>
+                        <label class="dg-panel-label">Portwood assets</label>
                         <div class="dg-imggrid">
-                            <template for:each={imageChoices} for:item="f">
+                            <template for:each={imageChoices} for:item="a">
                                 <button
-                                    key={f.contentVersionId}
-                                    class={f.cls}
-                                    data-url={f.url}
-                                    data-name={f.fileName}
+                                    key={a.id}
+                                    class={a.cls}
+                                    data-key={a.assetKey}
+                                    data-url={a.previewUrl}
+                                    data-name={a.name}
                                     onclick={handlePickImage}
-                                    title={f.fileName}
+                                    title={a.mergeTag}
                                 >
-                                    <img src={f.url} alt={f.fileName} class="dg-imgthumb" />
-                                    <span class="dg-imgname">{f.fileName}</span>
+                                    <img src={a.previewUrl} alt={a.name} class="dg-imgthumb" />
+                                    <span class="dg-imgname">{a.name}</span>
                                 </button>
                             </template>
                         </div>
+                        <p class="dg-panel-note">
+                            Referenced by key, so replacing an asset on the <b>Assets</b> tab updates every document
+                            that uses it.
+                        </p>
+                    </template>
+                    <template lwc:else>
+                        <p class="dg-panel-warn">
+                            No active assets with a file yet. Add images on the <b>Portwood Assets</b> tab, then reopen
+                            this panel.
+                        </p>
                     </template>
 
                     <label class="dg-panel-label">Or from a field on the record</label>
@@ -494,6 +507,76 @@
                     <template lwc:if={selImageHasSource}>
                         <button class="dg-panel-btn" onclick={handleImageClear}>Remove the picture</button>
                     </template>
+                </template>
+
+                <template lwc:if={selectedIsCode}>
+                    <h4 class="dg-panel-sub">QR / barcode</h4>
+                    <lightning-combobox
+                        label="Type"
+                        variant="label-stacked"
+                        value={selCode.type}
+                        options={codeTypeOptions}
+                        data-key="type"
+                        onchange={handleCodeChange}
+                    ></lightning-combobox>
+                    <label class="dg-panel-label">Reads this field</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selCode.field}
+                        placeholder="AccountNumber"
+                        data-key="field"
+                        onchange={handleCodeChange}
+                    />
+                    <p class="dg-panel-note">Or click a field below to bind it.</p>
+
+                    <template lwc:if={selCodeIsQr}>
+                        <label class="dg-panel-label">Size (px)</label>
+                        <input
+                            type="number"
+                            class="dg-panel-input dg-panel-input_sm"
+                            min="48"
+                            max="600"
+                            step="8"
+                            value={selCode.size}
+                            data-key="size"
+                            onchange={handleCodeChange}
+                        />
+                        <p class="dg-panel-note">
+                            QR is square. The box resizes to match, so you can lay out around it.
+                        </p>
+                    </template>
+                    <template lwc:else>
+                        <label class="dg-panel-label">Width x height (px)</label>
+                        <div class="dg-row">
+                            <input
+                                type="number"
+                                class="dg-panel-input dg-panel-input_sm"
+                                min="96"
+                                max="900"
+                                step="8"
+                                value={selCode.size}
+                                data-key="size"
+                                onchange={handleCodeChange}
+                            />
+                            <input
+                                type="number"
+                                class="dg-panel-input dg-panel-input_sm"
+                                min="32"
+                                max="400"
+                                step="8"
+                                value={selCode.height}
+                                data-key="height"
+                                onchange={handleCodeChange}
+                            />
+                        </div>
+                        <p class="dg-panel-note">
+                            The height is exact. The final <b>width</b> follows the encoded value — the engine widens a
+                            symbol that would otherwise be too fine to scan — so treat the box as the space you asked
+                            for, and leave a little room beside it.
+                        </p>
+                    </template>
+                    <p class="dg-panel-note">Footprint: {codeSizeLabel}</p>
                 </template>
 
                 <template lwc:if={selectedIsShape}>

@@ -4,8 +4,7 @@ import saveAndPublishHtmlBody from '@salesforce/apex/DocGenController.saveAndPub
 import generatePdf from '@salesforce/apex/DocGenController.generatePdf';
 import getTemplateVersions from '@salesforce/apex/DocGenController.getTemplateVersions';
 import getVersionBody from '@salesforce/apex/DocGenController.getVersionBody';
-import listCanvasImages from '@salesforce/apex/DocGenController.listCanvasImages';
-import saveHtmlTemplateImage from '@salesforce/apex/DocGenController.saveHtmlTemplateImage';
+import getAssets from '@salesforce/apex/DocGenController.getAssets';
 import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import { extractQueryShape } from 'c/docGenAuthoringKit';
 import { updateRecord } from 'lightning/uiRecordApi';
@@ -36,7 +35,10 @@ import {
     DEFAULT_MARGINS,
     normalizeMargins,
     DEFAULT_CUSTOM_PAGE,
-    normalizeCustomPage
+    normalizeCustomPage,
+    newCodeBox,
+    codeBoxSize,
+    CODE_TYPES
 } from './canvasModel';
 
 /**
@@ -288,6 +290,10 @@ export default class DocGenCanvas extends LightningElement {
 
     get toolImageClass() {
         return this.activeTool === 'image' ? 'dg-tool dg-tool_active' : 'dg-tool';
+    }
+
+    get toolCodeClass() {
+        return this.activeTool === 'code' ? 'dg-tool dg-tool_active' : 'dg-tool';
     }
 
     get toolShapeClass() {
@@ -555,7 +561,7 @@ export default class DocGenCanvas extends LightningElement {
     get hasPickableFields() {
         const box = this.selectedBox;
         const kind = box ? box.kind || 'text' : null;
-        return this.pickableFields.length > 0 && (kind === 'text' || kind === 'table');
+        return this.pickableFields.length > 0 && (kind === 'text' || kind === 'table' || kind === 'code');
     }
 
     /**
@@ -604,6 +610,8 @@ export default class DocGenCanvas extends LightningElement {
                 columns: [...(box.table.columns || []), { label, tag, width: '' }]
             });
             this.statusText = 'Column added: ' + label;
+        } else if (box.kind === 'code') {
+            this.bindFieldToCode(box, tag);
         } else {
             // Append to the RICH TEXT content. It used to append to box.text, which
             // stopped being what the box renders when editing moved into the rich-text
@@ -1145,10 +1153,11 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     get imageChoices() {
-        const current = this.selImage.src;
-        return (this.imageLibrary || []).map((f) => ({
-            ...f,
-            cls: f.url === current ? 'dg-imgcard dg-imgcard_on' : 'dg-imgcard'
+        const current = this.selImage.assetKey;
+        return (this.imageLibrary || []).map((a) => ({
+            ...a,
+            previewUrl: a.latestVersionCvId ? '/sfc/servlet.shepherd/version/download/' + a.latestVersionCvId : '',
+            cls: a.assetKey === current ? 'dg-imgcard dg-imgcard_on' : 'dg-imgcard'
         }));
     }
 
@@ -1157,37 +1166,56 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     /**
-     * The library is every image already attached to this template, plus the org's
-     * asset files. Asset files are resolved to their ContentVersion server-side rather
-     * than linked as /file-asset/… — a relative /sfc/ URL is the ONE image form proven
-     * to render through Blob.toPdf, and an asset URL that renders in the browser but
-     * comes out blank in the PDF is exactly the trap this editor exists to avoid.
+     * The library is the org's Portwood ASSETS, not org files or static resources.
+     *
+     * An asset is referenced by key, and `{%asset:<key>}` resolves to that asset's
+     * latest version every time a document is generated — so replacing the logo in the
+     * Assets tab updates every template at once. Listing raw files here instead would
+     * pin each document to one ContentVersion, and nothing would show that a template
+     * had gone stale.
+     *
+     * Inactive assets are filtered out because the merge resolver ignores them: the tag
+     * would render a placeholder, which is a broken document that looked fine while
+     * being authored.
      */
     async loadImageLibrary() {
-        if (!this.templateId || this.imageLoading) return;
+        if (this.imageLoading) return;
         this.imageLoading = true;
         try {
-            this.imageLibrary = await listCanvasImages({ templateId: this.templateId });
+            const rows = (await getAssets()) || [];
+            this.imageLibrary = rows.filter((a) => a.isActive && a.latestVersionCvId);
         } catch (e) {
-            this.statusText = 'Could not load images: ' + this.errText(e);
+            this.statusText = 'Could not load assets: ' + this.errText(e);
         } finally {
             this.imageLoading = false;
         }
     }
 
+    handleRefreshAssets() {
+        this.imageLibrary = [];
+        this.loadImageLibrary();
+    }
+
     handlePickImage(event) {
+        const key = event.currentTarget.dataset.key;
         const url = event.currentTarget.dataset.url;
         const name = event.currentTarget.dataset.name;
         const box = this.selectedBox;
         if (!box || box.kind !== 'image') return;
-        this.applyToBox(box.id, { image: { ...box.image, src: url, tag: '', fileName: name } });
-        this.statusText = 'Image set';
+        this.applyToBox(box.id, {
+            image: { ...box.image, assetKey: key, src: url, tag: '', fileName: name }
+        });
+        this.statusText = 'Image set to ' + key;
     }
 
     handleImageTagChange(event) {
         const box = this.selectedBox;
         if (!box || box.kind !== 'image') return;
-        this.applyToBox(box.id, { image: { ...box.image, tag: (event.target.value || '').trim() } });
+        // A field tag and an asset key are alternatives, not layers — setting one has
+        // to clear the other or the serializer silently picks for you.
+        this.applyToBox(box.id, {
+            image: { ...box.image, tag: (event.target.value || '').trim(), assetKey: '', src: '' }
+        });
     }
 
     handleImageRatioToggle(event) {
@@ -1199,50 +1227,12 @@ export default class DocGenCanvas extends LightningElement {
     handleImageClear() {
         const box = this.selectedBox;
         if (!box || box.kind !== 'image') return;
-        this.applyToBox(box.id, { image: { ...box.image, src: '', tag: '', fileName: '' } });
-    }
-
-    /** Uploads a new image to the template, then selects it into the current box. */
-    async handleImageUpload(event) {
-        const file = (event.target.files || [])[0];
-        if (!file || !this.templateId) return;
-        const box = this.selectedBox;
-        this.imageLoading = true;
-        this.statusText = 'Uploading ' + file.name + '...';
-        try {
-            const base64 = await this.readAsBase64(file);
-            const saved = await saveHtmlTemplateImage({
-                templateId: this.templateId,
-                fileName: file.name,
-                base64Content: base64
-            });
-            await this.loadImageLibrary();
-            const url = saved && saved.url;
-            if (url && box && box.kind === 'image') {
-                this.applyToBox(box.id, { image: { ...box.image, src: url, tag: '', fileName: file.name } });
-            }
-            this.statusText = 'Image uploaded';
-        } catch (e) {
-            this.statusText = 'Upload failed: ' + this.errText(e);
-        } finally {
-            this.imageLoading = false;
-            // Clear the input so re-picking the SAME file fires change again.
-            event.target.value = null;
-        }
+        this.applyToBox(box.id, { image: { ...box.image, assetKey: '', src: '', tag: '', fileName: '' } });
     }
 
     /** Apex errors arrive as e.body.message; JS errors as e.message. */
     errText(e) {
         return (e && e.body ? e.body.message : e && e.message) || 'Unknown error';
-    }
-
-    readAsBase64(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result).split(',')[1]);
-            reader.onerror = () => reject(reader.error);
-            reader.readAsDataURL(file);
-        });
     }
 
     // ---- Shape box -------------------------------------------------------
@@ -1316,6 +1306,27 @@ export default class DocGenCanvas extends LightningElement {
                 '</div>'
             );
         }
+        if (model.kind === 'code') {
+            const c = model.code || {};
+            // A placeholder at the exact footprint, not a drawn symbol. The real one is
+            // rendered by the engine from the record's value, which does not exist here
+            // — and a client-side encoder would be a second implementation to keep in
+            // step with the server's for no gain. What the author needs on the canvas
+            // is the SPACE it takes, which this is exact about.
+            const wPx = Math.max(1, inToPx(model.w, this.zoom));
+            const hPx = Math.max(1, inToPx(model.h, this.zoom));
+            const label = c.field ? c.type.toUpperCase() + ' · ' + c.field : c.type.toUpperCase() + ' · pick a field';
+            return (
+                '<div style="width:' +
+                wPx +
+                'px;height:' +
+                hPx +
+                'px;border:1px dashed #7a8a9c;background:repeating-linear-gradient(0deg,#f3f5f8,#f3f5f8 4px,#e6eaf0 4px,#e6eaf0 8px);' +
+                'color:#41546b;font:10px sans-serif;display:table-cell;text-align:center;vertical-align:middle;">' +
+                label +
+                '</div>'
+            );
+        }
         if (model.kind === 'shape') {
             const sh = model.shape || {};
             // An EXPLICIT pixel height, not height:100%.
@@ -1363,7 +1374,7 @@ export default class DocGenCanvas extends LightningElement {
 
     /** Click the artboard with the Text tool armed to place a box where you clicked. */
     handleBoardClick(event) {
-        const PLACING = ['text', 'table', 'image', 'shape'];
+        const PLACING = ['text', 'table', 'image', 'shape', 'code'];
         if (PLACING.indexOf(this.activeTool) === -1) {
             if (event.target.classList.contains('dg-board')) {
                 this.selectedId = null;
@@ -1385,6 +1396,8 @@ export default class DocGenCanvas extends LightningElement {
             fresh = newImageBox(x, y, 1.5, 1);
         } else if (tool === 'shape') {
             fresh = newShapeBox(x, y, 2, 1);
+        } else if (tool === 'code') {
+            fresh = newCodeBox(x, y);
         } else {
             fresh = newTextBox(x, y, 2.5, 0.4);
         }
@@ -1395,7 +1408,7 @@ export default class DocGenCanvas extends LightningElement {
         this.activeTool = 'select';
         // Read the tool from `tool`, not from this.activeTool — that was just reset to
         // 'select' above, so the status line always said "Text box placed".
-        const LABELS = { table: 'Table', image: 'Image', shape: 'Shape', text: 'Text box' };
+        const LABELS = { table: 'Table', image: 'Image', shape: 'Shape', code: 'Code', text: 'Text box' };
         this.statusText = (LABELS[tool] || 'Box') + ' placed';
         if (tool === 'image') {
             this.loadImageLibrary();
