@@ -948,6 +948,22 @@ export default class DocGenCanvas extends LightningElement {
         return box.html != null ? box.html : box.text || '';
     }
 
+    /**
+     * Typography controls belong to TABLES only.
+     *
+     * A text box gets its font, size, weight, colour and alignment from the rich-text
+     * editor, applied to whatever the author selected. Repeating those as box-level
+     * controls gave two places to set the same thing with different scopes, and the
+     * box-level one silently won on save — the definition of a confusing panel.
+     *
+     * A table has no rich-text editor: its cells hold merge tags, so the typography
+     * has to be set for the box and pushed onto the cells. That is why the controls
+     * stay for tables and go for text.
+     */
+    get showBoxTypography() {
+        return this.selectedIsTable;
+    }
+
     get canEditRichText() {
         const box = this.selectedBox;
         return !!box && box.kind !== 'table';

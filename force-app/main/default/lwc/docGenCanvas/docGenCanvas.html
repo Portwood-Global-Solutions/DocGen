@@ -64,58 +64,70 @@
                     </div>
                 </template>
 
-                <lightning-combobox
-                    label="Font"
-                    variant="label-stacked"
-                    value={selFont}
-                    options={fontOptions}
-                    onchange={handleFontChange}
-                    field-level-help="Only these three resolve in the PDF engine. Named families like Arial or Georgia silently render as serif, so they are not offered."
-                ></lightning-combobox>
+                <template lwc:if={showBoxTypography}>
+                    <lightning-combobox
+                        label="Font"
+                        variant="label-stacked"
+                        value={selFont}
+                        options={fontOptions}
+                        onchange={handleFontChange}
+                        field-level-help="Only these three resolve in the PDF engine. Named families like Arial or Georgia silently render as serif, so they are not offered."
+                    ></lightning-combobox>
+
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Size (pt)</label>
+                        <input
+                            type="number"
+                            class="dg-prop-num"
+                            min="5"
+                            max="96"
+                            step="0.5"
+                            value={selSize}
+                            data-key="size"
+                            onchange={handleNumChange}
+                        />
+                    </div>
+
+                    <div class="dg-prop-row">
+                        <button class={boldClass} data-key="bold" onclick={handleStyleToggle} title="Bold">
+                            <b>B</b>
+                        </button>
+                        <button class={italicClass} data-key="italic" onclick={handleStyleToggle} title="Italic">
+                            <i>I</i>
+                        </button>
+                        <button
+                            class={underlineClass}
+                            data-key="underline"
+                            onclick={handleStyleToggle}
+                            title="Underline"
+                        >
+                            <u>U</u>
+                        </button>
+                        <span class="dg-prop-gap"></span>
+                        <button class={alignLeftClass} data-align="left" onclick={handleAlign} title="Align left">
+                            &#8676;
+                        </button>
+                        <button class={alignCenterClass} data-align="center" onclick={handleAlign} title="Centre">
+                            &#8596;
+                        </button>
+                        <button class={alignRightClass} data-align="right" onclick={handleAlign} title="Align right">
+                            &#8677;
+                        </button>
+                    </div>
+
+                    <div class="dg-prop-row">
+                        <label class="dg-prop-label">Text</label>
+                        <input
+                            type="color"
+                            class="dg-prop-color"
+                            value={selColor}
+                            data-key="color"
+                            onchange={handleColorChange}
+                        />
+                    </div>
+                </template>
 
                 <div class="dg-prop-row">
-                    <label class="dg-prop-label">Size (pt)</label>
-                    <input
-                        type="number"
-                        class="dg-prop-num"
-                        min="5"
-                        max="96"
-                        step="0.5"
-                        value={selSize}
-                        data-key="size"
-                        onchange={handleNumChange}
-                    />
-                </div>
-
-                <div class="dg-prop-row">
-                    <button class={boldClass} data-key="bold" onclick={handleStyleToggle} title="Bold"><b>B</b></button>
-                    <button class={italicClass} data-key="italic" onclick={handleStyleToggle} title="Italic">
-                        <i>I</i>
-                    </button>
-                    <button class={underlineClass} data-key="underline" onclick={handleStyleToggle} title="Underline">
-                        <u>U</u>
-                    </button>
-                    <span class="dg-prop-gap"></span>
-                    <button class={alignLeftClass} data-align="left" onclick={handleAlign} title="Align left">
-                        &#8676;
-                    </button>
-                    <button class={alignCenterClass} data-align="center" onclick={handleAlign} title="Centre">
-                        &#8596;
-                    </button>
-                    <button class={alignRightClass} data-align="right" onclick={handleAlign} title="Align right">
-                        &#8677;
-                    </button>
-                </div>
-
-                <div class="dg-prop-row">
-                    <label class="dg-prop-label">Text</label>
-                    <input
-                        type="color"
-                        class="dg-prop-color"
-                        value={selColor}
-                        data-key="color"
-                        onchange={handleColorChange}
-                    />
                     <label class="dg-prop-label">Fill</label>
                     <input
                         type="color"
@@ -126,7 +138,6 @@
                     />
                     <button class="dg-sbtn" onclick={handleClearFill} title="No fill">&#8709;</button>
                 </div>
-
                 <div class="dg-prop-row">
                     <label class="dg-prop-label">Border</label>
                     <input
