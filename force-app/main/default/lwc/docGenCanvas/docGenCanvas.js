@@ -79,8 +79,23 @@ export default class DocGenCanvas extends LightningElement {
         this._templateId = value;
         this.resetForTemplate();
     }
+    /**
+     * Accepted for API compatibility, but NOT what the canvas draws.
+     *
+     * These carry the template RECORD's page fields. For a Canvas template the body's
+     * own @page rule is the source of truth — the engine defers to a source @page
+     * (v1.90) — so letting the record drive the editor gave two answers to one
+     * question, and a brand-new canvas opened on whatever the record happened to say
+     * rather than on a clean page. Writing back to them from inside was its own hazard:
+     * a parent re-render would overwrite whatever had been read out of the saved @page.
+     */
     @api pageSize = 'Letter';
     @api orientation = 'Portrait';
+
+    // What the canvas actually uses. A NEW canvas is Letter, portrait, no margins —
+    // the page and the artboard then coincide, so a box at 0,0 is at the paper corner.
+    @track canvasPageSize = 'Letter';
+    @track canvasOrientation = 'Portrait';
     @api queryConfig;
     @api baseObject;
     @api sampleRecordId;
@@ -118,11 +133,11 @@ export default class DocGenCanvas extends LightningElement {
     _drag = null;
 
     get geo() {
-        return pageGeometry(this.pageSize, this.orientation, this.margins, this.customPage);
+        return pageGeometry(this.canvasPageSize, this.canvasOrientation, this.margins, this.customPage);
     }
 
     get isCustomPage() {
-        return this.pageSize === 'Custom';
+        return this.canvasPageSize === 'Custom';
     }
 
     get customPageW() {
@@ -177,12 +192,12 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     handlePageSizeChange(event) {
-        this.pageSize = event.detail.value;
+        this.canvasPageSize = event.detail.value;
         this.reflowToPage();
     }
 
     handleOrientationChange(event) {
-        this.orientation = event.detail.value;
+        this.canvasOrientation = event.detail.value;
         this.reflowToPage();
     }
 
@@ -230,7 +245,7 @@ export default class DocGenCanvas extends LightningElement {
                 boxes: b.boxes.map((x) => clampBox(x, geo))
             }))
         };
-        this.statusText = 'Page set to ' + this.pageSize + ' ' + this.orientation.toLowerCase();
+        this.statusText = 'Page set to ' + this.canvasPageSize + ' ' + this.canvasOrientation.toLowerCase();
     }
 
     get boardStyle() {
@@ -1072,6 +1087,10 @@ export default class DocGenCanvas extends LightningElement {
         this._showPageSetup = false;
         this.margins = { ...DEFAULT_MARGINS };
         this.customPage = { ...DEFAULT_CUSTOM_PAGE };
+        // A new canvas starts Letter / portrait / no margins. An existing one has these
+        // overwritten by readPageSetup from its own saved @page rule.
+        this.canvasPageSize = 'Letter';
+        this.canvasOrientation = 'Portrait';
         if (this.previewUrl) {
             URL.revokeObjectURL(this.previewUrl);
             this.previewUrl = null;
@@ -1275,15 +1294,15 @@ export default class DocGenCanvas extends LightningElement {
         // A custom size is two lengths rather than a named page.
         const custom = /size:\s*([0-9.]+)in\s+([0-9.]+)in/i.exec(rule[1]);
         if (custom) {
-            this.pageSize = 'Custom';
-            this.orientation = 'Portrait';
+            this.canvasPageSize = 'Custom';
+            this.canvasOrientation = 'Portrait';
             this.customPage = normalizeCustomPage({ w: custom[1], h: custom[2] });
         }
         const size = custom ? null : /size:\s*([A-Za-z0-9]+)\s*(portrait|landscape)?/i.exec(rule[1]);
         if (size) {
             const named = ['Letter', 'A4', 'Legal'].find((n) => n.toLowerCase() === size[1].toLowerCase());
-            if (named) this.pageSize = named;
-            this.orientation = (size[2] || 'portrait').toLowerCase() === 'landscape' ? 'Landscape' : 'Portrait';
+            if (named) this.canvasPageSize = named;
+            this.canvasOrientation = (size[2] || 'portrait').toLowerCase() === 'landscape' ? 'Landscape' : 'Portrait';
         }
         const marg = /margin:\s*([^;]+)/i.exec(rule[1]);
         if (marg) {
