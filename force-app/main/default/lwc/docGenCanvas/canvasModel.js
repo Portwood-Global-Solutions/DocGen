@@ -2575,6 +2575,8 @@ function blockToBox(node, geo, cursorIn, report, measure) {
         const box = newTextBox(0, cursorIn, geo.w, 0.3);
         box.mode = 'flow';
         box.style = { ...DEFAULT_STYLE, padding: 0, borderWidth: 0 };
+        // READ off the detached parse tree, fed straight into the sanitizer.
+        // eslint-disable-next-line @lwc/lwc/no-inner-html
         box.html = sanitizeInline(node.outerHTML);
         box.text = '';
         box.h = measuredHeight(measure, box.html, box.w, box.h);
