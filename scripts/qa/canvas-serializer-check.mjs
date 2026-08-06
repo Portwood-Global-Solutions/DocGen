@@ -49,6 +49,12 @@ const p2 = m.newTextBox(1.0, 0.5, 3.0, 0.4);
 p2.text = 'Page two';
 doc.artboards[1].boxes.push(p2);
 
+// A second FLOW box below the table, to pin down the stacking maths.
+const below = m.newTextBox(0.5, 7.5, 4, 0.4);
+below.mode = 'flow';
+below.text = 'Below the table';
+doc.artboards[0].boxes.push(below);
+
 const html = m.serialize(doc, geo);
 
 const checks = [
@@ -87,7 +93,13 @@ const checks = [
     ['strike mark expands', html.includes('<s>void</s>')],
     ['a slash inside a mark survives', html.includes('<b>Net/30</b>')],
     ['merge tag beside marks is untouched', html.includes('{Name}')],
-    ['a literal < stays escaped, not turned into markup', html.includes('5 &lt; 10')]
+    ['a literal < stays escaped, not turned into markup', html.includes('5 &lt; 10')],
+    // A flow box's margin is the GAP from the previous flow box, never its absolute y.
+    // Emitting y put a box authored at 7.5in seven and a half inches BELOW the table
+    // instead of that far down the page, and the error compounded per box. Getting
+    // this right is what makes a growing table push what is under it down.
+    ['flow boxes stack by gap, not by absolute y', !/class="dg-flow"[^>]*margin: 7.5in/.test(html)],
+    ['pinned boxes are emitted before flow ones', html.indexOf('dg-pin') < html.indexOf('dg-flow')]
 ];
 
 let bad = 0;

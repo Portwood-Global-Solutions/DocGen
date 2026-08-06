@@ -551,14 +551,29 @@ function textToHtml(box) {
     return expandMarks(esc(box.text == null ? '' : box.text)).replace(/\n/g, '<br />');
 }
 
-function boxToHtml(box) {
+/**
+ * A flow box's vertical margin is the GAP from the previous flow box, not its y.
+ *
+ * This is the whole mechanism behind "a table that grows pushes what is under it
+ * down". Flow boxes sit in normal flow, so margin-top is measured from the bottom of
+ * the one before — emitting the box's absolute y there put a box authored at y=5in
+ * five inches BELOW the table instead of five inches down the page, and the error
+ * compounded with every additional flow box.
+ *
+ * Computing the gap means the layout matches the canvas exactly at minimum content,
+ * and everything after a growing table moves down by however much it grew. Pinned
+ * boxes are absolute and take no part in this, which is precisely what pinning is for.
+ */
+function flowMarginTop(box, cursor) {
+    return round3(Math.max(0, box.y - cursor));
+}
+
+function boxToHtml(box, cursor) {
     const inner = box.kind === 'table' ? tableToHtml(box) : textToHtml(box);
     if (box.mode === 'flow') {
-        // No top/left: a flow box is placed by the normal flow, and its margin-left
-        // is what keeps it visually where the author put it horizontally.
         return (
             '<div class="dg-flow" style="margin: ' +
-            box.y +
+            flowMarginTop(box, cursor || 0) +
             'in 0 0 ' +
             box.x +
             'in; width: ' +
@@ -593,7 +608,22 @@ export function serialize(doc, geo) {
     const boards = doc.artboards
         .map((b, i) => {
             const cls = i === 0 ? 'dg-artboard' : 'dg-artboard dg-artboard_break';
-            const inner = b.boxes.map(boxToHtml).join('\n  ');
+            // Pinned boxes first — they are absolute, so their position in the markup
+            // does not matter and emitting them up front leaves the flow starting at
+            // the top of the artboard. Flow boxes then follow IN Y ORDER, because
+            // normal flow is document order and authoring order is not.
+            const pinned = (b.boxes || []).filter((x) => x.mode !== 'flow');
+            const flowing = (b.boxes || [])
+                .filter((x) => x.mode === 'flow')
+                .slice()
+                .sort((p, q) => p.y - q.y);
+            let cursor = 0;
+            const flowHtml = flowing.map((x) => {
+                const out = boxToHtml(x, cursor);
+                cursor = x.y + x.h;
+                return out;
+            });
+            const inner = [...pinned.map((x) => boxToHtml(x, 0)), ...flowHtml].join('\n  ');
             return '<div class="' + cls + '" data-dg-artboard="' + (i + 1) + '">\n  ' + inner + '\n</div>';
         })
         .join('\n');
