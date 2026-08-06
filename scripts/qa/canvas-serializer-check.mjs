@@ -89,6 +89,14 @@ const bar = m.newCodeBox(0.5, 7.6);
 bar.code = { field: 'AccountNumber', type: 'code128', size: 288, height: 96 };
 doc.artboards[0].boxes.push(bar);
 
+// A bordered, padded box dragged to the right edge of the page. In CSS 2.1 the border
+// and padding sit OUTSIDE the declared width and box-sizing is ignored by this engine,
+// so emitting the authored width would push the box off the paper and clip it.
+const edge = m.newTextBox(0.5, 8.5, 8, 0.4);
+edge.style = { ...edge.style, borderWidth: 3, padding: 6 };
+edge.text = 'edge to edge';
+doc.artboards[0].boxes.push(edge);
+
 const a4Geo = m.pageGeometry('A4', 'Landscape', { top: 1, right: 0.75, bottom: 1, left: 0.75 });
 const a4Html = m.serialize(doc, a4Geo);
 
@@ -100,7 +108,10 @@ const customHtml = m.serialize(doc, customGeo);
 const html = m.serialize(doc, geo);
 
 const checks = [
-    ['pinned box uses left/top in inches', html.includes('left: 2.4in; top: 3.1in; width: 2.5in;')],
+    // 2.5in authored is the OUTER width. The default 2pt padding sits inside it, so the
+    // emitted content width is 2.5 - 2x2pt = 2.444in and the box still measures 2.5in
+    // edge to edge — which is what the author dragged and what the canvas draws.
+    ['pinned box uses left/top in inches', html.includes('left: 2.4in; top: 3.1in; width: 2.444in;')],
     ['pinned box omits height (so it can grow)', !/class="dg-pin"[^>]*[^-]height:/.test(html)],
     ['flow box uses margin, not left/top', html.includes('margin: 5in 0 0 0.3in;')],
     ['second artboard carries the break class', html.includes('dg-artboard dg-artboard_break')],
@@ -208,6 +219,10 @@ const checks = [
     // settings ride along as data attributes the engine ignores.
     ['code settings round-trip as data attributes', /data-dg-code-type="qr"[^>]*data-dg-code-field="Name"/.test(html)],
     ['a QR box is square at the requested pixel size', m.codeBoxSize({ type: 'qr', size: 192 }).w === 2],
+
+    // 8in authored, minus 2x(3pt border + 6pt padding) = 18pt = 0.25in -> 7.75in.
+    ['border and padding come OUT of the emitted width', html.includes('width: 7.75in')],
+    ['the authored outer width is still what round-trips', html.includes('data-dg-w="8"')],
 
     ['a custom size emits two lengths', /@page \{ size: 5.5in 8.5in;/.test(customHtml)],
     // Zero margins are what make the canvas and the page share an origin.

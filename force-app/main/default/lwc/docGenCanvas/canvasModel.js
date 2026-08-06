@@ -1171,6 +1171,32 @@ function baseAuthoringAttrs(box) {
     );
 }
 
+/**
+ * The width to EMIT so the box's outer edge lands where the author put it.
+ *
+ * Flying Saucer is CSS 2.1: `width` is the CONTENT box, and border and padding are
+ * added outside it. `box-sizing: border-box` does not help — measured against a real
+ * render (a 4in box with a 12pt border put its content edge at 300pt with and without
+ * the property, versus 288pt for no border at all), so the engine ignores it outright.
+ *
+ * The consequence was a box dragged to the right edge of the page being clipped: it
+ * occupied its authored width PLUS twice its border and padding, and the excess fell
+ * off the paper. The canvas showed it correctly because the browser does honour
+ * border-box, so the editor and the PDF disagreed by exactly that much on every
+ * bordered or padded box.
+ *
+ * Subtracting here makes the emitted box measure the authored width from outer edge to
+ * outer edge, which is what the author dragged and what the canvas draws.
+ */
+function outerToContentWidth(box) {
+    const st = { ...DEFAULT_STYLE, ...(box.style || {}) };
+    const chromePt = 2 * ((st.borderWidth > 0 ? st.borderWidth : 0) + (st.padding || 0));
+    // 72pt to the inch. Never below a hair's width: a narrow box with a fat border
+    // would otherwise ask for a negative width, which the engine treats as auto and
+    // lets run the full width of the page — the very failure being fixed.
+    return round3(Math.max(0.05, box.w - chromePt / 72));
+}
+
 function boxToHtml(box, cursor) {
     let inner;
     if (box.kind === 'table') {
@@ -1193,7 +1219,7 @@ function boxToHtml(box, cursor) {
             'in 0 0 ' +
             box.x +
             'in; width: ' +
-            box.w +
+            outerToContentWidth(box) +
             'in; ' +
             styleCss(box) +
             '">' +
@@ -1213,7 +1239,7 @@ function boxToHtml(box, cursor) {
         'in; top: ' +
         box.y +
         'in; width: ' +
-        box.w +
+        outerToContentWidth(box) +
         'in; ' +
         styleCss(box) +
         '">' +
@@ -1412,6 +1438,10 @@ export function deserialize(html) {
                 const aw = parseFloat(el.getAttribute('data-dg-w'));
                 const ah = parseFloat(el.getAttribute('data-dg-h'));
                 const hasAuthored = !isNaN(ax) && !isNaN(ay);
+                // The AUTHORED width, which is the outer edge. The emitted CSS width is
+                // that minus border and padding (see outerToContentWidth), so reading
+                // the CSS back as the box width would shrink every bordered box a
+                // little more on each save.
                 box.w = !isNaN(aw) ? aw : readInches(style, 'width') || 2;
                 if (hasAuthored) {
                     box.x = ax;
