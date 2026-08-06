@@ -14,7 +14,6 @@ import {
     STARTERS,
     extractQueryShape,
     buildStarterHtml,
-    buildCanvasStarter,
     buildAiPrompt,
     prettyPrintHtml,
     scopeHtmlForInlinePreview,
@@ -419,10 +418,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     newTemplateQuery = '';
     // HTML-first authoring path. 'starter' (recommended) and 'ai' both create
     // HTML templates; 'file' exposes the classic Type picker for uploads.
-    // Opens on the recommended path. It still lands on a canvas — a starter now builds
-    // a Canvas template — so "start with a design" and "start on the canvas" are the
-    // same journey, one of them with the page already laid out.
-    @track newAuthoringMode = 'starter';
+    // A blank canvas is the default. Nothing to choose before you can start.
+    @track newAuthoringMode = 'canvas';
     @track newStarterKey = 'report';
     // One-click create: auto-built query + optional company logo asset
     @track isAutoCreating = false;
@@ -2321,24 +2318,20 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     /**
-     * Three ways in, and no more than three.
+     * Two ways in: bring a document, or draw one.
      *
-     * All of them land on a Canvas except an upload, which keeps the format it arrived
-     * in. Two modes are deliberately absent rather than deleted: 'scratch' (the blank
-     * legacy designer, which a blank canvas replaces) and 'ai' (Agentforce generation,
-     * parked until it earns its place beside an editor that is now easy to use). Both
-     * still exist in code so a template already created that way opens normally — they
-     * are simply not somewhere the wizard sends anyone.
+     * Starters are gone. Every one was a layout somebody still had to understand and
+     * then edit, and a wizard that asks which of five designs you want before you have
+     * seen the editor is asking a question too early. A blank canvas is a shorter path
+     * to the same place, and the editor is now good enough to make it the honest one.
+     *
+     * 'starter', 'scratch' (the legacy blank designer) and 'ai' (Agentforce) are
+     * deliberately absent rather than deleted, so a template already created any of
+     * those ways still opens normally. They are simply not somewhere the wizard sends
+     * anyone.
      */
     get authoringCards() {
         const defs = [
-            {
-                mode: 'starter',
-                title: 'Start with a Design',
-                badge: 'Recommended',
-                icon: 'utility:brush',
-                desc: 'Pick a layout and your fields drop straight in. Built as canvas boxes — a title, tables, signature blocks — so it is pixel perfect from the first click and nothing was translated to get there.'
-            },
             {
                 mode: 'file',
                 title: 'Bring an Existing Template',
@@ -4840,7 +4833,7 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             // box, and an authored table stays markup because reshaping an arbitrary
             // table into the table model was measured to drop merge tags. Right for
             // someone else's document; wrong for a starting point.
-            let html = wantsCanvas ? buildCanvasStarter(starterKey, shape) : buildStarterHtml(starterKey, shape);
+            let html = buildStarterHtml(starterKey, shape);
             // Starter bodies carry SIZED {%asset:logo:Nx} slots (144x header
             // logos, 120x on the agreement); an existing asset picked in the
             // wizard swaps its own merge tag in, inheriting the slot's size
