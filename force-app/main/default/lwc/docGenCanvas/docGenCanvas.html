@@ -378,6 +378,12 @@
 
         <!-- Stage -->
         <div class="dg-stage">
+            <template lwc:if={saveError}>
+                <div class="dg-save-error">
+                    {saveError}
+                    <button class="dg-sbtn" onclick={handleDismissError}>Dismiss</button>
+                </div>
+            </template>
             <div class="dg-quickbar">
                 <button class="dg-qb-btn" data-dir="out" onclick={handleZoom}>&minus;</button>
                 <span class="dg-qb-zoom">{zoomPercent}</span>

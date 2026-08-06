@@ -61,6 +61,7 @@ export default class DocGenCanvas extends LightningElement {
     @track previewUrl = null;
     @track isPreviewing = false;
     @track queryDraft = null;
+    @track saveError = null;
 
     _loaded = false;
     // Live drag state. Kept off @track on purpose: it changes on every mousemove and
@@ -456,6 +457,10 @@ export default class DocGenCanvas extends LightningElement {
         }
     }
 
+    handleDismissError() {
+        this.saveError = null;
+    }
+
     handleClosePreview() {
         if (this.previewUrl) {
             URL.revokeObjectURL(this.previewUrl);
@@ -692,6 +697,31 @@ export default class DocGenCanvas extends LightningElement {
      * to the left of the tag.
      */
     renderedCallback() {
+        // Re-sync the property inputs whenever the SELECTION changes.
+        //
+        // These are plain <input> elements holding values that come from getters. When
+        // you click from one box to another, LWC reuses the same elements, and an
+        // input the user has typed into keeps the DOM value it had — so the panel
+        // showed the previous box's numbers. Keying off the selected id makes the
+        // hand-off explicit instead of relying on the diff to notice.
+        if (this._syncedFor !== this.selectedId) {
+            this._syncedFor = this.selectedId;
+            const st = this.selectedStyle;
+            const map = {
+                size: st.size,
+                borderWidth: st.borderWidth,
+                borderColor: st.borderColor,
+                color: st.color,
+                fill: st.fill || '#ffffff',
+                padding: st.padding
+            };
+            for (const el of this.template.querySelectorAll('[data-key]')) {
+                const want = map[el.dataset.key];
+                if (want !== undefined && el.value !== String(want)) {
+                    el.value = want;
+                }
+            }
+        }
         const byId = new Map();
         for (const board of this.doc.artboards) {
             for (const b of board.boxes) byId.set(b.id, b);
@@ -968,11 +998,28 @@ export default class DocGenCanvas extends LightningElement {
         this.zoom = Math.min(2, Math.max(0.4, Math.round(next * 10) / 10));
     }
 
+    get boxCount() {
+        return (this.doc.artboards || []).reduce((n, b) => n + (b.boxes || []).length, 0);
+    }
+
     async handleSave() {
         if (!this.templateId) {
-            this.statusText = 'No template id — cannot save';
+            this.saveError = 'No template id — cannot save.';
             return;
         }
+        // Catch the empty case HERE, with an explanation. The server refuses to
+        // overwrite a real body with an empty one — a guard that exists because a read
+        // failure once destroyed someone's document — but it can only tell you after
+        // the round trip, and only in a status line. If the canvas has no boxes, the
+        // likely cause is that it opened without loading them, and saving would be the
+        // destructive move.
+        if (this.boxCount === 0) {
+            this.saveError =
+                'Nothing to save — this canvas has no boxes. If the template had content, it did not load: ' +
+                'close and reopen it rather than saving over it.';
+            return;
+        }
+        this.saveError = null;
         this.isSaving = true;
         try {
             const html = serialize(this.doc, this.geo);
@@ -984,7 +1031,10 @@ export default class DocGenCanvas extends LightningElement {
             this.statusText = 'Saved';
             this.dispatchEvent(new CustomEvent('saved', { detail: { html } }));
         } catch (e) {
-            this.statusText = 'Save failed: ' + (e.body ? e.body.message : e.message);
+            // Surfaced as a banner, not a status line: a save that silently did not
+            // happen is the single worst thing this editor can do.
+            this.saveError = 'Save failed — ' + (e.body ? e.body.message : e.message);
+            this.statusText = '';
         } finally {
             this.isSaving = false;
         }

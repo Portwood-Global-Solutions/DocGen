@@ -18,7 +18,7 @@
 .dg-rail {
     width: 72px;
     background: var(--slds-g-color-surface-container-2, #1f2937);
-    padding: 8px 0;
+    padding: var(--slds-g-spacing-2, 8px) 0;
 }
 
 .dg-tool {
@@ -27,7 +27,7 @@
     border: none;
     background: transparent;
     color: #e5e7eb;
-    padding: 10px 4px;
+    padding: 10px var(--slds-g-spacing-1, 4px);
     cursor: pointer;
     text-align: center;
     font-size: 0.7rem;
@@ -72,7 +72,7 @@
     display: block;
     width: 100%;
     padding: 7px 10px;
-    margin-bottom: 8px;
+    margin-bottom: var(--slds-g-spacing-2, 8px);
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
     background: var(--slds-g-color-surface-1, #fff);
     border-radius: var(--slds-g-radius-border-2, 6px);
@@ -101,15 +101,15 @@
 .dg-qb-btn {
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
     background: var(--slds-g-color-surface-1, #fff);
-    width: 24px;
-    height: 24px;
+    width: var(--slds-g-sizing-7, 24px);
+    height: var(--slds-g-sizing-7, 24px);
     cursor: pointer;
     border-radius: var(--slds-g-radius-border-1, 4px);
 }
 
 .dg-qb-zoom {
     display: inline-block;
-    width: 48px;
+    width: var(--slds-g-sizing-10, 48px);
     text-align: center;
     font-size: 0.78rem;
 }
@@ -131,7 +131,7 @@
 
 .dg-qb-status {
     margin-left: 10px;
-    font-size: 0.75rem;
+    font-size: var(--slds-g-font-scale-neg-1, 0.75rem);
     color: var(--slds-g-color-on-surface-3, #6b7280);
 }
 
@@ -142,14 +142,14 @@
 }
 
 .dg-board-wrap {
-    margin: 0 auto 24px auto;
+    margin: 0 auto var(--slds-g-spacing-5, 24px) auto;
     display: table;
 }
 
 .dg-board-label {
     font-size: 0.72rem;
     color: var(--slds-g-color-on-surface-3, #6b7280);
-    margin-bottom: 4px;
+    margin-bottom: var(--slds-g-spacing-1, 4px);
 }
 
 /* The artboard. A white sheet at true page proportions — 1in = 96 CSS px x zoom,
@@ -192,8 +192,8 @@
 .dg-h {
     position: absolute;
     background: #7c3aed;
-    width: 8px;
-    height: 8px;
+    width: var(--slds-g-sizing-3, 8px);
+    height: var(--slds-g-sizing-3, 8px);
 }
 
 .dg-h_e {
@@ -216,13 +216,13 @@
 
 /* Property rows in the panel */
 .dg-prop-row {
-    margin: 8px 0;
+    margin: var(--slds-g-spacing-2, 8px) 0;
 }
 
 .dg-prop-label {
     font-size: 0.72rem;
     color: var(--slds-g-color-on-surface-3, #6b7280);
-    margin-right: 4px;
+    margin-right: var(--slds-g-spacing-1, 4px);
 }
 
 .dg-prop-num {
@@ -239,7 +239,7 @@
 
 .dg-prop-color {
     width: 30px;
-    height: 24px;
+    height: var(--slds-g-sizing-7, 24px);
     padding: 0;
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
     vertical-align: middle;
@@ -249,7 +249,7 @@
 
 .dg-sbtn {
     min-width: 26px;
-    height: 24px;
+    height: var(--slds-g-sizing-7, 24px);
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
     background: var(--slds-g-color-surface-1, #fff);
     cursor: pointer;
@@ -272,19 +272,19 @@
 .dg-panel-sub {
     font-size: 0.82rem;
     font-weight: var(--slds-g-font-weight-7, 700);
-    margin: 12px 0 4px 0;
+    margin: var(--slds-g-spacing-3, 12px) 0 var(--slds-g-spacing-1, 4px) 0;
 }
 
 .dg-prop-text {
     padding: 3px 5px;
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #d1d5db);
     border-radius: var(--slds-g-radius-border-1, 4px);
-    font-size: 0.75rem;
+    font-size: var(--slds-g-font-scale-neg-1, 0.75rem);
     width: 140px;
 }
 
 .dg-col-row {
-    margin-bottom: 4px;
+    margin-bottom: var(--slds-g-spacing-1, 4px);
     white-space: nowrap;
 }
 
@@ -349,12 +349,12 @@ textarea.dg-cbox-text {
 }
 
 .dg-row-head {
-    margin-bottom: 4px;
+    margin-bottom: var(--slds-g-spacing-1, 4px);
 }
 
 .dg-row-del {
     float: right;
-    min-width: 48px;
+    min-width: var(--slds-g-sizing-10, 48px);
     color: var(--slds-g-color-error-base-30, #991b1b);
 }
 
@@ -405,7 +405,7 @@ textarea.dg-cbox-text {
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
     border-radius: var(--slds-g-radius-border-1, 4px);
     padding: 6px;
-    margin-bottom: 8px;
+    margin-bottom: var(--slds-g-spacing-2, 8px);
     word-break: break-word;
     max-height: 120px;
     overflow: auto;
@@ -414,12 +414,12 @@ textarea.dg-cbox-text {
 /* A mismatch between the canvas and the query renders an empty table with no error —
    so say it here rather than letting it be discovered at generate time. */
 .dg-panel-warn {
-    font-size: 0.75rem;
+    font-size: var(--slds-g-font-scale-neg-1, 0.75rem);
     line-height: 1.35;
     background: #fff4e5;
     border: var(--slds-g-sizing-border-1, 1px) solid #f0b429;
     border-radius: var(--slds-g-radius-border-1, 4px);
-    padding: 6px 8px;
+    padding: 6px var(--slds-g-spacing-2, 8px);
     margin: 0 0 10px 0;
 }
 
@@ -448,7 +448,7 @@ textarea.dg-cbox-text {
 }
 
 .dg-preview-bar {
-    font-size: 0.75rem;
+    font-size: var(--slds-g-font-scale-neg-1, 0.75rem);
     margin-bottom: 6px;
     color: var(--slds-g-color-on-surface-3, #6b7280);
 }
@@ -461,4 +461,18 @@ textarea.dg-cbox-text {
     width: 100%;
     height: 60vh;
     border: var(--slds-g-sizing-border-1, 1px) solid var(--slds-g-color-border-1, #e5e7eb);
+}
+
+/* A save that did not happen has to be impossible to miss. */
+.dg-save-error {
+    background: #fdeaea;
+    border-bottom: var(--slds-g-sizing-border-1, 1px) solid #c23934;
+    color: #8c1d18;
+    padding: var(--slds-g-spacing-2, 8px) var(--slds-g-spacing-3, 12px);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.dg-save-error button {
+    float: right;
 }
