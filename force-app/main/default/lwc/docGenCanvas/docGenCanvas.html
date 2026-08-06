@@ -14,6 +14,10 @@
                 <lightning-icon icon-name="utility:table" size="small"></lightning-icon>
                 <span class="dg-rail-label">Table</span>
             </button>
+            <button class={dataToolClass} onclick={handleToggleData} title="Choose the fields this document uses">
+                <lightning-icon icon-name="utility:database" size="small"></lightning-icon>
+                <span class="dg-rail-label">Data</span>
+            </button>
             <button class="dg-tool" onclick={handleAddArtboard} title="Add a page">
                 <lightning-icon icon-name="utility:page" size="small"></lightning-icon>
                 <span class="dg-rail-label">Page</span>
@@ -450,15 +454,10 @@
                     them.
                 </p>
 
-                <h4 class="dg-panel-sub">Query</h4>
+                <h4 class="dg-panel-sub">Data</h4>
                 <p class="dg-panel-note">
-                    Built from the tags actually on the canvas, so a field can't render blank because nobody remembered
-                    to query it.
+                    Fields come from the <b>Data</b> tool in the left rail. Pick them there rather than writing a query.
                 </p>
-                <textarea class="dg-query-edit" value={queryText} oninput={handleQueryEdit}></textarea>
-                <button class="dg-panel-btn" onclick={handleUseGenerated}>Use what the canvas needs</button>
-                <div class="dg-query-preview">{generatedQuery}</div>
-                <button class="dg-panel-btn" onclick={handleSaveQuery}>Save query</button>
             </template>
         </div>
 
@@ -505,6 +504,21 @@
                 </button>
                 <span class="dg-qb-status">{statusText}</span>
             </div>
+
+            <template lwc:if={showData}>
+                <div class="dg-data-wrap">
+                    <div class="dg-data-bar">
+                        Pick the fields and related lists this document uses
+                        <button class="dg-sbtn" onclick={handleCloseData}>Done</button>
+                        <button class="dg-sbtn" onclick={handleUseGenerated}>Use what the canvas needs</button>
+                    </div>
+                    <c-doc-gen-tree-builder
+                        selected-object={baseObject}
+                        query-config={queryText}
+                        onconfigchange={handleBuilderConfigChange}
+                    ></c-doc-gen-tree-builder>
+                </div>
+            </template>
 
             <div class="dg-scroll">
                 <template for:each={renderedBoards} for:item="board">

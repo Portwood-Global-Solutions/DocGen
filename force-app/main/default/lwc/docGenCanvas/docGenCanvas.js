@@ -523,22 +523,10 @@ export default class DocGenCanvas extends LightningElement {
         return !!this.previewUrl;
     }
 
-    /** Editing the query in place — the canvas is where you find out it is wrong. */
+    /** The config the Data picker binds to, and what Save writes back. */
     get queryText() {
         return this.queryDraft == null ? this.queryConfig || '' : this.queryDraft;
     }
-
-    handleQueryEdit(event) {
-        this.queryDraft = event.target.value;
-    }
-
-    // The embedded query builder was removed. Two reasons, and the second is the one
-    // that matters: the component docGenAdmin actually uses is docGenTreeBuilder (the
-    // V3 node tree), not the older standalone docGenQueryBuilder I had wired here, so
-    // it was the wrong tool — and report-to-query is a genuinely hard mapping that is
-    // not worth carrying inside the canvas. The query stays editable here, and
-    // "Use what the canvas needs" derives it from the boxes, which is the part that
-    // actually removes work.
 
     handleUseGenerated() {
         this.queryDraft = this.generatedQuery;
