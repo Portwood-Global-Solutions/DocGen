@@ -599,9 +599,26 @@ textarea.dg-cbox-text {
     }
 }
 
+/* The back button carries an icon AND a word, so it cannot use the bare .dg-qb-btn —
+   that is a fixed 24x24 square built for the single-glyph zoom controls, and the label
+   was being crushed inside it. Auto width, and inline-flex so the chevron and the word
+   sit on one baseline instead of the icon pushing the text out of the box. */
+.dg-qb-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    width: auto;
+    height: auto;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    margin-right: 8px;
+}
+
 .dg-qb-icon {
     width: 14px;
     height: 14px;
-    vertical-align: -2px;
-    margin-right: 4px;
+    /* Never let the flex row shrink the glyph into an ellipse. */
+    flex: none;
 }
