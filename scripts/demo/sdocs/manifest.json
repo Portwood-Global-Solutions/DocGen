@@ -1,0 +1,206 @@
+{
+    "_comment": "SDocs-replacement demo. Three templates: the simple approval letter and the dynamic related-list document (the two shapes the customer described), plus a Canvas-designer invoice that shows the pixel-placement editor rather than the HTML path. Installed with: node scripts/demo/install/install.mjs <org> --manifest=scripts/demo/sdocs/manifest.json  (namespace is probed from the org; no DOCGEN_DEMO_NS needed)",
+    "namespace": "portwoodglobal__",
+    "templates": [
+        {
+            "key": "proj-approval-request",
+            "name": "Project Approval Request",
+            "file": "html/prof-services/project-approval-request.html",
+            "type": "HTML",
+            "output": "PDF",
+            "baseObject": "Demo_Project__c",
+            "category": "Project Delivery",
+            "titleFormat": "Approval Request - {Project_Code__c} - {Client__r.Name}",
+            "description": "A one-page client approval letter with the signature field built into the body. Nothing to attach \u2014 the document generated from this template is already signable.",
+            "pageSize": "Letter",
+            "orientation": "Portrait",
+            "testRecordSoql": "SELECT Id FROM Demo_Project__c WHERE Project_Code__c = 'P-2041' LIMIT 1",
+            "queryConfig": "Name, Project_Code__c, Phase__c, Status__c, Start_Date__c, Target_Completion__c, Contract_Value__c, Percent_Complete__c, Scope_Summary__c, Approval_Statement__c, Project_Manager__c, PM_Email__c, Client_Signer_Title__c, Client__r.Name, Client__r.BillingStreet, Client__r.BillingCity, Client__r.BillingState, Client__r.BillingPostalCode, Client_Contact__r.FirstName, Client_Contact__r.LastName, Client_Contact__r.Title, Client_Contact__r.Email"
+        },
+        {
+            "key": "proj-acceptance-certificate",
+            "name": "Project Acceptance Certificate",
+            "file": "html/prof-services/project-acceptance-certificate.html",
+            "type": "HTML",
+            "output": "PDF",
+            "baseObject": "Demo_Project__c",
+            "category": "Project Delivery",
+            "titleFormat": "Acceptance Certificate - {Project_Code__c} - {Client__r.Name}",
+            "description": "A multi-page acceptance certificate that pulls three related lists off the project \u2014 milestones, deliverables and approved change orders \u2014 with running totals and two signature roles.",
+            "pageSize": "Letter",
+            "orientation": "Portrait",
+            "footerHtml": "<div style=\"text-align:center;font-size:8pt;color:#8b96a1;\">Project Acceptance Certificate &nbsp;\u00b7&nbsp; Page {PageNumber} of {TotalPages}</div>",
+            "testRecordSoql": "SELECT Id FROM Demo_Project__c WHERE Project_Code__c = 'P-2041' LIMIT 1",
+            "queryConfig": {
+                "v": 3,
+                "root": "Demo_Project__c",
+                "nodes": [
+                    {
+                        "id": "n0",
+                        "object": "Demo_Project__c",
+                        "fields": [
+                            "Name",
+                            "Project_Code__c",
+                            "Phase__c",
+                            "Status__c",
+                            "Start_Date__c",
+                            "Target_Completion__c",
+                            "Actual_Completion__c",
+                            "Contract_Value__c",
+                            "Revised_Contract_Value__c",
+                            "Percent_Complete__c",
+                            "Scope_Summary__c",
+                            "Approval_Statement__c",
+                            "Project_Manager__c",
+                            "PM_Email__c",
+                            "Client_Signer_Title__c"
+                        ],
+                        "parentFields": [
+                            "Client__r.Name",
+                            "Client__r.BillingStreet",
+                            "Client__r.BillingCity",
+                            "Client__r.BillingState",
+                            "Client__r.BillingPostalCode",
+                            "Client_Contact__r.FirstName",
+                            "Client_Contact__r.LastName",
+                            "Client_Contact__r.Title",
+                            "Client_Contact__r.Email"
+                        ],
+                        "parentNode": null,
+                        "lookupField": null,
+                        "relationshipName": null
+                    },
+                    {
+                        "id": "n1",
+                        "object": "Demo_Project_Milestone__c",
+                        "fields": [
+                            "Name",
+                            "Sequence__c",
+                            "Due_Date__c",
+                            "Completed_Date__c",
+                            "Status__c",
+                            "Value__c",
+                            "Acceptance_Criteria__c"
+                        ],
+                        "parentNode": "n0",
+                        "lookupField": "Project__c",
+                        "relationshipName": "Milestones__r",
+                        "orderBy": "Sequence__c ASC"
+                    },
+                    {
+                        "id": "n2",
+                        "object": "Demo_Project_Deliverable__c",
+                        "fields": [
+                            "Name",
+                            "Sequence__c",
+                            "Category__c",
+                            "Description__c",
+                            "Delivered_Date__c",
+                            "Status__c",
+                            "Accepted_By__c"
+                        ],
+                        "parentNode": "n0",
+                        "lookupField": "Project__c",
+                        "relationshipName": "Deliverables__r",
+                        "orderBy": "Sequence__c ASC"
+                    },
+                    {
+                        "id": "n3",
+                        "object": "Demo_Change_Order__c",
+                        "fields": [
+                            "Name",
+                            "Request_Date__c",
+                            "Requested_By__c",
+                            "Description__c",
+                            "Amount__c",
+                            "Schedule_Impact_Days__c",
+                            "Status__c"
+                        ],
+                        "parentNode": "n0",
+                        "lookupField": "Project__c",
+                        "relationshipName": "Change_Orders__r",
+                        "where": "Status__c = 'Approved'",
+                        "orderBy": "Request_Date__c ASC"
+                    }
+                ]
+            }
+        },
+        {
+            "key": "proj-invoice",
+            "name": "Project Invoice",
+            "file": "html/prof-services/project-invoice.canvas.html",
+            "type": "Canvas",
+            "output": "PDF",
+            "baseObject": "Demo_Project__c",
+            "category": "Project Delivery",
+            "titleFormat": "Invoice INV-{Project_Code__c}-08 - {Client__r.Name}",
+            "description": "A two-page professional-services invoice built entirely in the Canvas designer: letterhead, bill-to and invoice-detail blocks, a milestone line-item table that paginates, an amount-due panel, and an appendix of approved change orders with a signature block and QR. Opens as editable boxes in the designer.",
+            "testRecordSoql": "SELECT Id FROM Demo_Project__c WHERE Project_Code__c = 'P-2041' LIMIT 1",
+            "queryConfig": {
+                "v": 3,
+                "root": "Demo_Project__c",
+                "nodes": [
+                    {
+                        "id": "n0",
+                        "object": "Demo_Project__c",
+                        "fields": [
+                            "Name",
+                            "Project_Code__c",
+                            "Phase__c",
+                            "Status__c",
+                            "Percent_Complete__c",
+                            "Start_Date__c",
+                            "Target_Completion__c",
+                            "Contract_Value__c",
+                            "Revised_Contract_Value__c",
+                            "Project_Manager__c",
+                            "PM_Email__c"
+                        ],
+                        "parentFields": [
+                            "Client__r.Name",
+                            "Client__r.BillingStreet",
+                            "Client__r.BillingCity",
+                            "Client__r.BillingState",
+                            "Client__r.BillingPostalCode",
+                            "Client_Contact__r.FirstName",
+                            "Client_Contact__r.LastName",
+                            "Client_Contact__r.Title",
+                            "Client_Contact__r.Email"
+                        ],
+                        "parentNode": null,
+                        "lookupField": null,
+                        "relationshipName": null
+                    },
+                    {
+                        "id": "n1",
+                        "object": "Demo_Project_Milestone__c",
+                        "fields": ["Name", "Sequence__c", "Due_Date__c", "Completed_Date__c", "Status__c", "Value__c"],
+                        "parentNode": "n0",
+                        "lookupField": "Project__c",
+                        "relationshipName": "Milestones__r",
+                        "where": "Status__c IN ('Accepted','Complete')",
+                        "orderBy": "Sequence__c ASC"
+                    },
+                    {
+                        "id": "n2",
+                        "object": "Demo_Change_Order__c",
+                        "fields": [
+                            "Name",
+                            "Request_Date__c",
+                            "Requested_By__c",
+                            "Description__c",
+                            "Amount__c",
+                            "Schedule_Impact_Days__c",
+                            "Status__c"
+                        ],
+                        "parentNode": "n0",
+                        "lookupField": "Project__c",
+                        "relationshipName": "Change_Orders__r",
+                        "where": "Status__c = 'Approved'",
+                        "orderBy": "Request_Date__c ASC"
+                    }
+                ]
+            }
+        }
+    ]
+}

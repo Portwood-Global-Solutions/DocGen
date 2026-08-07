@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  DEMO — Auto-send the approval document when a project is marked
+  "Pending Client Approval".
+
+  THIS IS THE POINT OF THE WHOLE DEMO.
+
+  The customer's current process is: a user generates a document, then has to
+  remember to attach a separate e-signature template before sending. They forget,
+  so a Flow was built to auto-attach it — and that Flow is itself now a
+  maintenance burden.
+
+  With Portwood there is nothing to attach. The signature fields live in the
+  template body, so a generated document is already signable. That reduces the
+  whole automation to a single action: pick a template, pick a record, name the
+  signers. Everything below the entry criteria is ONE action call and one field
+  update for audit.
+
+  Notice what is NOT here: no document-generation step, no file lookup, no
+  ContentDocumentLink juggling, no "attach the e-sig template" branch. The
+  Create Signature Request action generates the document from the template AND
+  requests the signature in one call.
+
+  The template is referenced by API NAME, not record Id — an Id differs in every
+  org and would break this Flow on the first sandbox-to-production deploy.
+
+  Hand-authored metadata (not exported from Flow Builder), so it stays readable
+  and reviewable in the repo. It opens and edits normally in Flow Builder.
+-->
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>62.0</apiVersion>
+    <description
+    >When a project is set to Pending Client Approval, generate the approval document and send it to the client contact for signature. Demo of the SDocs replacement story.</description>
+    <environments>Default</environments>
+    <interviewLabel>Project — Auto-Send for Approval {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Project — Auto-Send for Approval</label>
+    <processMetadataValues>
+        <name>BuilderType</name>
+        <value>
+            <stringValue>LightningFlowBuilder</stringValue>
+        </value>
+    </processMetadataValues>
+    <processType>AutoLaunchedFlow</processType>
+    <status>Active</status>
+
+    <start>
+        <locationX>50</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Get_Client_Contact</targetReference>
+        </connector>
+        <doesRequireRecordChangedToMeetCriteria>true</doesRequireRecordChangedToMeetCriteria>
+        <filterLogic>and</filterLogic>
+        <filters>
+            <field>Status__c</field>
+            <operator>EqualTo</operator>
+            <value>
+                <stringValue>Pending Client Approval</stringValue>
+            </value>
+        </filters>
+        <filters>
+            <field>Client_Contact__c</field>
+            <operator>IsNull</operator>
+            <value>
+                <booleanValue>false</booleanValue>
+            </value>
+        </filters>
+        <object>Demo_Project__c</object>
+        <!--
+          Update, not CreateAndUpdate: doesRequireRecordChangedToMeetCriteria has
+          no meaning on insert, and "changed INTO Pending Client Approval" is the
+          semantics that makes this fire exactly once per approval cycle rather
+          than on every subsequent edit.
+        -->
+        <recordTriggerType>Update</recordTriggerType>
+        <triggerType>RecordAfterSave</triggerType>
+    </start>
+
+    <!--
+      Read the client contact explicitly rather than traversing
+      $Record.Client_Contact__r.Name in the assignment.
+
+      That traversal compiles, activates, and then hands the action a BLANK name
+      at run time — the request fails with "Each signer must have a Name", which
+      points at the signer data rather than at the lookup that produced it. A Get
+      Records is one more element and removes the ambiguity entirely.
+    -->
+    <recordLookups>
+        <name>Get_Client_Contact</name>
+        <label>Get the client contact</label>
+        <locationX>176</locationX>
+        <locationY>167</locationY>
+        <assignNullValuesIfNoRecordsFound>false</assignNullValuesIfNoRecordsFound>
+        <connector>
+            <targetReference>Build_Client_Signer</targetReference>
+        </connector>
+        <filterLogic>and</filterLogic>
+        <filters>
+            <field>Id</field>
+            <operator>EqualTo</operator>
+            <value>
+                <elementReference>$Record.Client_Contact__c</elementReference>
+            </value>
+        </filters>
+        <getFirstRecordOnly>true</getFirstRecordOnly>
+        <object>Contact</object>
+        <queriedFields>Id</queriedFields>
+        <queriedFields>Name</queriedFields>
+        <queriedFields>Email</queriedFields>
+        <storeOutputAutomatically>true</storeOutputAutomatically>
+    </recordLookups>
+
+    <!-- One Apex-Defined variable, filled from the contact we just read. -->
+    <assignments>
+        <name>Build_Client_Signer</name>
+        <label>Build the client signer</label>
+        <locationX>176</locationX>
+        <locationY>287</locationY>
+        <assignmentItems>
+            <assignToReference>clientSigner.name</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <elementReference>Get_Client_Contact.Name</elementReference>
+            </value>
+        </assignmentItems>
+        <assignmentItems>
+            <assignToReference>clientSigner.email</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <elementReference>Get_Client_Contact.Email</elementReference>
+            </value>
+        </assignmentItems>
+        <!-- Must match the {@Signature_Client:1:Full} tag in the template body. -->
+        <assignmentItems>
+            <assignToReference>clientSigner.role</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <stringValue>Client</stringValue>
+            </value>
+        </assignmentItems>
+        <assignmentItems>
+            <assignToReference>clientSigner.contactId</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <elementReference>$Record.Client_Contact__c</elementReference>
+            </value>
+        </assignmentItems>
+        <assignmentItems>
+            <assignToReference>signerList</assignToReference>
+            <operator>Add</operator>
+            <value>
+                <elementReference>clientSigner</elementReference>
+            </value>
+        </assignmentItems>
+        <connector>
+            <targetReference>Create_Signature_Request</targetReference>
+        </connector>
+    </assignments>
+
+    <!-- The entire integration. One action. -->
+    <actionCalls>
+        <name>Create_Signature_Request</name>
+        <label>Portwood — Create Signature Request</label>
+        <locationX>176</locationX>
+        <locationY>407</locationY>
+        <actionName>portwoodglobal__DocGenSignatureFlowAction</actionName>
+        <actionType>apex</actionType>
+        <connector>
+            <targetReference>Was_It_Created</targetReference>
+        </connector>
+        <flowTransactionModel>CurrentTransaction</flowTransactionModel>
+        <inputParameters>
+            <name>templateApiName</name>
+            <value>
+                <stringValue>Project_Approval_Request</stringValue>
+            </value>
+        </inputParameters>
+        <inputParameters>
+            <name>relatedRecordId</name>
+            <value>
+                <elementReference>$Record.Id</elementReference>
+            </value>
+        </inputParameters>
+        <inputParameters>
+            <name>signerRecords</name>
+            <value>
+                <elementReference>signerList</elementReference>
+            </value>
+        </inputParameters>
+        <inputParameters>
+            <name>signingOrder</name>
+            <value>
+                <stringValue>Single</stringValue>
+            </value>
+        </inputParameters>
+        <inputParameters>
+            <name>sendEmails</name>
+            <value>
+                <booleanValue>true</booleanValue>
+            </value>
+        </inputParameters>
+        <!--
+          DEMO SETTING, and worth saying out loud when you present.
+
+          TRUE sends the signer a one-time email PIN before they can open the
+          document. That is the right production setting — but the PIN is
+          delivered by email, and a scratch org with no Org-Wide Email Address
+          cannot send it, so the demo would dead-end on a "Verify your email to
+          continue" screen with no code ever arriving.
+
+          Set to FALSE here so the signing experience opens immediately. In a
+          customer org with an OWA configured, remove this input (or set TRUE)
+          and the PIN step comes back.
+        -->
+        <inputParameters>
+            <name>requireEmailVerification</name>
+            <value>
+                <booleanValue>false</booleanValue>
+            </value>
+        </inputParameters>
+        <inputParameters>
+            <name>emailSubject</name>
+            <value>
+                <stringValue>Approval requested — your project document is ready to sign</stringValue>
+            </value>
+        </inputParameters>
+        <storeOutputAutomatically>true</storeOutputAutomatically>
+    </actionCalls>
+
+    <!--
+      Never assume the action succeeded. It returns success/errorMessage rather
+      than throwing, so without this check a failed request looks identical to a
+      sent one from the record page.
+    -->
+    <decisions>
+        <name>Was_It_Created</name>
+        <label>Was it created?</label>
+        <locationX>176</locationX>
+        <locationY>527</locationY>
+        <defaultConnectorLabel>No — leave the record alone</defaultConnectorLabel>
+        <rules>
+            <name>Created</name>
+            <conditionLogic>and</conditionLogic>
+            <conditions>
+                <leftValueReference>Create_Signature_Request.success</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <booleanValue>true</booleanValue>
+                </rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Stamp_The_Project</targetReference>
+            </connector>
+            <label>Yes</label>
+        </rules>
+    </decisions>
+
+    <!-- Audit trail so the demo can prove the automation fired. -->
+    <recordUpdates>
+        <name>Stamp_The_Project</name>
+        <label>Stamp the project</label>
+        <locationX>50</locationX>
+        <locationY>647</locationY>
+        <inputAssignments>
+            <field>Approval_Sent_On__c</field>
+            <value>
+                <elementReference>$Flow.CurrentDate</elementReference>
+            </value>
+        </inputAssignments>
+        <inputAssignments>
+            <field>Last_Signature_Request_Id__c</field>
+            <value>
+                <elementReference>Create_Signature_Request.signatureRequestId</elementReference>
+            </value>
+        </inputAssignments>
+        <inputReference>$Record</inputReference>
+    </recordUpdates>
+
+    <variables>
+        <name>clientSigner</name>
+        <apexClass>portwoodglobal__DocGenSigner</apexClass>
+        <dataType>Apex</dataType>
+        <isCollection>false</isCollection>
+        <isInput>false</isInput>
+        <isOutput>false</isOutput>
+    </variables>
+    <variables>
+        <name>signerList</name>
+        <apexClass>portwoodglobal__DocGenSigner</apexClass>
+        <dataType>Apex</dataType>
+        <isCollection>true</isCollection>
+        <isInput>false</isInput>
+        <isOutput>false</isOutput>
+    </variables>
+</Flow>

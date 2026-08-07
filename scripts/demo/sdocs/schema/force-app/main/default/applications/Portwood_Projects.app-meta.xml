@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <label>Portwood Projects</label>
+    <description>Project delivery demo — generate and e-sign project documents from a Project record.</description>
+    <navType>Standard</navType>
+    <uiType>Lightning</uiType>
+    <formFactors>Large</formFactors>
+    <tabs>Demo_Project__c</tabs>
+    <tabs>Demo_Project_Milestone__c</tabs>
+    <tabs>Demo_Project_Deliverable__c</tabs>
+    <tabs>Demo_Change_Order__c</tabs>
+    <tabs>standard-Account</tabs>
+    <tabs>standard-Contact</tabs>
+</CustomApplication>

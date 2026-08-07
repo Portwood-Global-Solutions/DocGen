@@ -1,0 +1,261 @@
+<!--
+  Portwood DEMO — Project Approval Request (HTML -> PDF)
+  Base object: Demo_Project__c    Child loops: none
+  Features: flat merge fields, parent-lookup fields (Client__r.*), date and
+            currency formatting, ONE embedded client signature block.
+
+  THE POINT OF THIS TEMPLATE
+  --------------------------
+  This is the "simple approval email" case. The thing worth noticing is what is
+  NOT here: there is no second document, no separate e-signature template, and
+  nothing for a user to remember to attach. {@Signature_Client:1:Full} IS the
+  signature field, and it lives in the body. A document generated from this
+  template is already signable.
+
+  Flying Saucer is CSS 2.1 — tables for layout, solid colors, fixed units.
+  No flex, grid, gap, calc(), var() or gradients.
+-->
+<html>
+    <head>
+        <style>
+            @page {
+                size: letter;
+                margin: 0.75in 0.8in;
+            }
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+                color: #1e252c;
+                font-size: 11pt;
+                line-height: 1.5;
+            }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+            }
+
+            .letterhead {
+                border-bottom: 3px solid #1b4d7a;
+                padding-bottom: 10px;
+            }
+            .letterhead h1 {
+                margin: 0;
+                font-size: 17pt;
+                color: #1b4d7a;
+                letter-spacing: 0.3px;
+            }
+            .letterhead .sub {
+                font-size: 8.5pt;
+                color: #6b7885;
+                margin-top: 2px;
+            }
+            .letterhead .doctype {
+                font-size: 12pt;
+                font-weight: bold;
+                color: #1b4d7a;
+            }
+            .letterhead .code {
+                font-size: 8.5pt;
+                color: #6b7885;
+            }
+
+            .addr {
+                margin-top: 26px;
+                font-size: 10.5pt;
+            }
+            .addr .name {
+                font-weight: bold;
+            }
+            .addr .muted {
+                color: #55606b;
+            }
+
+            .subject {
+                margin-top: 22px;
+                font-size: 11.5pt;
+                font-weight: bold;
+                color: #1b4d7a;
+            }
+
+            p.body {
+                margin: 0 0 12px 0;
+            }
+
+            .facts {
+                border: 1px solid #d3dce4;
+                margin: 16px 0 18px 0;
+            }
+            .facts th {
+                background: #eef3f8;
+                text-align: left;
+                padding: 7px 12px;
+                font-size: 8.5pt;
+                color: #1b4d7a;
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+                border-bottom: 1px solid #d3dce4;
+            }
+            .facts td {
+                padding: 8px 12px;
+                font-size: 10.5pt;
+                border-bottom: 1px solid #eaeff4;
+            }
+            .facts td.k {
+                color: #6b7885;
+                width: 42%;
+            }
+            .facts td.v {
+                font-weight: bold;
+                text-align: right;
+            }
+
+            .scope {
+                background: #f7f9fb;
+                border-left: 3px solid #1b4d7a;
+                padding: 12px 14px;
+                font-size: 10pt;
+                color: #38424d;
+                margin-bottom: 18px;
+            }
+
+            .statement {
+                font-size: 10.5pt;
+                margin-bottom: 6px;
+            }
+
+            .sigwrap {
+                margin-top: 26px;
+                border-top: 1px solid #d3dce4;
+                padding-top: 16px;
+            }
+            .siglabel {
+                font-size: 8.5pt;
+                color: #6b7885;
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+            }
+            .sigcell {
+                height: 58px;
+                vertical-align: bottom;
+                font-size: 13pt;
+            }
+            .sigrule {
+                border-top: 1px solid #1e252c;
+                padding-top: 4px;
+                font-size: 9.5pt;
+            }
+            .sigmeta {
+                font-size: 9pt;
+                color: #6b7885;
+            }
+
+            .foot {
+                margin-top: 26px;
+                border-top: 1px solid #e3e9ee;
+                padding-top: 8px;
+                text-align: center;
+                font-size: 8pt;
+                color: #8b96a1;
+            }
+        </style>
+    </head>
+    <body>
+        <table class="letterhead">
+            <tr>
+                <td>
+                    <h1>Portwood Global Solutions</h1>
+                    <div class="sub">
+                        Project Delivery &nbsp;·&nbsp; portwoodglobal.example.com &nbsp;·&nbsp; (800) 555-0100
+                    </div>
+                </td>
+                <td style="text-align: right; vertical-align: top">
+                    <div class="doctype">Approval Request</div>
+                    <div class="code">{Project_Code__c} &nbsp;·&nbsp; {Today:MMMM d, yyyy}</div>
+                </td>
+            </tr>
+        </table>
+
+        <div class="addr">
+            <div class="name">{Client_Contact__r.FirstName} {Client_Contact__r.LastName}</div>
+            <div class="muted">{Client_Contact__r.Title}</div>
+            <div class="muted">{Client__r.Name}</div>
+            <div class="muted">{Client__r.BillingStreet}</div>
+            <div class="muted">{Client__r.BillingCity}, {Client__r.BillingState} {Client__r.BillingPostalCode}</div>
+        </div>
+
+        <div class="subject">Re: {Name} &mdash; {Phase__c}</div>
+
+        <p class="body" style="margin-top: 14px">Dear {Client_Contact__r.FirstName},</p>
+
+        <p class="body">
+            We are requesting your approval to proceed on <strong>{Name}</strong> ({Project_Code__c}). The project is
+            currently <strong>{Percent_Complete__c}%</strong> complete and tracking to a target completion date of
+            <strong>{Target_Completion__c:MMMM d, yyyy}</strong>.
+        </p>
+
+        <table class="facts">
+            <tr>
+                <th colspan="2">Project Summary</th>
+            </tr>
+            <tr>
+                <td class="k">Project</td>
+                <td class="v">{Name}</td>
+            </tr>
+            <tr>
+                <td class="k">Project Code</td>
+                <td class="v">{Project_Code__c}</td>
+            </tr>
+            <tr>
+                <td class="k">Current Phase</td>
+                <td class="v">{Phase__c}</td>
+            </tr>
+            <tr>
+                <td class="k">Start Date</td>
+                <td class="v">{Start_Date__c:MMMM d, yyyy}</td>
+            </tr>
+            <tr>
+                <td class="k">Target Completion</td>
+                <td class="v">{Target_Completion__c:MMMM d, yyyy}</td>
+            </tr>
+            <tr>
+                <td class="k">Contract Value</td>
+                <td class="v">{Contract_Value__c:currency}</td>
+            </tr>
+            <tr>
+                <td class="k">Project Manager</td>
+                <td class="v">{Project_Manager__c}</td>
+            </tr>
+        </table>
+
+        <div class="scope">{Scope_Summary__c}</div>
+
+        <p class="statement">{Approval_Statement__c}</p>
+
+        <p class="body">
+            If you have any questions before signing, please contact {Project_Manager__c} at {PM_Email__c}. We
+            appreciate your continued partnership.
+        </p>
+
+        <div class="sigwrap">
+            <div class="siglabel">Client Authorization</div>
+            <table style="margin-top: 10px">
+                <tr>
+                    <td style="width: 56%; vertical-align: bottom">
+                        <div class="sigcell">{@Signature_Client:1:Full}</div>
+                        <div class="sigrule">{Client_Contact__r.FirstName} {Client_Contact__r.LastName}</div>
+                        <div class="sigmeta">{Client_Signer_Title__c}, {Client__r.Name}</div>
+                    </td>
+                    <td style="width: 8%"></td>
+                    <td style="width: 36%; vertical-align: bottom">
+                        <div class="sigcell" style="font-size: 11pt">{@Signature_Client:1:Date}</div>
+                        <div class="sigrule">Date Signed</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="foot">
+            Generated by Portwood from Salesforce record {Project_Code__c} &nbsp;·&nbsp; Portwood Global Solutions
+            &nbsp;·&nbsp; This document is executed electronically under ESIGN/UETA.
+        </div>
+    </body>
+</html>

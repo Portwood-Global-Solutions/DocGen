@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Status__c</fullName>
+    <label>Status</label>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+                <value>
+                    <fullName>Planning</fullName>
+                    <default>true</default>
+                    <label>Planning</label>
+                </value>
+                <value>
+                    <fullName>In Flight</fullName>
+                    <default>false</default>
+                    <label>In Flight</label>
+                </value>
+                <value>
+                    <fullName>Pending Client Approval</fullName>
+                    <default>false</default>
+                    <label>Pending Client Approval</label>
+                </value>
+                <value>
+                    <fullName>Approved</fullName>
+                    <default>false</default>
+                    <label>Approved</label>
+                </value>
+                <value>
+                    <fullName>Complete</fullName>
+                    <default>false</default>
+                    <label>Complete</label>
+                </value>
+                <value>
+                    <fullName>On Hold</fullName>
+                    <default>false</default>
+                    <label>On Hold</label>
+                </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

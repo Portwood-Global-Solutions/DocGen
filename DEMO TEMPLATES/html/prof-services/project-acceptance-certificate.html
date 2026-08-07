@@ -1,0 +1,386 @@
+<!--
+  Portwood DEMO — Project Acceptance Certificate (HTML -> PDF)
+  Base object: Demo_Project__c
+  Child loops: Milestones__r, Deliverables__r, Change_Orders__r  (THREE related lists)
+  Features: three child-table loops, SUM/COUNT aggregates over two of them, a
+            filtered child node (approved change orders only), parent-lookup
+            fields, and TWO signature roles in a defined signing order.
+
+  THE POINT OF THIS TEMPLATE
+  --------------------------
+  This is the "more dynamic, pulls data from related lists" case. Every row in
+  every table below comes from a Query Config node — no Apex, no Visualforce, no
+  per-document code. Add a milestone to the project and it appears here on the
+  next generation.
+
+  The change-order table shows APPROVED change orders only. That rule is a
+  `where` clause on the node, not logic in the body, which is why the table and
+  the Revised Contract Value in the summary box can never disagree.
+
+  Flying Saucer is CSS 2.1 — tables for layout, solid colors, fixed units.
+  No flex, grid, gap, calc(), var() or gradients.
+-->
+<html>
+    <head>
+        <style>
+            @page {
+                size: letter;
+                margin: 0.6in 0.65in;
+            }
+            body {
+                font-family: Helvetica, Arial, sans-serif;
+                color: #1e252c;
+                font-size: 10pt;
+            }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+            }
+
+            .bar {
+                background: #12395c;
+                color: #ffffff;
+                padding: 15px 18px;
+            }
+            .bar h1 {
+                margin: 0;
+                font-size: 19pt;
+                letter-spacing: 0.4px;
+            }
+            .bar .tag {
+                font-size: 8.5pt;
+                color: #a9c4dc;
+                margin-top: 3px;
+            }
+            .bar .doctitle {
+                font-size: 13pt;
+                font-weight: bold;
+            }
+            .bar .code {
+                font-size: 8.5pt;
+                color: #a9c4dc;
+            }
+
+            .parties td {
+                padding: 2px 0;
+                font-size: 10pt;
+                vertical-align: top;
+            }
+            .parties .k {
+                color: #6b7885;
+                width: 96px;
+            }
+
+            h2.sec {
+                color: #12395c;
+                font-size: 11.5pt;
+                border-bottom: 2px solid #12395c;
+                padding-bottom: 3px;
+                margin: 20px 0 9px 0;
+            }
+
+            .scope {
+                background: #f6f9fc;
+                border-left: 3px solid #12395c;
+                padding: 11px 13px;
+                font-size: 9.5pt;
+                color: #38424d;
+                line-height: 1.45;
+            }
+
+            .grid th {
+                background: #12395c;
+                color: #ffffff;
+                text-align: left;
+                padding: 6px 8px;
+                font-size: 8.5pt;
+                letter-spacing: 0.3px;
+            }
+            .grid td {
+                padding: 6px 8px;
+                border-bottom: 1px solid #e6ecf2;
+                font-size: 9pt;
+                vertical-align: top;
+            }
+            .grid tr:nth-child(even) td {
+                background: #f7fafc;
+            }
+            .grid .r {
+                text-align: right;
+            }
+            .grid .c {
+                text-align: center;
+            }
+            .grid .crit {
+                color: #6b7885;
+                font-size: 8pt;
+                display: block;
+                margin-top: 2px;
+            }
+            .grid .tot td {
+                background: #eef3f8;
+                font-weight: bold;
+                border-top: 2px solid #12395c;
+                border-bottom: none;
+                font-size: 9.5pt;
+            }
+
+            .pill {
+                font-size: 7.5pt;
+                padding: 1px 6px;
+                border: 1px solid #b9c6d3;
+                color: #4a5764;
+            }
+
+            .summary {
+                border: 1px solid #d3dce4;
+                margin-top: 6px;
+            }
+            .summary td {
+                padding: 8px 12px;
+                font-size: 10.5pt;
+                border-bottom: 1px solid #eaeff4;
+            }
+            .summary td.k {
+                color: #6b7885;
+            }
+            .summary td.v {
+                text-align: right;
+                font-weight: bold;
+            }
+            .summary tr.grand td {
+                background: #eef3f8;
+                font-size: 13pt;
+                color: #12395c;
+                border-bottom: none;
+                border-top: 2px solid #12395c;
+            }
+
+            .attest {
+                font-size: 9.5pt;
+                line-height: 1.5;
+                color: #38424d;
+            }
+
+            .siglabel {
+                font-size: 8.5pt;
+                color: #6b7885;
+                text-transform: uppercase;
+                letter-spacing: 0.6px;
+            }
+            .sigcell {
+                height: 56px;
+                vertical-align: bottom;
+                font-size: 13pt;
+            }
+            .sigrule {
+                border-top: 1px solid #1e252c;
+                padding-top: 4px;
+                font-size: 9.5pt;
+            }
+            .sigmeta {
+                font-size: 8.5pt;
+                color: #6b7885;
+            }
+
+            .foot {
+                margin-top: 20px;
+                border-top: 1px solid #e3e9ee;
+                padding-top: 7px;
+                text-align: center;
+                font-size: 8pt;
+                color: #8b96a1;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="bar">
+            <table>
+                <tr>
+                    <td>
+                        <h1>Portwood Global Solutions</h1>
+                        <div class="tag">Project Delivery &nbsp;·&nbsp; portwoodglobal.example.com</div>
+                    </td>
+                    <td style="text-align: right; vertical-align: top">
+                        <div class="doctitle">Project Acceptance Certificate</div>
+                        <div class="code">{Project_Code__c} &nbsp;·&nbsp; Issued {Today:MMMM d, yyyy}</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <table style="margin-top: 14px">
+            <tr>
+                <td style="width: 50%; vertical-align: top">
+                    <table class="parties">
+                        <tr>
+                            <td class="k">Client</td>
+                            <td><strong>{Client__r.Name}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="k">Contact</td>
+                            <td>{Client_Contact__r.FirstName} {Client_Contact__r.LastName}</td>
+                        </tr>
+                        <tr>
+                            <td class="k">Title</td>
+                            <td>{Client_Signer_Title__c}</td>
+                        </tr>
+                        <tr>
+                            <td class="k">Address</td>
+                            <td>
+                                {Client__r.BillingStreet}<br />{Client__r.BillingCity}, {Client__r.BillingState}
+                                {Client__r.BillingPostalCode}
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+                <td style="width: 50%; vertical-align: top">
+                    <table class="parties">
+                        <tr>
+                            <td class="k">Project</td>
+                            <td><strong>{Name}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="k">Phase</td>
+                            <td>{Phase__c}</td>
+                        </tr>
+                        <tr>
+                            <td class="k">Period</td>
+                            <td>{Start_Date__c:MMM d, yyyy} &ndash; {Target_Completion__c:MMM d, yyyy}</td>
+                        </tr>
+                        <tr>
+                            <td class="k">Manager</td>
+                            <td>{Project_Manager__c}</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <h2 class="sec">Scope of Engagement</h2>
+        <div class="scope">{Scope_Summary__c}</div>
+
+        <!-- RELATED LIST 1 — Milestones -->
+        <h2 class="sec">Milestone Schedule</h2>
+        <table class="grid">
+            <tr>
+                <th style="width: 5%">#</th>
+                <th style="width: 47%">Milestone</th>
+                <th style="width: 13%">Due</th>
+                <th style="width: 13%">Completed</th>
+                <th style="width: 11%" class="c">Status</th>
+                <th style="width: 11%" class="r">Value</th>
+            </tr>
+            <tr>
+                <td>{#Milestones__r}{Sequence__c}</td>
+                <td><strong>{Name}</strong><span class="crit">{Acceptance_Criteria__c}</span></td>
+                <td>{Due_Date__c:MMM d, yyyy}</td>
+                <td>{Completed_Date__c:MMM d, yyyy}</td>
+                <td class="c"><span class="pill">{Status__c}</span></td>
+                <td class="r">{Value__c:currency}{/Milestones__r}</td>
+            </tr>
+            <tr class="tot">
+                <td colspan="5">Total milestone value &nbsp;·&nbsp; {COUNT:Milestones__r} milestones</td>
+                <td class="r">{SUM:Milestones__r.Value__c:currency}</td>
+            </tr>
+        </table>
+
+        <!-- RELATED LIST 2 — Deliverables -->
+        <h2 class="sec">Deliverables</h2>
+        <table class="grid">
+            <tr>
+                <th style="width: 5%">#</th>
+                <th style="width: 40%">Deliverable</th>
+                <th style="width: 15%">Category</th>
+                <th style="width: 14%">Delivered</th>
+                <th style="width: 12%" class="c">Status</th>
+                <th style="width: 14%">Accepted By</th>
+            </tr>
+            <tr>
+                <td>{#Deliverables__r}{Sequence__c}</td>
+                <td><strong>{Name}</strong><span class="crit">{Description__c}</span></td>
+                <td>{Category__c}</td>
+                <td>{Delivered_Date__c:MMM d, yyyy}</td>
+                <td class="c"><span class="pill">{Status__c}</span></td>
+                <td>{Accepted_By__c}{/Deliverables__r}</td>
+            </tr>
+            <tr class="tot">
+                <td colspan="6">{COUNT:Deliverables__r} deliverables recorded against this engagement</td>
+            </tr>
+        </table>
+
+        <!-- RELATED LIST 3 — Change Orders (filtered to Approved by the query node) -->
+        <h2 class="sec">Approved Change Orders</h2>
+        <table class="grid">
+            <tr>
+                <th style="width: 12%">CO No.</th>
+                <th style="width: 42%">Description</th>
+                <th style="width: 16%">Requested By</th>
+                <th style="width: 11%">Date</th>
+                <th style="width: 9%" class="c">Days</th>
+                <th style="width: 10%" class="r">Amount</th>
+            </tr>
+            <tr>
+                <td>{#Change_Orders__r}{Name}</td>
+                <td>{Description__c}</td>
+                <td>{Requested_By__c}</td>
+                <td>{Request_Date__c:MMM d, yyyy}</td>
+                <td class="c">{Schedule_Impact_Days__c}</td>
+                <td class="r">{Amount__c:currency}{/Change_Orders__r}</td>
+            </tr>
+            <tr class="tot">
+                <td colspan="5">Total approved change orders &nbsp;·&nbsp; {COUNT:Change_Orders__r} authorized</td>
+                <td class="r">{SUM:Change_Orders__r.Amount__c:currency}</td>
+            </tr>
+        </table>
+
+        <h2 class="sec">Contract Summary</h2>
+        <table class="summary">
+            <tr>
+                <td class="k">Original contract value</td>
+                <td class="v">{Contract_Value__c:currency}</td>
+            </tr>
+            <tr>
+                <td class="k">Approved change orders ({COUNT:Change_Orders__r})</td>
+                <td class="v">{SUM:Change_Orders__r.Amount__c:currency}</td>
+            </tr>
+            <tr class="grand">
+                <td class="k" style="color: #12395c">Revised contract value</td>
+                <td class="v">{Revised_Contract_Value__c:currency}</td>
+            </tr>
+        </table>
+
+        <h2 class="sec">Acceptance</h2>
+        <p class="attest">{Approval_Statement__c}</p>
+        <p class="attest">
+            By signing below, the parties confirm that the milestones and deliverables listed in this certificate have
+            been reviewed against their stated acceptance criteria. Signature by the Client authorizes final milestone
+            invoicing and starts the warranty period defined in the governing agreement.
+        </p>
+
+        <table style="margin-top: 16px">
+            <tr>
+                <td style="width: 46%; vertical-align: bottom">
+                    <div class="siglabel">Client</div>
+                    <div class="sigcell">{@Signature_Client:1:Full}</div>
+                    <div class="sigrule">{Client_Contact__r.FirstName} {Client_Contact__r.LastName}</div>
+                    <div class="sigmeta">{Client_Signer_Title__c}, {Client__r.Name}</div>
+                    <div class="sigmeta" style="margin-top: 8px">Date: {@Signature_Client:1:Date}</div>
+                </td>
+                <td style="width: 8%"></td>
+                <td style="width: 46%; vertical-align: bottom">
+                    <div class="siglabel">Provider</div>
+                    <div class="sigcell">{@Signature_Provider:2:Full}</div>
+                    <div class="sigrule">{Project_Manager__c}</div>
+                    <div class="sigmeta">Project Manager, Portwood Global Solutions</div>
+                    <div class="sigmeta" style="margin-top: 8px">Date: {@Signature_Provider:2:Date}</div>
+                </td>
+            </tr>
+        </table>
+
+        <div class="foot">
+            Generated by Portwood from Salesforce record {Project_Code__c} &nbsp;·&nbsp; Portwood Global Solutions
+            &nbsp;·&nbsp; Executed electronically under ESIGN/UETA.
+        </div>
+    </body>
+</html>
