@@ -3550,6 +3550,20 @@ The release-update UI is easy to misread. If the button is grayed out and says *
 
 ![Salesforce release update screen showing a grayed-out Enable Test Run button](https://raw.githubusercontent.com/Portwood-Global-Solutions/Portwood/refs/heads/main/docs/images/blob-to-pdf-enable-test-run.jpg)
 
+**If you see only selectors, with the braces and declarations missing** — a run-on line
+like `@page body h1 h2 h3 table td, th p ul, ol .docgen-body-content .tab` — that is a
+different fault, **fixed in v3.55**. A `<style>` block sitting inside `<body>` used to be
+merged along with the rest of the document, and because every `{...}` pair is merge-tag
+syntax, each CSS declaration resolved to nothing and left its selector behind as text.
+
+You are most likely to hit it if the template came from Google Docs or Notion, which put
+`<style>` in the body as a matter of course, or if it was made by re-uploading a
+previously generated document — that is why the leaked selectors in reported cases
+include Portwood's own `docgen-*` class names.
+
+Upgrading fixes it with no change to your template: the stylesheet is lifted into
+`<head>` before the merge runs, so the CSS still applies and only the stray text goes.
+
 Suggested case language:
 
 > Please enable the "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations" release update in this org. We generate PDFs using a managed package that calls `Blob.toPdf()`. The Release Updates page still shows "Enable Test Run", and generated PDFs are rendering raw CSS at the top of the document.
@@ -3675,7 +3689,11 @@ Not yet supported in Excel output: **images** (`{%…}` tags are removed cleanly
 
 ### 15.2 Raw CSS appears at the top of generated PDFs
 
-This usually means the Visualforce PDF Rendering Service release update for `Blob.toPdf()` is not active in the org. Go to Setup → Release Updates → "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations".
+There are two different causes, and the text itself tells you which one you have.
+
+**If you see whole CSS rules, braces and all** — `body { font-family: Helvetica; }` — the
+Visualforce PDF Rendering Service release update for `Blob.toPdf()` is not active in the
+org. Go to Setup → Release Updates → "Use the Visualforce PDF Rendering Service for Blob.toPdf() Invocations".
 
 ![Generated PDF showing raw CSS printed at the top of the document](https://raw.githubusercontent.com/Portwood-Global-Solutions/Portwood/refs/heads/main/docs/images/blob-to-pdf-css-leak.jpg)
 

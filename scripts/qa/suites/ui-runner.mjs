@@ -858,31 +858,54 @@ export async function run({ org, headed }) {
                 area
             });
 
-            // RECORD FILTER: a genuinely different question, and the answer is not
-            // simply "the picker is wrong".
+            // RECORD FILTER. The earlier version of this check asserted that the
+            // template must be absent from the bulk picker, and said in its message
+            // that "the batch never calls the per-record check". That was true once and
+            // is not now: DocGenBatch.andTemplateFilter ANDs Record_Filter__c onto the
+            // job's WHERE clause, parenthesising both sides so `A OR B` + `C` cannot
+            // degrade into `A OR (B AND C)`.
             //
-            // Record_Filter__c is a per-RECORD rule, and the bulk screen has no
-            // single record — getBulkTemplates passes null to filterTemplatesForSender
-            // precisely because of that, so only sharing and audience apply. Offering
-            // the template is therefore defensible.
+            // Measured against the real method rather than reasoned about:
+            //   null                              -> (Industry = 'Agriculture')
+            //   Industry = 'Technology'           -> (Industry = 'Technology') AND (Industry = 'Agriculture')
+            //   Industry = 'Tech' OR ... 'Banking'-> (… OR …) AND (Industry = 'Agriculture')
             //
-            // What is NOT defensible is that nothing downstream applies it either:
-            // Record_Filter__c is evaluated only in DocGenController's per-record
-            // path (see canUseTemplateForRecord), and the batch does not call it. So
-            // a bulk run over a WHERE clause can generate documents for records the
-            // template's own filter excludes — silently, and at scale.
-            //
-            // Reported rather than fixed: making the batch honour the filter changes
-            // what existing bulk jobs produce, which is a product decision.
+            // So offering the template for bulk is defensible and the output is safe.
+            // What is left is a usability point, not a correctness one: a filter that
+            // excludes every selected record yields an empty job. That is worth saying
+            // out loud, but it is not the silent-wrong-documents failure this check
+            // used to claim, so it is no longer MAJOR.
+            const filterProbe = debugMap(
+                await runAnonymous(
+                    org,
+                    `DocGen_Template__c ft = [SELECT Id FROM DocGen_Template__c WHERE Name = '${PREFIX} Filtered Out' LIMIT 1];
+DocGen_Job__c fj = new DocGen_Job__c(Template__c = ft.Id, Status__c = 'Queued');
+insert fj;
+DocGenBatch fb = new DocGenBatch(fj.Id);
+System.debug('FILTERQ=' + fb.andTemplateFilter('Industry = \\'Technology\\''));
+delete fj;`
+                )
+            );
+            const q = filterProbe.FILTERQ || '';
             add({
                 ...check(
-                    'a record-filtered template is not silently applied to excluded records in bulk',
-                    bulkPicker.indexOf(`${PREFIX} Filtered Out`) === -1,
-                    `"${PREFIX} Filtered Out" carries a Record_Filter__c and is offered for bulk, where the filter ` +
-                        `is never evaluated — DocGenBulkController passes null to filterTemplatesForSender and the ` +
-                        `batch never calls the per-record check. Documents can be generated for records the ` +
-                        `template excludes. Either the batch must apply the filter, or the picker must exclude it.`,
+                    'the bulk query ANDs the template Record Filter onto the job condition',
+                    /\(Industry = 'Technology'\)\s+AND\s+\(Industry = 'Agriculture'\)/.test(q),
+                    q
+                        ? `composed WHERE was: ${q}`
+                        : 'could not read the composed WHERE clause from DocGenBatch.andTemplateFilter',
                     SEVERITY.MAJOR
+                ),
+                area
+            });
+            add({
+                ...check(
+                    'a template whose filter excludes everything still appears in the bulk picker',
+                    bulkPicker.indexOf(`${PREFIX} Filtered Out`) !== -1,
+                    `Offering it is correct — the batch applies the filter — but a run over records it ` +
+                        `excludes produces an empty job with no explanation. A count preview or a note on the ` +
+                        `picker would close that.`,
+                    SEVERITY.MINOR
                 ),
                 area
             });

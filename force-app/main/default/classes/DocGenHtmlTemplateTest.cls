@@ -1232,4 +1232,65 @@ private class DocGenHtmlTemplateTest {
         System.assert(textWins > 1.3, 'Eight lines must estimate taller than an inch: ' + textWins);
         System.assertEquals(0, DocGenService.estimateChromeHeightIn(null), 'No chrome, no height');
     }
+
+    /**
+     * A <style> block inside <body> must never reach processXml.
+     *
+     * The merge engine treats every {...} pair as a merge tag, so a CSS declaration
+     * block resolves to nothing and leaves its selector behind as literal text. A
+     * customer reported a line of bare selectors printed above their first heading —
+     * "@page body h1 h2 ... .docgen-body-content .tab" — and this reproduces the exact
+     * shape of it. Google Docs and Notion put <style> in the body routinely, and so
+     * does re-uploading a previously generated document, which is why the selectors in
+     * that report were Portwood's own docgen-* classes.
+     *
+     * Both halves matter: the stray text has to go, AND the CSS has to survive. Fixing
+     * the first by dropping the author's stylesheet would be no fix at all.
+     */
+    @isTest
+    static void styleBlockInsideBodyIsNotMerged() {
+        String html =
+            '<!DOCTYPE html><html><head><title>T</title></head><body>' +
+            '<style>' +
+            '@page { size: Letter portrait; margin: 0.75in; }' +
+            'body { font-family: Helvetica; font-size: 11pt; }' +
+            '.tab { margin-left: 24pt; }' +
+            '</style>' +
+            '<h1>Hello {Name}</h1><p class="tab">Body.</p>' +
+            '</body></html>';
+
+        String body = DocGenService.extractHtmlBodyContent(html);
+        System.assert(body.toLowerCase().contains('<style'), 'precondition: the style block is inside the body');
+
+        String styles = DocGenService.extractHtmlStyleBlocks(html);
+        System.assert(styles.contains('font-family'), 'the stylesheet is captured before stripping');
+        System.assert(styles.contains('24pt'), 'including the author\'s own rules');
+
+        String stripped = DocGenService.stripStyleAndScriptBlocks(body);
+        System.assert(!stripped.toLowerCase().contains('<style'), 'the style element is removed from the body');
+
+        String merged = DocGenService.processXmlForTest(stripped, new Map<String, Object>{ 'Name' => 'Acme' });
+        System.assert(merged.contains('Hello Acme'), 'real content still merges: ' + merged);
+        // The selectors are what leaked, so they are what the assertion has to name.
+        System.assert(!merged.contains('@page'), 'no bare @page selector in the output: ' + merged);
+        System.assert(!merged.contains('.tab {'), 'no CSS at all in the output: ' + merged);
+        System.assert(!merged.contains('docgen-body-content'), 'no engine selectors either: ' + merged);
+    }
+
+    /** Script source is not document content either. */
+    @isTest
+    static void scriptBlocksAreStrippedToo() {
+        String stripped = DocGenService.stripStyleAndScriptBlocks('<p>Keep</p><script>var x = {a: 1};</script>');
+        System.assert(stripped.contains('Keep'), 'surrounding content survives');
+        System.assert(!stripped.toLowerCase().contains('<script'), 'the script element is gone');
+        System.assert(!stripped.contains('var x'), 'and so is its source');
+    }
+
+    /** Stripping must not disturb a document that has no style or script at all. */
+    @isTest
+    static void stripIsANoOpWithoutStyleOrScript() {
+        String src = '<h1>Title</h1><p>Text with {Name} in it.</p>';
+        System.assertEquals(src, DocGenService.stripStyleAndScriptBlocks(src), 'unchanged');
+        System.assertEquals(null, DocGenService.stripStyleAndScriptBlocks(null), 'null in, null out');
+    }
 }

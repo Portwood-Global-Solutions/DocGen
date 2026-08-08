@@ -9905,13 +9905,40 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         String sourceStyles = extractHtmlStyleBlocks(rawHtml);
         String bodyContent = extractHtmlBodyContent(rawHtml);
 
+        // A <style> block INSIDE <body> has to come out before the merge runs.
+        //
+        // extractHtmlStyleBlocks already copied it into sourceStyles, and
+        // wrapHtmlForPdf re-emits that in <head>, so the CSS is not lost. What was
+        // lost is everything between the braces: processXml treats every {...} pair as
+        // a merge tag, so `body { font-family: Helvetica; }` resolves to nothing and
+        // the selector is left behind as literal text. The document then prints a line
+        // of bare selectors above its first heading —
+        // "@page body h1 h2 ... .docgen-body-content .tab" — which is what a customer
+        // reported and what this reproduces exactly.
+        //
+        // Google Docs and Notion exports put <style> in the body routinely, and so
+        // does re-uploading a previously generated document, which is why the leaked
+        // selectors in that report were Portwood's own docgen-* classes.
+        //
+        // Header and footer get the same treatment, and their styles are hoisted into
+        // sourceStyles rather than dropped — stripping without hoisting would fix the
+        // stray text by silently discarding the author's CSS.
+        bodyContent = stripStyleAndScriptBlocks(bodyContent);
+
+        String headerSrc = String.isBlank(headerHtml) ? null : decodeBraceEntities(headerHtml);
+        String footerSrc = String.isBlank(footerHtml) ? null : decodeBraceEntities(footerHtml);
+        if (String.isNotBlank(headerSrc)) {
+            sourceStyles += '\n' + extractHtmlStyleBlocks(headerSrc);
+            headerSrc = stripStyleAndScriptBlocks(headerSrc);
+        }
+        if (String.isNotBlank(footerSrc)) {
+            sourceStyles += '\n' + extractHtmlStyleBlocks(footerSrc);
+            footerSrc = stripStyleAndScriptBlocks(footerSrc);
+        }
+
         String mergedBody = processXml(bodyContent, recordDataMap);
-        String mergedHeader = String.isBlank(headerHtml)
-            ? null
-            : processXml(decodeBraceEntities(headerHtml), recordDataMap);
-        String mergedFooter = String.isBlank(footerHtml)
-            ? null
-            : processXml(decodeBraceEntities(footerHtml), recordDataMap);
+        String mergedHeader = headerSrc == null ? null : processXml(headerSrc, recordDataMap);
+        String mergedFooter = footerSrc == null ? null : processXml(footerSrc, recordDataMap);
 
         // Convert {*Field:qr} / {*Field:code128} barcode markers (emitted by
         // processXml as ##BARCODE:...##) into inline CSS so they render in
@@ -9937,6 +9964,24 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
         mr.docTitle = title;
         return mr;
+    }
+
+
+    /**
+     * Removes <style> and <script> elements, contents and all.
+     *
+     * Their text is never document content. A <style> that reaches processXml has every
+     * declaration eaten — `{...}` is merge-tag syntax — and prints its selectors on the
+     * page; a <script> would print its source. Callers must hoist any CSS they still
+     * want into the stylesheet BEFORE calling this, or it is gone.
+     */
+    @TestVisible
+    private static String stripStyleAndScriptBlocks(String html) {
+        if (String.isBlank(html)) {
+            return html;
+        }
+        return html.replaceAll('(?is)<style[^>]*>.*?</style\\s*>', '')
+            .replaceAll('(?is)<script[^>]*>.*?</script\\s*>', '');
     }
 
     /**
