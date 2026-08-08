@@ -1,0 +1,310 @@
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Kugamon Quote — Portwood</title>
+        <style type="text/css">
+@page {
+                size: Letter portrait;
+                margin: 0.5in 0.55in 0.75in 0.55in;
+            }
+</style>
+    </head>
+
+    <body style="font-family: Helvetica, Arial, sans-serif; font-size: 9.5pt; line-height: 1.45; color: #0f172a; margin: 0; padding: 0">
+        <!-- ============ MASTHEAD ============ -->
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0; background-color: #2563eb">
+            <tr>
+                <td style="padding: 16px 18px 16px 18px; vertical-align: middle">
+                    <table style="border-collapse: collapse; border-spacing: 0">
+                        <tr>
+                            <td style="width: 34px; height: 34px; background-color: #ffffff; color: #1d4ed8; font-size: 15pt; font-weight: bold; text-align: center; vertical-align: middle">PG</td>
+                            <td>
+                                <div style="color: #ffffff; font-size: 13pt; font-weight: bold; letter-spacing: 0.4px; padding-left: 10px; vertical-align: middle">PORTWOOD GLOBAL</div>
+                                <div style="color: #bfdbfe; font-size: 7.5pt; letter-spacing: 1.6px; padding-left: 10px; vertical-align: middle">PORTWOOD &#183; QUOTE TO CASH</div>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+                <td style="padding: 16px 18px 16px 18px; vertical-align: middle; text-align: right">
+                    <div style="color: #ffffff; font-size: 20pt; font-weight: bold; letter-spacing: 3px">QUOTE</div>
+                    <div style="color: #dbeafe; font-size: 10pt; letter-spacing: 0.5px">{Name}</div>
+                </td>
+            </tr>
+        </table>
+        <div style="height: 4px; background-color: #1d4ed8; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ TITLE + STATUS ============ -->
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0; background-color: #f8fafc; border-bottom: 1px solid #e2e8f0">
+            <tr>
+                <td style="padding: 9px 14px; font-size: 11pt; font-weight: bold; color: #0f172a">{kugo2p__QuoteName__c}</td>
+                <td style="padding: 9px 14px; text-align: right"><span style="background-color: #1d4ed8; color: #ffffff; font-size: 7.5pt; font-weight: bold; letter-spacing: 1.2px; padding: 4px 10px">{kugo2p__RecordStatus__c}</span></td>
+            </tr>
+        </table>
+
+        <div style="height: 14px; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ BILL TO / SHIP TO / CONTACT ============ -->
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0">
+            <tr>
+                <td style="width: 34%; vertical-align: top">
+                    <div style="background-color: #2563eb; color: #ffffff; font-size: 7.5pt; font-weight: bold; letter-spacing: 1.3px; padding: 5px 10px">BILL TO</div>
+                    <div style="border: 1px solid #e2e8f0; border-top: 0; padding: 9px 10px; vertical-align: top; font-size: 9pt">
+                        <span style="font-weight: bold">{kugo2p__BillToName__c}</span><br />
+                        {kugo2p__BillToStreetLong__c}<br />
+                        {kugo2p__BillToCity__c}, {kugo2p__BillToStateProvince__c}
+                        {kugo2p__BillToZipPostalCode__c}<br />
+                        {kugo2p__BillToCountry__c}
+                    </div>
+                </td>
+                <td style="width: 14px; font-size: 1pt"></td>
+                <td style="width: 34%; vertical-align: top">
+                    <div style="background-color: #2563eb; color: #ffffff; font-size: 7.5pt; font-weight: bold; letter-spacing: 1.3px; padding: 5px 10px">SHIP TO</div>
+                    <div style="border: 1px solid #e2e8f0; border-top: 0; padding: 9px 10px; vertical-align: top; font-size: 9pt">
+                        <span style="font-weight: bold">{kugo2p__ShipToName__c}</span><br />
+                        {kugo2p__ShipToStreetLong__c}<br />
+                        {kugo2p__ShipToCity__c}, {kugo2p__ShipToStateProvince__c}
+                        {kugo2p__ShipToZipPostalCode__c}<br />
+                        {kugo2p__ShipToCountry__c}
+                    </div>
+                </td>
+                <td style="width: 14px; font-size: 1pt"></td>
+                <td style="width: 32%; vertical-align: top">
+                    <div style="background-color: #2563eb; color: #ffffff; font-size: 7.5pt; font-weight: bold; letter-spacing: 1.3px; padding: 5px 10px">YOUR CONTACT</div>
+                    <div style="border: 1px solid #e2e8f0; border-top: 0; padding: 9px 10px; vertical-align: top; font-size: 9pt">
+                        <span style="font-weight: bold">{kugo2p__ContactBuying__r.Name}</span><br />
+                        <span style="color: #64748b; font-size: 8pt">{kugo2p__ContactBuying__r.Email}</span><br />
+                        <span style="color: #64748b; font-size: 8pt">{kugo2p__ContactBuying__r.Phone}</span><br />
+                        <span style="color: #64748b; font-size: 7.4pt; letter-spacing: 0.8px">ACCOUNT</span><br />
+                        {kugo2p__Account__r.Name}
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <div style="height: 14px; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ QUOTE FACTS ============ -->
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0; border: 1px solid #e2e8f0">
+            <tr>
+                <td style="background-color: #f8fafc; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 7.4pt; font-weight: bold; letter-spacing: 0.9px; padding: 5px 9px; width: 16%">DATE SENT</td>
+                <td style="border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 5px 9px; font-size: 9pt; width: 17.33%">{kugo2p__DateSent__c}</td>
+                <td style="background-color: #f8fafc; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 7.4pt; font-weight: bold; letter-spacing: 0.9px; padding: 5px 9px; width: 16%">VALID THROUGH</td>
+                <td style="border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 5px 9px; font-size: 9pt; width: 17.33%"><span style="font-weight: bold">{kugo2p__DateOfferValidThrough__c}</span></td>
+                <td style="background-color: #f8fafc; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 7.4pt; font-weight: bold; letter-spacing: 0.9px; padding: 5px 9px; width: 16%">PAYMENT TERMS</td>
+                <td style="border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 5px 9px; font-size: 9pt; width: 17.33%">{kugo2p__PaymentTerms__c}</td>
+            </tr>
+            <tr>
+                <td style="background-color: #f8fafc; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 7.4pt; font-weight: bold; letter-spacing: 0.9px; padding: 5px 9px; width: 16%">PO NUMBER</td>
+                <td style="border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 5px 9px; font-size: 9pt; width: 17.33%">{kugo2p__CustomerPONumber__c}</td>
+                <td style="background-color: #f8fafc; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 7.4pt; font-weight: bold; letter-spacing: 0.9px; padding: 5px 9px; width: 16%">PAYMENT METHOD</td>
+                <td style="border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 5px 9px; font-size: 9pt; width: 17.33%">{kugo2p__PaymentMethod__c}</td>
+                <td style="background-color: #f8fafc; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 7.4pt; font-weight: bold; letter-spacing: 0.9px; padding: 5px 9px; width: 16%">DELIVERY TERMS</td>
+                <td style="border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; padding: 5px 9px; font-size: 9pt; width: 17.33%">{kugo2p__DeliveryTerms__c}</td>
+            </tr>
+        </table>
+
+        <div style="height: 14px; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ PRODUCTS ============ -->
+        <div style="border-left: 4px solid #2563eb; padding: 2px 0 2px 9px; font-size: 10pt; font-weight: bold; color: #1d4ed8; letter-spacing: 0.3px">Products</div>
+        <div style="height: 8px; font-size: 1pt; line-height: 1pt"></div>
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0; border: 1px solid #cbd5e1">
+            <thead>
+                <tr>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: left; border-right: 1px solid #2563eb; width: 44%">ITEM</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: right; border-right: 1px solid #2563eb; width: 8%">QTY</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: right; border-right: 1px solid #2563eb; width: 14%">LIST</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: right; border-right: 1px solid #2563eb; width: 16%">UNIT PRICE</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: right; border-right: 1px solid #2563eb; width: 18%">AMOUNT</th>
+                </tr>
+            </thead>
+            <tbody>
+                                <tr>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; font-size: 9pt">{#ProductLines}
+                        <span style="color: #2563eb; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.6px">{kugo2p__Product__r.kugo2p__ProductCode__c}</span><br />
+                        <span style="font-weight: bold; color: #0f172a">{kugo2p__ProductName__c}</span><br />
+                        <span style="color: #64748b; font-size: 8pt">{kugo2p__LineDescription__c}</span><br />
+                        <span style="color: #64748b; font-size: 7.4pt; letter-spacing: 0.8px">{kugo2p__LineGroup__r.Name}</span>
+                    </td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt">{kugo2p__Quantity__c}</td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt"><span style="text-decoration: line-through; color: #94a3b8; font-size: 8pt">{kugo2p__ListPrice__c}</span></td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt">{kugo2p__DiscountSalesPrice__c}</td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt"><span style="font-weight: bold">{kugo2p__NetAmount__c}</span>{/ProductLines}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="height: 14px; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ SERVICES ============ -->
+        <div style="border-left: 4px solid #2563eb; padding: 2px 0 2px 9px; font-size: 10pt; font-weight: bold; color: #1d4ed8; letter-spacing: 0.3px">Services &amp; Subscriptions</div>
+        <div style="height: 8px; font-size: 1pt; line-height: 1pt"></div>
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0; border: 1px solid #cbd5e1">
+            <thead>
+                <tr>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: left; border-right: 1px solid #2563eb; width: 38%">SERVICE</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: left; border-right: 1px solid #2563eb; width: 20%">TERM</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: right; border-right: 1px solid #2563eb; width: 7%">QTY</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: right; border-right: 1px solid #2563eb; width: 17%">UNIT PRICE</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: right; border-right: 1px solid #2563eb; width: 18%">AMOUNT</th>
+                </tr>
+            </thead>
+            <tbody>
+                                <tr>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; font-size: 9pt">{#ServiceLines}
+                        <span style="color: #2563eb; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.6px">{kugo2p__Service__r.kugo2p__ProductCode__c}</span><br />
+                        <span style="font-weight: bold; color: #0f172a">{kugo2p__ServiceName__c}</span><br />
+                        <span style="color: #64748b; font-size: 8pt">{kugo2p__LineDescription__c}</span><br />
+                        <span style="color: #64748b; font-size: 7.4pt; letter-spacing: 0.8px">{kugo2p__LineGroup__r.Name}</span>
+                    </td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; font-size: 9pt">
+                        <span style="font-weight: bold">{kugo2p__LineTerm__c}</span><br />
+                        <span style="color: #64748b; font-size: 8pt"
+                            >{kugo2p__DateServiceStart__c} &#8594; {kugo2p__DateServiceEnd__c}</span
+                        >
+                    </td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt">{kugo2p__Quantity__c}</td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt">{kugo2p__DiscountSalesPrice__c}</td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt"><span style="font-weight: bold">{kugo2p__NetAmount__c}</span>{/ServiceLines}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="height: 14px; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ ADDITIONAL CHARGES (renders only when present) ============ -->
+        {#Charges}
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0; border: 1px solid #cbd5e1">
+            <tr>
+                <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; font-size: 9pt; width: 66%">
+                    <span style="font-weight: bold; color: #0f172a">{kugo2p__AdditionalChargeCredit__r.Name}</span><br />
+                    <span style="color: #64748b; font-size: 8pt">{kugo2p__LineDescription__c}</span>
+                </td>
+                <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt; width: 16%">{kugo2p__Quantity__c}</td>
+                <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt; width: 18%">
+                    <span style="font-weight: bold">{kugo2p__AdditionalChargeCreditAmount__c}</span>
+                </td>
+            </tr>
+        </table>
+        {/Charges}
+
+        <!-- ============ TOTALS ============ -->
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0">
+            <tr>
+                <td style="width: 56%; vertical-align: top">
+                    {#kugo2p__PrintComments__c}
+                    <div style="border: 1px solid #e2e8f0; border-left: 4px solid #2563eb; background-color: #f8fafc; padding: 9px 12px; font-size: 8.6pt; color: #334155"><span style="font-weight: bold">Notes.</span> {kugo2p__Comments__c}</div>
+                    {/kugo2p__PrintComments__c}
+                </td>
+                <td style="width: 14px; font-size: 1pt"></td>
+                <td style="width: 42%; vertical-align: top">
+                    <table style="width: 100%; border-collapse: collapse; border-spacing: 0; border: 1px solid #e2e8f0">
+                        <tr>
+                            <td style="padding: 5px 10px; text-align: right; color: #64748b; font-size: 9pt">Products</td>
+                            <td style="padding: 5px 10px; text-align: right; font-size: 9pt; width: 105px">{kugo2p__ProductAmount__c}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 5px 10px; text-align: right; color: #64748b; font-size: 9pt">Services</td>
+                            <td style="padding: 5px 10px; text-align: right; font-size: 9pt; width: 105px">{kugo2p__ServiceAmount__c}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 5px 10px; text-align: right; color: #64748b; font-size: 9pt; border-top: 1px solid #cbd5e1">Subtotal</td>
+                            <td style="padding: 5px 10px; text-align: right; font-size: 9pt; width: 105px; border-top: 1px solid #cbd5e1">{kugo2p__SubtotalAmount__c}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 5px 10px; text-align: right; color: #64748b; font-size: 9pt">Discount</td>
+                            <td style="padding: 5px 10px; text-align: right; font-size: 9pt; width: 105px">&#8722; {kugo2p__TotalDiscountAmount__c}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 5px 10px; text-align: right; color: #64748b; font-size: 9pt">Additional charges</td>
+                            <td style="padding: 5px 10px; text-align: right; font-size: 9pt; width: 105px">{kugo2p__AdditionalChargeCreditAmount__c}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 5px 10px; text-align: right; color: #64748b; font-size: 9pt">Tax</td>
+                            <td style="padding: 5px 10px; text-align: right; font-size: 9pt; width: 105px">{kugo2p__TotalTaxAmount__c}</td>
+                        </tr>
+                        <tr>
+                            <td style="background-color: #2563eb; color: #ffffff; padding: 9px 10px; text-align: right; font-size: 10pt; font-weight: bold; letter-spacing: 0.8px">TOTAL</td>
+                            <td style="background-color: #2563eb; color: #ffffff; padding: 9px 10px; text-align: right; font-size: 12pt; font-weight: bold; width: 105px">{kugo2p__TotalAmount__c}</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        <div style="height: 14px; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ OPTIONAL / UPSELL ============ -->
+        <div style="border-left: 4px solid #2563eb; padding: 2px 0 2px 9px; font-size: 10pt; font-weight: bold; color: #1d4ed8; letter-spacing: 0.3px">Also Available</div>
+        <div style="height: 8px; font-size: 1pt; line-height: 1pt"></div>
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0; border: 1px solid #cbd5e1">
+            <thead>
+                <tr>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: left; border-right: 1px solid #2563eb; width: 66%">OPTIONAL ITEM</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: right; border-right: 1px solid #2563eb; width: 16%">LIST</th>
+                    <th style="background-color: #1d4ed8; color: #ffffff; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.9px; padding: 7px 8px; text-align: right; border-right: 1px solid #2563eb; width: 18%">YOUR PRICE</th>
+                </tr>
+            </thead>
+            <tbody>
+                                <tr>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; font-size: 9pt">{#OptionalLines}
+                        <span style="color: #2563eb; font-size: 7.6pt; font-weight: bold; letter-spacing: 0.6px">{kugo2p__ProductService__r.kugo2p__ProductCode__c}</span
+                        ><br />
+                        <span style="font-weight: bold; color: #0f172a">{kugo2p__ProductService__r.Name}</span><br />
+                        <span style="color: #64748b; font-size: 8pt"
+                            >{kugo2p__ProductService__r.kugo2p__ProductDescription__c}</span
+                        >
+                    </td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt"><span style="text-decoration: line-through; color: #94a3b8; font-size: 8pt">{kugo2p__ListPrice__c}</span></td>
+                    <td style="padding: 7px 8px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #eef2f7; vertical-align: top; text-align: right; font-size: 9pt"><span style="font-weight: bold">{kugo2p__SalesPrice__c}</span>{/OptionalLines}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="height: 14px; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ ACCEPTANCE ============ -->
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0">
+            <tr>
+                <td style="width: 48%">
+                    <div style="border-bottom: 1px solid #94a3b8; height: 30px"></div>
+                    <div style="color: #64748b; font-size: 7.4pt; letter-spacing: 0.9px; padding-top: 4px">AUTHORIZED SIGNATURE</div>
+                </td>
+                <td style="width: 14px; font-size: 1pt"></td>
+                <td style="width: 22%">
+                    <div style="border-bottom: 1px solid #94a3b8; height: 30px"></div>
+                    <div style="color: #64748b; font-size: 7.4pt; letter-spacing: 0.9px; padding-top: 4px">PRINTED NAME</div>
+                </td>
+                <td style="width: 14px; font-size: 1pt"></td>
+                <td style="width: 22%">
+                    <div style="border-bottom: 1px solid #94a3b8; height: 30px"></div>
+                    <div style="color: #64748b; font-size: 7.4pt; letter-spacing: 0.9px; padding-top: 4px">DATE</div>
+                </td>
+            </tr>
+        </table>
+
+        <div style="height: 14px; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ TERMS ============ -->
+        {#kugo2p__PrintSpecificTextandTerms__c}
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 8px; font-size: 7.6pt; color: #64748b; line-height: 1.5">
+            <span style="font-weight: bold">Terms &amp; Conditions</span><br />
+            {kugo2p__SpecificTextandTerms__c}
+        </div>
+        {/kugo2p__PrintSpecificTextandTerms__c}
+
+        <div style="height: 14px; font-size: 1pt; line-height: 1pt"></div>
+
+        <!-- ============ FOOTER ============ -->
+        <table style="width: 100%; border-collapse: collapse; border-spacing: 0; border-top: 3px solid #2563eb; padding-top: 7px; color: #94a3b8; font-size: 7.4pt">
+            <tr>
+                <td style="width: 60%">
+                    Prepared by <span style="font-weight: bold">{Owner.Name}</span> &#183; {Owner.Email}
+                </td>
+                <td style="text-align: right; width: 40%">
+                    Quote {Name} &#183; valid through {kugo2p__DateOfferValidThrough__c}
+                </td>
+            </tr>
+        </table>
+    </body>
+</html>

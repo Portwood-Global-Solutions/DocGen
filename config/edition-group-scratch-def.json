@@ -1,0 +1,18 @@
+{
+    "orgName": "Portwood GE Install Test",
+    "edition": "group",
+    "description": "Group Edition scratch org — the closest available proxy for Starter Suite. There is NO 'starter' or 'pro suite' scratch org edition (sf org create scratch accepts only developer|enterprise|group|professional|partner-*), so a genuine Starter Suite install can only be verified on a real Starter trial org. Group is the lowest-tier scratch SKU and shares the important constraints: no custom profiles, sharply reduced object/tab limits, no Experience Cloud.",
+    "features": ["EnableSetPasswordInApi"],
+    "settings": {
+        "lightningExperienceSettings": {
+            "enableS1DesktopEnabled": true
+        },
+        "securitySettings": {
+            "passwordPolicies": {
+                "complexity": "NoRestriction",
+                "expiration": "Never",
+                "minimumPasswordLength": 8
+            }
+        }
+    }
+}

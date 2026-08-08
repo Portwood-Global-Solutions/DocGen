@@ -1915,21 +1915,31 @@ function flowMarginTop(box, cursor) {
  * derived, which also means the layout maths can change later without corrupting
  * documents saved under the old rules. Flying Saucer ignores unknown attributes.
  */
-function authoringAttrs(box) {
+function authoringAttrs(box, withId) {
     if (box.kind === 'code') {
-        return baseAuthoringAttrs(box) + codeAttrs(box);
+        return baseAuthoringAttrs(box, withId) + codeAttrs(box);
     }
     if (box.kind === 'signature') {
-        return baseAuthoringAttrs(box) + signatureAttrs(box);
+        return baseAuthoringAttrs(box, withId) + signatureAttrs(box);
     }
     if (box.kind === 'chart') {
-        return baseAuthoringAttrs(box) + chartAttrs(box);
+        return baseAuthoringAttrs(box, withId) + chartAttrs(box);
     }
-    return baseAuthoringAttrs(box);
+    return baseAuthoringAttrs(box, withId);
 }
 
-function baseAuthoringAttrs(box) {
+function baseAuthoringAttrs(box, withId) {
     return (
+        // The box's OWN id, so an anchor saved against it can be resolved on the way
+        // back in. deserialize mints fresh ids, so a bare data-dg-anchor holding last
+        // session's id is not merely stale — the ids are sequential, so it usually
+        // still MATCHES, just a different box. Links silently re-pointed at whatever
+        // landed on that number this time. See the remap in deserialize.
+        //
+        // Only group members get one. An id is per-session and renumbers on every
+        // save, so emitting it everywhere would make exported HTML churn on documents
+        // that have no links at all — and an unlinked box has nothing to resolve.
+        (withId ? ' data-dg-id="' + esc(box.id || '') + '"' : '') +
         ' data-dg-x="' +
         box.x +
         '" data-dg-y="' +
@@ -2110,7 +2120,7 @@ function groupToHtml(members, cursor) {
         const gapLeft = round3(Math.max(0, m.x - head.x));
         inner +=
             '<div class="dg-anchored"' +
-            authoringAttrs(m) +
+            authoringAttrs(m, true) +
             ' style="margin: ' +
             gapTop +
             'in 0 0 ' +
@@ -2490,7 +2500,8 @@ export function deserialize(html) {
             // linked element vanishes on reload. The .dg-group wrapper itself is
             // NOT a box — it carries no authoring attributes and is rebuilt from
             // the members' anchors on the way out.
-            board.boxes = [...boardEl.querySelectorAll('.dg-pin, .dg-flow, .dg-anchored')].map((el) => {
+            const els = [...boardEl.querySelectorAll('.dg-pin, .dg-flow, .dg-anchored')];
+            board.boxes = els.map((el) => {
                 const style = el.getAttribute('style') || '';
                 const isFlow = el.classList.contains('dg-flow');
                 const box = newTextBox(0, 0, 2, 0.5);
@@ -2566,6 +2577,9 @@ export function deserialize(html) {
                 // Position mode is orthogonal to kind — any box can follow another.
                 if (el.hasAttribute('data-dg-anchor')) {
                     box.positionMode = 'follows';
+                    // The SAVED id, not a live one. Rewritten to the freshly minted id
+                    // by remapAnchors below, which also owns what happens when it
+                    // cannot be resolved.
                     box.anchorTo = el.getAttribute('data-dg-anchor') || '';
                 }
                 if (el.hasAttribute('data-dg-keep')) {
@@ -2586,9 +2600,66 @@ export function deserialize(html) {
                 }
                 return box;
             });
+            remapAnchors(board.boxes, els);
             return board;
         })
     };
+}
+
+/**
+ * Rewrites every `anchorTo` from the id it was SAVED against to the id its box was
+ * just given.
+ *
+ * `deserialize` builds each box with `newTextBox`, which mints a fresh sequential id.
+ * The saved `data-dg-anchor` holds an id from the session that wrote the file. Those
+ * two id spaces are unrelated — but because both are `box_<n>` from the same counter,
+ * a saved id almost always collides with a real box in the new document. So the link
+ * did not dangle and did not error; it quietly re-pointed at a different element.
+ * Measured on the Anchor Demo fixture: one open-and-save turned a four-box chain
+ * (table → summary → note → signature) into three groups, with the summary anchored to
+ * the subtitle and the note to a horizontal rule.
+ *
+ * Two ways to resolve, in order:
+ *
+ *  1. `data-dg-id`, written alongside the anchor. Exact, and handles trees — two
+ *     followers hanging off one anchor — as well as chains.
+ *  2. For documents written before that attribute existed, position within the
+ *     `.dg-group`: the serializer emits members in chain order, so a follower's anchor
+ *     is the member before it. Correct for a chain, a guess for a tree, and strictly
+ *     better than the collision it replaces.
+ *
+ * Anything still unresolved goes back to `fixed` rather than keeping an id that means
+ * nothing. A box that stops moving is visible; a box silently tied to the wrong
+ * neighbour is not.
+ */
+function remapAnchors(boxes, els) {
+    const savedToNew = new Map();
+    els.forEach((el, i) => {
+        const saved = el.getAttribute('data-dg-id');
+        if (saved && !savedToNew.has(saved)) {
+            savedToNew.set(saved, boxes[i].id);
+        }
+    });
+    boxes.forEach((box, i) => {
+        if (box.positionMode !== 'follows' || !box.anchorTo) {
+            return;
+        }
+        const exact = savedToNew.get(box.anchorTo);
+        if (exact && exact !== box.id) {
+            box.anchorTo = exact;
+            return;
+        }
+        // Legacy: no ids were written, so fall back to the member above this one
+        // inside the same group.
+        const group = els[i].closest('.dg-group');
+        const prev = group && els[i].previousElementSibling;
+        if (!savedToNew.size && prev && prev.classList.contains('dg-anchored')) {
+            box.anchorTo = boxes[els.indexOf(prev)].id;
+            return;
+        }
+        box.positionMode = 'fixed';
+        box.anchorTo = '';
+    });
 }
 
 // ---------------------------------------------------------------------------
