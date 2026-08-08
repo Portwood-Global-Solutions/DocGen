@@ -148,6 +148,18 @@ function nextId(prefix) {
 export const UNICODE_FONT = "'Arial Unicode MS'";
 
 /**
+ * Whether a font-family can actually print bold in the PDF engine (Blob.toPdf /
+ * Flying Saucer). Only `'Arial Unicode MS'` cannot: it embeds a regular (and italic)
+ * face but no bold variant (#281), so `font-weight: bold` on it silently renders
+ * regular — the canvas showed a weight the PDF could not deliver. The serializers
+ * use this to skip emitting bold for it, and the editor disables the Bold control, so
+ * authoring and output agree.
+ */
+export function canRenderBold(font) {
+    return typeof font !== 'string' || font.replace(/['"]/g, '').toLowerCase() !== 'arial unicode ms';
+}
+
+/**
  * Symbols, and the font each one needs.
  *
  * Measured against rendered PDFs. Blob.toPdf resolves the generic families to the
@@ -157,7 +169,8 @@ export const UNICODE_FONT = "'Arial Unicode MS'";
  *
  * `Arial Unicode MS` is different: it embeds as a subsetted CID TrueType with
  * Identity-H encoding and draws the lot — ✓ ✔ ☑ ☐ ✗ ● ■ ★ → √ ≤ ≥ ≈ ∞, CJK, Greek,
- * Cyrillic, Hebrew — in regular, bold and italic. Naming it is the whole trick, and it
+ * Cyrillic, Hebrew — in regular and italic but NOT bold (#281: it has no bold face,
+ * so font-weight bold on it prints regular). Naming it is the whole trick, and it
  * is why `unicode: true` symbols below are inserted wrapped in a span that asks for it
  * rather than relying on whatever the box is set to.
  *
@@ -207,8 +220,10 @@ export const FONT_CHOICES = [
     { label: 'Sans-serif', value: 'sans-serif' },
     { label: 'Serif', value: 'serif' },
     { label: 'Monospace', value: 'monospace' },
-    // The Unicode face. Measured to embed and draw symbols, CJK, Greek, Cyrillic and
-    // Hebrew in regular, bold and italic — everything the base-14 fonts cannot.
+    // The Unicode face. Embeds and draws symbols, CJK, Greek, Cyrillic and Hebrew that
+    // the base-14 fonts cannot — in regular and italic. It has NO bold face in the PDF
+    // engine (Blob.toPdf), so font-weight: bold on it silently prints regular; the
+    // Bold control is disabled for it (see canRenderBold).
     { label: 'Arial Unicode (symbols, CJK)', value: "'Arial Unicode MS'" }
 ];
 
@@ -1222,7 +1237,9 @@ function styleCss(box) {
     if (st.color) css += 'color: ' + st.color + '; ';
     if (st.align) css += 'text-align: ' + st.align + '; ';
     css += 'padding: ' + (st.padding || 0) + 'pt;';
-    if (st.bold) css += ' font-weight: bold;';
+    // Arial Unicode MS has no bold face in the PDF engine, so a bold it emits would
+    // silently print regular — the canvas promises a weight the PDF cannot deliver.
+    if (st.bold && canRenderBold(st.font)) css += ' font-weight: bold;';
     if (st.italic) css += ' font-style: italic;';
     if (st.underline) css += ' text-decoration: underline;';
     // A flat hex, never rgba(): rgba resolves to nothing in this engine and the fill
@@ -1325,7 +1342,7 @@ function totalsCell(t, tt, frame, value, span) {
         '; text-align: ' +
         tt.align +
         ';' +
-        (tt.bold ? ' font-weight: bold;' : ' font-weight: normal;') +
+        (tt.bold && canRenderBold(tt.font) ? ' font-weight: bold;' : ' font-weight: normal;') +
         fill;
     return '<td' + (span || '') + ' style="' + css + '">' + (value || '') + '</td>';
 }
@@ -1358,7 +1375,7 @@ function subLoopRow(t, parentColCount, boxFont) {
         '; text-align: ' +
         stx.align +
         ';' +
-        (stx.bold ? ' font-weight: bold;' : ' font-weight: normal;') +
+        (stx.bold && canRenderBold(stx.font || boxFont) ? ' font-weight: bold;' : ' font-weight: normal;') +
         (t.subFill ? ' background: ' + t.subFill + ';' : '');
     const cells = subs
         .map((c, i) => {
@@ -1400,7 +1417,7 @@ function tableToHtml(box) {
         '; text-align: ' +
         x.align +
         ';' +
-        (x.bold ? ' font-weight: bold;' : ' font-weight: normal;');
+        (x.bold && canRenderBold(x.font || st.font) ? ' font-weight: bold;' : ' font-weight: normal;');
     const frame = gridCss(t, 'body');
     const cellCss = frame + typo(rt);
     const headCss = gridCss(t, 'head') + typo(ht);
@@ -1493,7 +1510,7 @@ export function tablePreviewHtml(box) {
         '; text-align: ' +
         x.align +
         ';' +
-        (x.bold ? ' font-weight: bold;' : ' font-weight: normal;');
+        (x.bold && canRenderBold(x.font || st.font) ? ' font-weight: bold;' : ' font-weight: normal;');
     const frame = gridCss(t, 'body');
     const cellCss = frame + typo(rt);
     const headCss = gridCss(t, 'head') + typo(ht);

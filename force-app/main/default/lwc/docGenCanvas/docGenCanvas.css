@@ -342,6 +342,13 @@
     border-color: rgba(124, 58, 237, 0.7);
 }
 
+/* A Bold (or other) toggle that is a silent no-op in the PDF for the chosen font —
+   greyed and inert so the canvas stops promising a weight it cannot deliver. */
+.dg-sbtn[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .dg-prop-gap {
     display: inline-block;
     width: 10px;

@@ -62,6 +62,17 @@ import {
 } from './canvasModel';
 
 /**
+ * Arial Unicode MS has no bold face in the PDF engine (Blob.toPdf), so a bold this
+ * font carries silently prints regular. The canvas disables the Bold control for it
+ * so it stops promising a weight the PDF cannot deliver. Mirrors canRenderBold in
+ * canvasModel (which also suppresses serialization) — keeping both in sync:
+ * canRenderBold must stay the exact inverse of this.
+ */
+function isUnicodeFont(font) {
+    return typeof font === 'string' && font.replace(/['"]/g, '').toLowerCase() === 'arial unicode ms';
+}
+
+/**
  * Canvas editor — a Canva-style artboard for Portwood's Canvas template type.
  *
  * DELIBERATELY NET NEW, not a mode inside docGenAdmin. That component is ~15k lines
@@ -1402,7 +1413,16 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     get totalsBoldClass() {
-        return this.selTotalsText.bold ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+        return this.selTotalsText.bold && !this.totalsBoldDisabled ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+    get totalsBoldDisabled() {
+        return isUnicodeFont(this.selTotalsFont);
+    }
+    get totalsBoldTitle() {
+        return this.totalsBoldDisabled ? 'Bold not available for Arial Unicode' : 'Bold';
+    }
+    get subBoldDisabled() {
+        return isUnicodeFont(this.selSubFont);
     }
 
     /** Align is a button, not a field, so it carries its value in data-align. */
@@ -1420,11 +1440,23 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     get headerBoldClass() {
-        return this.selHeaderText.bold ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+        return this.selHeaderText.bold && !this.headerBoldDisabled ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+    get headerBoldDisabled() {
+        return isUnicodeFont(this.selHeaderFont);
+    }
+    get headerBoldTitle() {
+        return this.headerBoldDisabled ? 'Bold not available for Arial Unicode' : 'Bold';
     }
 
     get rowBoldClass() {
-        return this.selRowText.bold ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+        return this.selRowText.bold && !this.rowBoldDisabled ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+    get rowBoldDisabled() {
+        return isUnicodeFont(this.selRowFont);
+    }
+    get rowBoldTitle() {
+        return this.rowBoldDisabled ? 'Bold not available for Arial Unicode' : 'Bold';
     }
 
     /** Header and body rows are styled separately — see DEFAULT_HEADER_TEXT. */
@@ -1459,6 +1491,18 @@ export default class DocGenCanvas extends LightningElement {
                     : this.selRowText;
         let value;
         if (key === 'bold') {
+            // Arial Unicode MS has no bold face — refuse the toggle for that band.
+            const bandDisabled =
+                which === 'header'
+                    ? this.headerBoldDisabled
+                    : which === 'totals'
+                      ? this.totalsBoldDisabled
+                      : which === 'sub'
+                        ? this.subBoldDisabled
+                        : this.rowBoldDisabled;
+            if (bandDisabled) {
+                return;
+            }
             value = !current.bold;
         } else if (key === 'size') {
             value = parseFloat(event.target.value);
@@ -1474,7 +1518,11 @@ export default class DocGenCanvas extends LightningElement {
                   : which === 'sub'
                     ? 'subText'
                     : 'rowText';
-        this._patchTable({ [field]: { ...current, [key]: value } });
+        const patch = { [key]: value };
+        if (key === 'font' && isUnicodeFont(value) && current.bold) {
+            patch.bold = false;
+        }
+        this._patchTable({ [field]: { ...current, ...patch } });
     }
 
     handleAddColumn() {
@@ -1826,7 +1874,16 @@ export default class DocGenCanvas extends LightningElement {
         return this.selectedStyle.borderColor;
     }
     get boldClass() {
-        return this.selectedStyle.bold ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+        return this.selectedStyle.bold && !this.boxBoldDisabled ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
+    }
+    /** Arial Unicode MS has no bold face in the PDF — the Bold toggle is a no-op for it. */
+    get boxBoldDisabled() {
+        return isUnicodeFont(this.selFont);
+    }
+    get boldTitle() {
+        return this.boxBoldDisabled
+            ? 'Bold is not available for Arial Unicode — it has no bold face in the PDF'
+            : 'Bold';
     }
     get italicClass() {
         return this.selectedStyle.italic ? 'dg-sbtn dg-sbtn_on' : 'dg-sbtn';
@@ -1853,6 +1910,11 @@ export default class DocGenCanvas extends LightningElement {
 
     handleStyleToggle(event) {
         const key = event.currentTarget.dataset.key;
+        // Arial Unicode MS has no bold face — a bold this box carries would silently
+        // print regular in the PDF. Refuse the toggle so the canvas can't promise it.
+        if (key === 'bold' && this.boxBoldDisabled) {
+            return;
+        }
         this._patchStyle({ [key]: !this.selectedStyle[key] });
     }
 
@@ -1861,7 +1923,14 @@ export default class DocGenCanvas extends LightningElement {
     }
 
     handleFontChange(event) {
-        this._patchStyle({ font: event.detail.value });
+        const font = event.detail.value;
+        // Switching to Arial Unicode MS clears an active bold: it has no bold face, so
+        // keeping bold on would show a weight the PDF cannot print (see canRenderBold).
+        const patch = { font };
+        if (isUnicodeFont(font) && this.selectedStyle.bold) {
+            patch.bold = false;
+        }
+        this._patchStyle(patch);
     }
 
     handleNumChange(event) {
