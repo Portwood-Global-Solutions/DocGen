@@ -1,0 +1,101 @@
+<html>
+<head>
+<style>
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; }
+  .marker { font-weight: bold; color: #b91c1c; }
+  .board { position: relative; min-height: 9in; }
+  .pinned { position: absolute; }
+  .grp { border: 1px solid #94a3b8; padding: 6pt; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid #cbd5e1; padding: 2pt 4pt; font-size: 8pt; }
+</style>
+</head>
+<body>
+
+<!-- ===================================================================
+     PROBE 1 — the CURRENT canvas model.
+     A pinned (absolute) caption sits below where the table was drawn.
+     If the table grows past that y, does it overlap the caption?
+     =================================================================== -->
+<div class="board">
+  <div class="pinned" style="left:0in; top:0.2in; width:6in;">
+    <span class="marker">P1-TABLE-START</span>
+    <table>
+      <tr><th>Name</th><th>Dept</th></tr>
+      {#Contacts}<tr><td>{LastName}</td><td>{Department}</td></tr>{/Contacts}
+    </table>
+    <span class="marker">P1-TABLE-END</span>
+  </div>
+  <div class="pinned" style="left:0in; top:2.5in; width:6in;">
+    <span class="marker">P1-PINNED-CAPTION</span>
+  </div>
+</div>
+
+<div style="page-break-before: always;"></div>
+
+<!-- ===================================================================
+     PROBE 2 — the PROPOSED model: one flow container holding both.
+     Does the caption get PUSHED below the grown table instead of
+     being overlapped?
+     =================================================================== -->
+<span class="marker">P2-BEFORE-GROUP</span>
+<div class="grp">
+  <span class="marker">P2-GROUP-TOP</span>
+  <table>
+    <tr><th>Name</th><th>Dept</th></tr>
+    {#Contacts}<tr><td>{LastName}</td><td>{Department}</td></tr>{/Contacts}
+  </table>
+  <span class="marker">P2-GROUP-BOTTOM</span>
+</div>
+<span class="marker">P2-AFTER-GROUP</span>
+
+<div style="page-break-before: always;"></div>
+
+<!-- ===================================================================
+     PROBE 3 — page-break-inside: avoid on a group that CANNOT fit.
+     Honoured (pushed whole to next page / overflows) or ignored (split)?
+     =================================================================== -->
+<span class="marker">P3-BEFORE</span>
+<div class="grp" style="page-break-inside: avoid;">
+  <span class="marker">P3-AVOID-TOP</span>
+  <table>
+    <tr><th>Name</th><th>Dept</th></tr>
+    {#Contacts}<tr><td>{LastName}</td><td>{Department}</td></tr>{/Contacts}
+  </table>
+  <span class="marker">P3-AVOID-BOTTOM</span>
+</div>
+<span class="marker">P3-AFTER</span>
+
+<div style="page-break-before: always;"></div>
+
+<!-- ===================================================================
+     PROBE 4 — does <thead> repeat on every page of a split table?
+     =================================================================== -->
+<span class="marker">P4-BEFORE</span>
+<table>
+  <thead><tr><th>P4-REPEATING-HEADER</th><th>Dept</th></tr></thead>
+  <tbody>
+    {#Contacts}<tr><td>{LastName}</td><td>{Department}</td></tr>{/Contacts}
+  </tbody>
+</table>
+<span class="marker">P4-AFTER</span>
+
+<div style="page-break-before: always;"></div>
+
+<!-- ===================================================================
+     PROBE 5 — absolute INSIDE a flowing relatively-positioned parent.
+     Does it anchor to the parent (so it travels with it) or to the page?
+     This is the hinge: if it anchors to the parent, an anchored group
+     could keep absolute positioning internally and still flow.
+     =================================================================== -->
+<span class="marker">P5-BEFORE</span>
+<div style="position: relative; height: 1.5in; border: 1px solid #94a3b8;">
+  <span class="marker">P5-PARENT-TOP</span>
+  <div style="position: absolute; top: 1in; left: 2in;">
+    <span class="marker">P5-ABS-CHILD</span>
+  </div>
+</div>
+<span class="marker">P5-AFTER</span>
+
+</body>
+</html>
