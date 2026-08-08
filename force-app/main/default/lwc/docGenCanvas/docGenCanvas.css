@@ -1003,3 +1003,31 @@ textarea.dg-cbox-text {
     font-size: 0.75rem;
     line-height: 1.35;
 }
+
+/* ---- Element linking --------------------------------------------------- */
+
+.dg-pos-mode,
+.dg-anchor-pick,
+.dg-keep-together {
+    display: block;
+    margin-bottom: 6px;
+}
+
+/* Fills the board so the line coordinates are board coordinates — the same px the
+   boxes are positioned in. Click-through, or it would swallow every box mousedown. */
+.dg-tethers {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.dg-tether-line {
+    stroke: #7c3aed;
+    stroke-width: 1.5;
+    stroke-dasharray: 4 3;
+    opacity: 0.85;
+}

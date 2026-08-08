@@ -2081,6 +2081,90 @@ export function anchorRoot(box, byId) {
 }
 
 /**
+ * Would linking `box` to `candidate` close a loop?
+ *
+ * A cycle is one click away in the picker — link A to B, then B to A — and it has to
+ * be stopped BEFORE it reaches the model, not detected afterwards. anchorRoot survives
+ * a cycle by returning null, which drops the whole set to singletons: both boxes
+ * quietly stop travelling together and nothing says why. Far better to grey the option
+ * out and never let it happen.
+ *
+ * Walks up from the candidate: if the chain above it passes through `box`, then making
+ * `box` follow it closes the loop.
+ */
+export function wouldCycle(box, candidateId, byId) {
+    if (!box || !candidateId || candidateId === box.id) {
+        return true;
+    }
+    let cur = byId.get(candidateId);
+    const seen = new Set();
+    while (cur) {
+        if (cur.id === box.id) {
+            return true;
+        }
+        if (seen.has(cur.id)) {
+            return true; // the candidate is already in a loop of its own
+        }
+        seen.add(cur.id);
+        cur = isFollower(cur) ? byId.get(cur.anchorTo) : null;
+    }
+    return false;
+}
+
+/**
+ * A short human name for a box, for the anchor picker and the artboard badge.
+ *
+ * Boxes have no user-given name, so this is derived. A table says which relationship
+ * it lists, because "Contacts table" is how an author refers to it; everything else
+ * leads with its own first few words, which is what they actually recognise on the
+ * page. Falls back to the kind so an empty box is still selectable rather than a blank
+ * row in the dropdown.
+ */
+export function boxLabel(box) {
+    if (!box) {
+        return '';
+    }
+    if (box.kind === 'table') {
+        const rel = box.table && box.table.relationship;
+        return rel ? rel + ' table' : 'Table';
+    }
+    if (box.kind === 'chart') {
+        const f = box.chart && box.chart.fieldApi;
+        return f ? 'Chart of ' + f : 'Chart';
+    }
+    // Named by kind, NOT by their text field. Every box is built by newTextBox, which
+    // seeds `text` with the placeholder "Text", and a non-text box never overwrites it
+    // — so a horizontal rule offered itself to the picker as "Text".
+    if (box.kind === 'shape') {
+        const found = SHAPE_CHOICES.find((s) => s.value === (box.shape && box.shape.type));
+        return found ? found.label : 'Shape';
+    }
+    if (box.kind === 'image') {
+        return 'Image';
+    }
+    if (box.kind === 'code') {
+        const found = CODE_TYPES.find((c) => c.value === (box.code && box.code.type));
+        return found ? found.label : 'Code';
+    }
+    if (box.kind === 'signature') {
+        return 'Signature block';
+    }
+    // Marks are stripped, not rendered. `text` carries the canvas's own inline syntax,
+    // so a bolded heading read back as "**Contact Roster**" — the picker was showing
+    // authoring source where it should show what is on the page.
+    let raw = box.text || htmlToText(box.html || '') || '';
+    for (const mk of INLINE_MARKS) {
+        raw = raw.split(mk.open).join('').split(mk.close).join('');
+    }
+    const words = raw.replace(/\s+/g, ' ').trim();
+    if (words) {
+        return words.length > 32 ? words.slice(0, 32).trim() + '…' : words;
+    }
+    const kind = box.kind || 'text';
+    return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+/**
  * Groups boxes into anchor sets: each head plus everything that transitively
  * follows it, ordered by authored y so document order matches what the author
  * sees. Boxes with a broken or cyclic anchor come back as singletons rather

@@ -55,6 +55,9 @@ import {
     signatureBoxSize,
     SIGNATURE_TYPES,
     htmlToCanvas,
+    anchorRoot,
+    wouldCycle,
+    boxLabel,
     normalizeCustomPage as normalizeCustom
 } from './canvasModel';
 
@@ -859,9 +862,71 @@ export default class DocGenCanvas extends LightningElement {
                 // rich-text editor, tables through the column editor. The artboard is a
                 // faithful preview you arrange, which is what makes it trustworthy.
                 readout: b.x.toFixed(2) + 'in, ' + b.y.toFixed(2) + 'in · ' + b.w.toFixed(2) + 'in',
-                modeLabel: b.mode === 'flow' ? 'Flows' : 'Pinned'
+                // A linked box reported "Pinned" here, which is what its `mode` field
+                // still says — but the link is what actually decides where it lands,
+                // so that was the panel confidently describing the wrong thing.
+                modeLabel: this.boxModeLabel(b, board)
             }))
         }));
+    }
+
+    boxModeLabel(b, board) {
+        if (b.positionMode === 'follows') {
+            const target = (board.boxes || []).find((x) => x.id === b.anchorTo);
+            return target ? 'Follows ' + boxLabel(target) : 'Follows (element deleted)';
+        }
+        return b.mode === 'flow' ? 'Flows' : 'Pinned';
+    }
+
+    /**
+     * The line drawn from an anchor to the box that follows it.
+     *
+     * Only for the selected box's own chain. Drawing every link on the page turns a
+     * document with a few groups into a cat's cradle, and the question an author is
+     * asking is always about the thing they just clicked.
+     */
+    get tethers() {
+        const sel = this.selectedBox;
+        if (!sel) {
+            return [];
+        }
+        const board = this._boardOf(sel.id);
+        if (!board) {
+            return [];
+        }
+        const byId = new Map(board.boxes.map((b) => [b.id, b]));
+        // The whole chain the selection belongs to, not just its own link — seeing
+        // where a group starts is the point.
+        const root = anchorRoot(sel, byId);
+        if (!root) {
+            return [];
+        }
+        const out = [];
+        for (const b of board.boxes) {
+            if (b.positionMode !== 'follows' || !b.anchorTo) {
+                continue;
+            }
+            if (anchorRoot(b, byId) !== root) {
+                continue;
+            }
+            const a = byId.get(b.anchorTo);
+            if (!a) {
+                continue;
+            }
+            const z = this.zoom;
+            out.push({
+                key: 'tether-' + b.id,
+                x1: inToPx(a.x + a.w / 2, z),
+                y1: inToPx(a.y + a.h, z),
+                x2: inToPx(b.x + b.w / 2, z),
+                y2: inToPx(b.y, z)
+            });
+        }
+        return out;
+    }
+
+    get hasTethers() {
+        return this.tethers.length > 0;
     }
 
     /**
@@ -3329,6 +3394,186 @@ export default class DocGenCanvas extends LightningElement {
             box.mode === 'flow'
                 ? 'Pinned — lands exactly here, does not repeat on continuation pages'
                 : 'Flows — content can grow and spill onto following pages';
+    }
+
+    // ---- Position: where a box goes when the content above it grows --------
+    //
+    // Three answers to one question, so one control rather than two. The model keeps
+    // them on separate fields — `mode` is pinned/flow, `positionMode`+`anchorTo` is the
+    // link — but an author choosing between "stays put", "flows" and "follows that" is
+    // making a single decision, and surfacing it as two independent toggles is how the
+    // panel ended up reporting a linked box as "Pinned".
+
+    /** Every box on the same page as the selection, by id. Links do not cross pages. */
+    get _siblingsById() {
+        const map = new Map();
+        const board = this._boardOf(this.selectedId);
+        for (const b of (board && board.boxes) || []) {
+            map.set(b.id, b);
+        }
+        return map;
+    }
+
+    _boardOf(boxId) {
+        return this.doc.artboards.find((b) => b.boxes.some((x) => x.id === boxId)) || null;
+    }
+
+    get positionModeOptions() {
+        return [
+            { label: 'Stays put', value: 'pinned' },
+            { label: 'Flows down the page', value: 'flow' },
+            { label: 'Follows another element', value: 'follows' }
+        ];
+    }
+
+    get selectedPositionMode() {
+        const b = this.selectedBox;
+        if (!b) {
+            return 'pinned';
+        }
+        if (b.positionMode === 'follows') {
+            return 'follows';
+        }
+        return b.mode === 'flow' ? 'flow' : 'pinned';
+    }
+
+    get isSelectedFollowing() {
+        return this.selectedPositionMode === 'follows';
+    }
+
+    /**
+     * What this box may be linked to.
+     *
+     * Itself and anything that would close a loop are left out entirely rather than
+     * shown disabled — a combobox cannot disable one option, and an author who picks a
+     * greyed-looking row and gets nothing has learned nothing. Same page only, because
+     * a group is emitted inside one artboard.
+     */
+    get anchorOptions() {
+        const box = this.selectedBox;
+        if (!box) {
+            return [];
+        }
+        const byId = this._siblingsById;
+        const opts = [];
+        for (const cand of byId.values()) {
+            if (cand.id === box.id || wouldCycle(box, cand.id, byId)) {
+                continue;
+            }
+            opts.push({ label: boxLabel(cand), value: cand.id, y: cand.y });
+        }
+        // Down the page, which is the order the author is looking at.
+        opts.sort((a, b) => a.y - b.y);
+        return opts.map((o) => ({ label: o.label, value: o.value }));
+    }
+
+    get selectedAnchorId() {
+        const b = this.selectedBox;
+        return (b && b.anchorTo) || '';
+    }
+
+    get selectedKeepTogether() {
+        const b = this.selectedBox;
+        return !!(b && b.keepTogether);
+    }
+
+    get hasAnchorOptions() {
+        return this.anchorOptions.length > 0;
+    }
+
+    /**
+     * Anything wrong with the current link, in the author's words.
+     *
+     * A dangling anchor is the case that matters: the target was deleted, so the box
+     * silently stopped travelling. Nothing else in the editor would say so.
+     */
+    get anchorIssue() {
+        const box = this.selectedBox;
+        if (!box || box.positionMode !== 'follows') {
+            return null;
+        }
+        if (!box.anchorTo) {
+            return 'Pick the element this should follow. Until you do, it stays where it is.';
+        }
+        const byId = this._siblingsById;
+        if (!byId.has(box.anchorTo)) {
+            return 'The element this followed has been deleted, so it no longer moves. Pick another.';
+        }
+        if (!anchorRoot(box, byId)) {
+            return 'This link loops back on itself, so it cannot be followed. Pick a different element.';
+        }
+        return null;
+    }
+
+    /** "Follows the Contacts table" — the one line that says what the link does. */
+    get anchorSummary() {
+        const box = this.selectedBox;
+        if (!box || box.positionMode !== 'follows' || !box.anchorTo) {
+            return '';
+        }
+        const target = this._siblingsById.get(box.anchorTo);
+        return target ? boxLabel(target) : '';
+    }
+
+    handlePositionModeChange(event) {
+        const box = this.selectedBox;
+        if (!box) {
+            return;
+        }
+        const next = event.detail ? event.detail.value : event.target.value;
+        if (next === 'follows') {
+            // Default to the nearest element ABOVE, which is what "follows" almost
+            // always means and saves a second interaction. Falls back to the first
+            // legal target when there is nothing above.
+            const above = this.anchorOptions
+                .map((o) => this._siblingsById.get(o.value))
+                .filter((b) => b && b.y <= box.y)
+                .pop();
+            const pick = (above && above.id) || (this.anchorOptions[0] || {}).value || '';
+            this.applyToBox(box.id, { positionMode: 'follows', anchorTo: pick });
+            const target = this._siblingsById.get(pick);
+            this.statusText = target
+                ? 'Now follows ' + boxLabel(target)
+                : 'Set to follow — pick the element it should travel with';
+            return;
+        }
+        // Leaving 'follows' clears the anchor rather than keeping it around to be
+        // re-applied invisibly if the mode is switched back.
+        this.applyToBox(box.id, {
+            positionMode: 'fixed',
+            anchorTo: '',
+            keepTogether: false,
+            mode: next === 'flow' ? 'flow' : 'pinned'
+        });
+        this.statusText =
+            next === 'flow'
+                ? 'Flows — content can grow and spill onto following pages'
+                : 'Stays put — lands exactly here';
+    }
+
+    handleAnchorChange(event) {
+        const box = this.selectedBox;
+        if (!box) {
+            return;
+        }
+        const id = event.detail ? event.detail.value : event.target.value;
+        // Belt and braces: the picker already excludes these, but a stale option could
+        // still arrive if the target was deleted between render and change.
+        if (!id || id === box.id || wouldCycle(box, id, this._siblingsById)) {
+            this.statusText = 'That element cannot be followed — it would loop back on itself';
+            return;
+        }
+        this.applyToBox(box.id, { positionMode: 'follows', anchorTo: id });
+        const target = this._siblingsById.get(id);
+        this.statusText = target ? 'Now follows ' + boxLabel(target) : 'Link updated';
+    }
+
+    handleKeepTogetherChange(event) {
+        const box = this.selectedBox;
+        if (!box) {
+            return;
+        }
+        this.applyToBox(box.id, { keepTogether: !!event.target.checked });
     }
 
     /**

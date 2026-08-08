@@ -1101,20 +1101,65 @@
                 </div>
                 <p class="dg-panel-note">Layer {selZ}. Higher sits on top.</p>
 
-                <button class="dg-panel-btn" onclick={handleModeToggle}>
-                    <template lwc:if={selectedIsFlow}>Make it pinned</template>
-                    <template lwc:else>Let it flow across pages</template>
-                </button>
-                <p class="dg-panel-note">
-                    <template lwc:if={selectedIsFlow}>
-                        <b>Flows.</b> Content can grow and spill onto the next page — this is where a line-item loop
-                        goes.
+                <h4 class="dg-panel-sub">Position</h4>
+                <lightning-radio-group
+                    class="dg-pos-mode"
+                    label="Position"
+                    variant="label-hidden"
+                    options={positionModeOptions}
+                    value={selectedPositionMode}
+                    onchange={handlePositionModeChange}
+                ></lightning-radio-group>
+
+                <template lwc:if={isSelectedFollowing}>
+                    <template lwc:if={hasAnchorOptions}>
+                        <lightning-combobox
+                            class="dg-anchor-pick"
+                            label="Follows"
+                            variant="label-hidden"
+                            placeholder="Pick the element to follow…"
+                            options={anchorOptions}
+                            value={selectedAnchorId}
+                            onchange={handleAnchorChange}
+                        ></lightning-combobox>
                     </template>
                     <template lwc:else>
-                        <b>Pinned.</b> Lands exactly where you put it. Does not repeat on continuation pages — use a
-                        running header/footer for that.
+                        <p class="dg-panel-warn">
+                            Nothing on this page can be followed yet — add another element first. Links stay within one
+                            page.
+                        </p>
                     </template>
-                </p>
+
+                    <lightning-input
+                        class="dg-keep-together"
+                        type="checkbox"
+                        label="Keep on the same page as what it follows"
+                        checked={selectedKeepTogether}
+                        onchange={handleKeepTogetherChange}
+                    ></lightning-input>
+
+                    <template lwc:if={anchorIssue}>
+                        <p class="dg-panel-warn">{anchorIssue}</p>
+                    </template>
+                    <template lwc:elseif={anchorSummary}>
+                        <p class="dg-panel-note">
+                            <b>Follows {anchorSummary}.</b> However far that grows at merge time, this lands below it
+                            instead of being overrun — and travels with it onto whatever page it ends on.
+                        </p>
+                    </template>
+                </template>
+                <template lwc:elseif={selectedIsFlow}>
+                    <p class="dg-panel-note">
+                        <b>Flows.</b> Content can grow and spill onto the next page — this is where a line-item loop
+                        goes.
+                    </p>
+                </template>
+                <template lwc:else>
+                    <p class="dg-panel-note">
+                        <b>Stays put.</b> Lands exactly where you put it, and is overrun if something above it grows.
+                        Does not repeat on continuation pages — use a running header/footer for that.
+                    </p>
+                </template>
                 <button class="dg-panel-btn dg-panel-btn_danger" onclick={handleDelete}>Delete box</button>
             </template>
             <template lwc:else>
@@ -1460,6 +1505,23 @@
                             >
                                 <template for:each={renderedGuides} for:item="g">
                                     <div key={g.key} class="dg-guide" style={g.style}></div>
+                                </template>
+                                <!-- Anchor tethers for the selected box's chain. Drawn
+                                     under the boxes and click-through, so it shows the
+                                     relationship without getting in the way of one. -->
+                                <template lwc:if={hasTethers}>
+                                    <svg class="dg-tethers" aria-hidden="true" focusable="false">
+                                        <template for:each={tethers} for:item="t">
+                                            <line
+                                                key={t.key}
+                                                x1={t.x1}
+                                                y1={t.y1}
+                                                x2={t.x2}
+                                                y2={t.y2}
+                                                class="dg-tether-line"
+                                            ></line>
+                                        </template>
+                                    </svg>
                                 </template>
                                 <template for:each={board.boxes} for:item="box">
                                     <div

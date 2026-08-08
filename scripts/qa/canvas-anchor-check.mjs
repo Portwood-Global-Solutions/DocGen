@@ -220,7 +220,10 @@ function tableBox(x, y, w) {
     doc.artboards[0].boxes.push(a, f);
     // Strip the ids a real save would have written, leaving only the anchor — and
     // break the group so the legacy sibling fallback cannot apply either.
-    const mangled = m.serialize(doc, geo).replace(/ data-dg-id="[^"]*"/g, '').replace(/dg-anchored/g, 'dg-pin');
+    const mangled = m
+        .serialize(doc, geo)
+        .replace(/ data-dg-id="[^"]*"/g, '')
+        .replace(/dg-anchored/g, 'dg-pin');
     const rf = m.deserialize(mangled).artboards[0].boxes.find((x) => (x.text || '').includes('Follower'));
     ok(rf && rf.positionMode === 'fixed', 'an unresolvable anchor reverts to fixed');
     ok(rf && !rf.anchorTo, 'and does not keep an id that means nothing');
@@ -246,6 +249,84 @@ function tableBox(x, y, w) {
     const bn = back.artboards[0].boxes.find((x) => (x.text || '').includes('Note'));
     ok(bs && bs.anchorTo === bt.id, 'legacy chain recovers from group order — summary → table');
     ok(bn && bn.anchorTo === bs.id, 'legacy chain recovers from group order — note → summary');
+}
+
+// --- what the inspector may offer as an anchor -------------------------------
+// The picker is where a cycle gets created, so it is where one has to be prevented.
+// Detecting it afterwards is not equivalent: anchorRoot survives a cycle by returning
+// null, which drops the whole set to singletons — both boxes quietly stop travelling
+// and nothing says why.
+{
+    const a = m.newTextBox(1, 1, 3, 0.5);
+    const b = m.newTextBox(1, 2, 3, 0.5);
+    const c = m.newTextBox(1, 3, 3, 0.5);
+    a.text = 'A';
+    b.text = 'B';
+    c.text = 'C';
+    // A chain: C follows B follows A.
+    b.positionMode = 'follows';
+    b.anchorTo = a.id;
+    c.positionMode = 'follows';
+    c.anchorTo = b.id;
+    const byId = new Map([a, b, c].map((x) => [x.id, x]));
+
+    ok(m.wouldCycle(a, a.id, byId), 'a box can never follow itself');
+    ok(m.wouldCycle(a, b.id, byId), 'A cannot follow B — B already follows A');
+    ok(m.wouldCycle(a, c.id, byId), 'nor C, two links further down the same chain');
+    ok(!m.wouldCycle(c, a.id, byId), 'but C may be re-pointed at A — that shortens the chain, it does not loop');
+
+    const d = m.newTextBox(1, 4, 3, 0.5);
+    d.text = 'D';
+    byId.set(d.id, d);
+    ok(!m.wouldCycle(d, c.id, byId), 'an unlinked box may join the end of a chain');
+    ok(!m.wouldCycle(a, d.id, byId), 'and the head may follow something outside its own chain');
+}
+
+// --- labels the picker shows -------------------------------------------------
+{
+    const t = tableBox(1, 1, 5);
+    ok(m.boxLabel(t) === 'Contacts table', 'a table is named by its relationship: ' + m.boxLabel(t));
+
+    const txt = m.newTextBox(1, 1, 3, 0.5);
+    txt.text = 'Summary of everything above';
+    ok(m.boxLabel(txt) === 'Summary of everything above', 'text leads with its own words');
+
+    const long = m.newTextBox(1, 1, 3, 0.5);
+    long.text = 'x'.repeat(80);
+    ok(m.boxLabel(long).length <= 33, 'a long one is truncated (' + m.boxLabel(long).length + ')');
+    ok(m.boxLabel(long).endsWith('…'), 'and says so');
+
+    const empty = m.newTextBox(1, 1, 3, 0.5);
+    empty.text = '';
+    empty.html = '';
+    ok(m.boxLabel(empty) === 'Text', 'an empty box still gets a name rather than a blank row');
+
+    // Every box is built by newTextBox, which seeds `text` with "Text", and a non-text
+    // box never overwrites it — so a horizontal rule offered itself to the picker as
+    // "Text". These must be named by what they ARE.
+    const rule = m.newShapeBox(1, 1, 5, 0.02);
+    rule.shape.type = 'hline';
+    ok(m.boxLabel(rule) === 'Horizontal line', 'a shape is named by its type, not its stale text: ' + m.boxLabel(rule));
+    ok(m.boxLabel(m.newShapeBox(1, 1, 2, 1)) === 'Rectangle', 'and the default shape too');
+    ok(m.boxLabel(m.newImageBox(1, 1, 2, 1)) === 'Image', 'an image says so');
+    ok(m.boxLabel(m.newCodeBox(1, 1)) === 'QR code', 'and a code box names its type');
+    ok(m.boxLabel(m.newSignatureBox(1, 1)) === 'Signature block', 'and a signature block');
+
+    const marked = m.newTextBox(1, 1, 3, 0.5);
+    marked.text = '';
+    marked.html = '<strong>Total</strong> due';
+    ok(m.boxLabel(marked) === 'Total due', 'markup is flattened for the label: ' + m.boxLabel(marked));
+
+    // `text` carries the canvas's own inline mark syntax, so the picker was showing
+    // authoring source ("**Contact Roster**") instead of what is on the page.
+    const bold = m.newTextBox(1, 1, 3, 0.5);
+    bold.text = '**Contact Roster**';
+    ok(m.boxLabel(bold) === 'Contact Roster', 'bold marks are stripped: ' + m.boxLabel(bold));
+    const mixed = m.newTextBox(1, 1, 3, 0.5);
+    mixed.text = '__Total__ //due// ~~now~~';
+    ok(m.boxLabel(mixed) === 'Total due now', 'and so are the others: ' + m.boxLabel(mixed));
+
+    ok(m.boxLabel(null) === '', 'and a missing box does not throw');
 }
 
 console.log(fail ? `\n${fail} FAILED` : '\nanchors OK');
