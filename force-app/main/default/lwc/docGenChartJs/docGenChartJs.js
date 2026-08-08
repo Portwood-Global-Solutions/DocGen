@@ -317,6 +317,42 @@ function buildConfig(style, buckets, opts) {
  * @param {Object} opts - { style, title, width, height, scale }
  * @returns {{ base64: String, width: Number, height: Number }}
  */
+/**
+ * Representative buckets for the canvas designer's live preview.
+ *
+ * The designer is a layout tool: an author is choosing shape, colours and
+ * proportions, not reading numbers. Rendering real aggregates would mean paging
+ * the child list on every keystroke, and a sample record usually holds too few
+ * rows to show what the chart will actually look like. Four uneven buckets read
+ * as a real chart at any size.
+ */
+export const SAMPLE_CHART_BUCKETS = [
+    { key_label: 'Category A', count: 42, percent: 42, color: PALETTE[0] },
+    { key_label: 'Category B', count: 28, percent: 28, color: PALETTE[1] },
+    { key_label: 'Category C', count: 19, percent: 19, color: PALETTE[2] },
+    { key_label: 'Category D', count: 11, percent: 11, color: PALETTE[3] }
+];
+
+/**
+ * Renders buckets into an EXISTING canvas and returns the Chart instance.
+ *
+ * The runner rasterizes to a detached canvas it throws away; the designer needs
+ * the chart to stay on a canvas that is already in the DOM, and needs the
+ * instance back so it can destroy it before repainting. Same config builder
+ * feeds both, so a preview and the finished document cannot drift apart.
+ *
+ * Cross-tab styles have no client-side implementation yet, so they preview as a
+ * bar — honest about the data shape without pretending to a layout the browser
+ * cannot produce.
+ */
+export function renderChartToCanvas(ChartCtor, canvas, buckets, opts) {
+    const requested = (opts.style || 'bar').toLowerCase();
+    const style = isStyleSupported(requested) ? requested : 'bar';
+    const config = buildConfig(style, buckets, opts || {});
+    config.plugins = [valueLabelPlugin(style, buckets)];
+    return new ChartCtor(canvas.getContext('2d'), config);
+}
+
 export function renderChartPng(ChartCtor, buckets, opts) {
     const style = (opts.style || 'bar').toLowerCase();
     const logicalWidth = Number(opts.width) || 540;

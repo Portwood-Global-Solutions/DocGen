@@ -608,6 +608,25 @@ export const CODE_TYPES = [
 export const DEFAULT_CODE = { field: '', type: 'qr', size: 200, height: 80 };
 
 /**
+ * Chart styles offered in the designer.
+ *
+ * Ordered by how often they are the right answer, not alphabetically — bar and
+ * column carry most real reports. The cross-tab three are grouped last because
+ * they need a second dimension (groupBy) to mean anything.
+ */
+export const CHART_STYLES = [
+    { label: 'Bar (horizontal)', value: 'bar' },
+    { label: 'Column (vertical)', value: 'column' },
+    { label: 'Donut', value: 'donut' },
+    { label: 'Pie', value: 'pie' },
+    { label: 'Line', value: 'line' },
+    { label: 'Area', value: 'area' },
+    { label: 'Stacked bar (cross-tab)', value: 'stacked' },
+    { label: 'Clustered column (cross-tab)', value: 'clustered' },
+    { label: 'Pivot table (cross-tab)', value: 'pivot' }
+];
+
+/**
  * Chart element defaults.
  *
  * `relationship` + `field` are the child list and the field to bucket by — the

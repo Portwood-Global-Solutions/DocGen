@@ -807,6 +807,104 @@
                     </template>
                 </template>
 
+                <template lwc:if={selectedIsChart}>
+                    <h4 class="dg-panel-sub">Chart</h4>
+                    <label class="dg-panel-label">Related list</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selChart.relationship}
+                        placeholder="Opportunities"
+                        data-key="relationship"
+                        onchange={handleChartChange}
+                    />
+                    <label class="dg-panel-label">Group by field</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selChart.field}
+                        placeholder="StageName"
+                        data-key="field"
+                        onchange={handleChartChange}
+                    />
+                    <p class="dg-panel-note">
+                        Or click a field below — the first click sets the related list, the next sets the field.
+                    </p>
+
+                    <lightning-combobox
+                        label="Style"
+                        variant="label-stacked"
+                        value={selChart.style}
+                        options={chartStyleOptions}
+                        data-key="style"
+                        onchange={handleChartChange}
+                    ></lightning-combobox>
+
+                    <label class="dg-panel-label">Title</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selChart.title}
+                        placeholder="Pipeline by stage"
+                        data-key="title"
+                        onchange={handleChartChange}
+                    />
+
+                    <label class="dg-panel-label">Colours</label>
+                    <input
+                        class="dg-panel-input"
+                        type="text"
+                        value={selChart.colors}
+                        placeholder="#1e3a8a,#f59e0b,#10b981"
+                        data-key="colors"
+                        onchange={handleChartChange}
+                    />
+
+                    <label class="dg-panel-label">Multi-select separator</label>
+                    <input
+                        class="dg-panel-input dg-panel-input_sm"
+                        type="text"
+                        value={selChart.split}
+                        placeholder=";"
+                        data-key="split"
+                        onchange={handleChartChange}
+                    />
+                    <p class="dg-panel-note">
+                        Set this when one record stores several answers in one field. Percentages then add up to more
+                        than 100% by design.
+                    </p>
+
+                    <template lwc:if={selChartIsCrossTab}>
+                        <label class="dg-panel-label">Split columns by</label>
+                        <input
+                            class="dg-panel-input"
+                            type="text"
+                            value={selChart.groupBy}
+                            placeholder="Type"
+                            data-key="groupBy"
+                            onchange={handleChartChange}
+                        />
+                        <label class="dg-panel-label">Column order</label>
+                        <input
+                            class="dg-panel-input"
+                            type="text"
+                            value={selChart.colSort}
+                            placeholder="New,Existing"
+                            data-key="colSort"
+                            onchange={handleChartChange}
+                        />
+                        <p class="dg-panel-note">
+                            Cross-tab styles group server-side, so the grouped field must be groupable — a long text
+                            area will not work.
+                        </p>
+                    </template>
+
+                    <p class="dg-panel-note">
+                        The chart is drawn at the size of the box, so resizing it here is what changes its shape in the
+                        document.
+                    </p>
+                </template>
+
                 <template lwc:if={selectedIsCode}>
                     <h4 class="dg-panel-sub">QR / barcode</h4>
                     <lightning-combobox

@@ -35,7 +35,7 @@ import {
     finalizeBuckets,
     renderChartPng,
     isStyleSupported
-} from './docGenChartJsRenderer';
+} from 'c/docGenChartJs';
 import { buildDocx } from './docGenZipWriter';
 import { mergePdfs } from './docGenPdfMerger';
 import { extractFirstImageFromPdfBase64 } from './docGenPdfImageExtractor';

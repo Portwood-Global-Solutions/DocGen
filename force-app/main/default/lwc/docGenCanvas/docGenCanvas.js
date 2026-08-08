@@ -7,6 +7,9 @@ import getVersionBody from '@salesforce/apex/DocGenController.getVersionBody';
 import getAssets from '@salesforce/apex/DocGenController.getAssets';
 import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import { extractQueryShape } from 'c/docGenAuthoringKit';
+import { loadScript } from 'lightning/platformResourceLoader';
+import CHARTJS_RESOURCE from '@salesforce/resourceUrl/DocGenChartJs';
+import { renderChartToCanvas, SAMPLE_CHART_BUCKETS } from 'c/docGenChartJs';
 import { updateRecord } from 'lightning/uiRecordApi';
 import LightningConfirm from 'lightning/confirm';
 import ID_FIELD from '@salesforce/schema/DocGen_Template__c.Id';
@@ -45,7 +48,9 @@ import {
     newCodeBox,
     codeBoxSize,
     CODE_TYPES,
+    CHART_STYLES,
     newSignatureBox,
+    newChartBox,
     signatureBoxSize,
     SIGNATURE_TYPES,
     htmlToCanvas,
@@ -114,6 +119,11 @@ export default class DocGenCanvas extends LightningElement {
     @track selectedId = null;
     @track zoom = 1;
     @track activeTool = 'select';
+
+    // Live Chart.js instances keyed by box id. Chart.js registers per canvas, so
+    // an instance must be destroyed before its box is repainted or the registry
+    // leaks and every later render slows down.
+    _chartInstances = new Map();
     @track isSaving = false;
     @track statusText = '';
     // Alignment guides for the box being dragged. Cleared on mouseup.
@@ -888,6 +898,13 @@ export default class DocGenCanvas extends LightningElement {
                 d: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z'
             },
             {
+                id: 'chart',
+                label: 'Chart',
+                title: 'Add a chart over a related list',
+                action: 'tool',
+                d: 'M3 21h18M6 21V10M11 21V4M16 21v-7M21 21v-11'
+            },
+            {
                 id: 'signature',
                 label: 'Signature',
                 title: 'Add a place for someone to sign',
@@ -1453,6 +1470,8 @@ export default class DocGenCanvas extends LightningElement {
             this.statusText = 'Column added: ' + label;
         } else if (box.kind === 'code') {
             this.bindFieldToCode(box, tag);
+        } else if (box.kind === 'chart') {
+            this.bindFieldToChart(box, tag);
         } else {
             // Append to the RICH TEXT content. It used to append to box.text, which
             // stopped being what the box renders when editing moved into the rich-text
@@ -1773,6 +1792,12 @@ export default class DocGenCanvas extends LightningElement {
             window.removeEventListener('keydown', this._onKey);
             this._onKey = null;
         }
+        // Chart.js holds a registry entry per canvas; without this, reopening the
+        // designer accumulates dead instances for the lifetime of the page.
+        for (const chart of this._chartInstances.values()) {
+            chart.destroy();
+        }
+        this._chartInstances.clear();
         if (this.previewUrl) {
             URL.revokeObjectURL(this.previewUrl);
             this.previewUrl = null;
@@ -2048,6 +2073,100 @@ export default class DocGenCanvas extends LightningElement {
                 el.innerHTML = want;
             }
         }
+        this.paintChartPreviews();
+    }
+
+    /**
+     * Draws every configured chart box onto its canvas.
+     *
+     * Runs after the painter has written the placeholders, because setting
+     * innerHTML replaces the canvas element and would discard anything drawn
+     * into the old one.
+     *
+     * Preview data is representative, not live: the designer is a layout tool
+     * and an author is choosing shape, colours and proportions here. Rendering
+     * real aggregates would mean paging the child list on every keystroke, and
+     * the sample record often has too little data to show what the chart will
+     * look like in production anyway.
+     */
+    async paintChartPreviews() {
+        const canvases = this.template.querySelectorAll('.dg-chart-canvas');
+        if (!canvases || !canvases.length) {
+            return;
+        }
+        let ChartCtor;
+        try {
+            ChartCtor = await this.ensureChartJs();
+        } catch (e) {
+            // No preview is a cosmetic loss; the tag still generates correctly.
+            return;
+        }
+        if (!ChartCtor) {
+            return;
+        }
+        const byId = new Map();
+        for (const board of this.doc.artboards) {
+            for (const b of board.boxes) byId.set(b.id, b);
+        }
+        for (const canvas of canvases) {
+            const model = byId.get(canvas.dataset.chartFor);
+            if (!model) continue;
+            const wPx = Math.max(40, inToPx(model.w, this.zoom));
+            const hPx = Math.max(30, inToPx(model.h, this.zoom));
+            if (
+                canvas.width === wPx &&
+                canvas.height === hPx &&
+                canvas.dataset.painted === this.chartFingerprint(model)
+            ) {
+                continue;
+            }
+            canvas.width = wPx;
+            canvas.height = hPx;
+            canvas.dataset.painted = this.chartFingerprint(model);
+            const existing = this._chartInstances.get(model.id);
+            if (existing) {
+                existing.destroy();
+            }
+            const c = model.chart || {};
+            const palette = String(c.colors || '')
+                .split(',')
+                .map((x) => x.trim())
+                .filter(Boolean);
+            const buckets = SAMPLE_CHART_BUCKETS.map((b, i) => ({
+                ...b,
+                color: palette.length ? palette[i % palette.length] : b.color
+            }));
+            try {
+                this._chartInstances.set(
+                    model.id,
+                    renderChartToCanvas(ChartCtor, canvas, buckets, {
+                        style: c.style || 'bar',
+                        title: c.title || ''
+                    })
+                );
+            } catch (e) {
+                // Leave the canvas blank rather than break the board.
+            }
+        }
+    }
+
+    /** Any change that should force a repaint. */
+    chartFingerprint(model) {
+        const c = model.chart || {};
+        return [c.style, c.title, c.colors, model.w, model.h, this.zoom].join('|');
+    }
+
+    async ensureChartJs() {
+        if (window.Chart) {
+            return window.Chart;
+        }
+        await loadScript(this, CHARTJS_RESOURCE);
+        return window.Chart;
+    }
+
+    refreshChartPreview() {
+        // The painter runs on the next render; nudging tracked state is enough.
+        this.paintChartPreviews();
     }
 
     /**
@@ -2322,6 +2441,62 @@ export default class DocGenCanvas extends LightningElement {
      * of the layout can be built around it instead of guessed at and corrected after
      * the first render.
      */
+    // ---------------------------------------------------------------- chart
+    get selectedIsChart() {
+        const b = this.selectedBox;
+        return !!b && b.kind === 'chart';
+    }
+
+    get selChart() {
+        return (this.selectedBox || {}).chart || {};
+    }
+
+    get chartStyleOptions() {
+        return CHART_STYLES;
+    }
+
+    /**
+     * Cross-tab styles need a second dimension; the plain ones must not show
+     * those inputs or an author will fill them in and wonder why nothing
+     * changed.
+     */
+    get selChartIsCrossTab() {
+        return ['stacked', 'clustered', 'pivot'].indexOf(this.selChart.style || 'bar') !== -1;
+    }
+
+    handleChartChange(event) {
+        const key = event.currentTarget.dataset.key;
+        const box = this.selectedBox;
+        if (!box || box.kind !== 'chart') return;
+        const value = event.detail && event.detail.value != null ? event.detail.value : event.target.value;
+        const chart = { ...box.chart, [key]: value };
+        this.applyToBox(box.id, { chart });
+        this.refreshChartPreview(box.id);
+    }
+
+    /**
+     * Clicking a field chip with a chart box selected binds it — relationship
+     * first (it is the one the author cannot guess), then the bucket field.
+     */
+    bindFieldToChart(box, token) {
+        // Strip the braces and any format suffix — a chart groups by the raw
+        // field, and `{Amount:currency}` would not resolve.
+        const clean = String(token || '')
+            .trim()
+            .replace(/^\{|\}$/g, '')
+            .split(':')[0];
+        const chart = { ...box.chart };
+        if (!chart.relationship) {
+            chart.relationship = clean;
+            this.statusText = 'Chart reads ' + clean;
+        } else {
+            chart.field = clean;
+            this.statusText = 'Chart groups by ' + clean;
+        }
+        this.applyToBox(box.id, { chart });
+        this.refreshChartPreview();
+    }
+
     handleCodeChange(event) {
         const key = event.currentTarget.dataset.key;
         const box = this.selectedBox;
@@ -2440,6 +2615,20 @@ export default class DocGenCanvas extends LightningElement {
      * emits — the canvas is only worth having if the two agree.
      */
     previewHtmlFor(model) {
+        if (model.kind === 'chart') {
+            // A <canvas> placeholder only. Chart.js paints into it after the DOM
+            // settles (paintChartPreviews) — drawing here would be wiped by the
+            // very next innerHTML comparison in the painter loop.
+            const c = model.chart || {};
+            if (!c.relationship || !c.field) {
+                return (
+                    '<div class="dg-chart-empty">' +
+                    '<strong>Chart</strong><br/>Pick a related list and a field to group by.' +
+                    '</div>'
+                );
+            }
+            return '<canvas class="dg-chart-canvas" data-chart-for="' + model.id + '"></canvas>';
+        }
         if (model.kind === 'table') {
             return tablePreviewHtml(model);
         }
@@ -2561,7 +2750,7 @@ export default class DocGenCanvas extends LightningElement {
 
     /** Click the artboard with the Text tool armed to place a box where you clicked. */
     handleBoardClick(event) {
-        const PLACING = ['text', 'table', 'image', 'shape', 'code', 'signature'];
+        const PLACING = ['text', 'table', 'image', 'shape', 'code', 'signature', 'chart'];
         if (PLACING.indexOf(this.activeTool) === -1) {
             if (event.target.classList.contains('dg-board')) {
                 this.selectedId = null;
@@ -2585,6 +2774,8 @@ export default class DocGenCanvas extends LightningElement {
             fresh = newShapeBox(x, y, 2, 1);
         } else if (tool === 'code') {
             fresh = newCodeBox(x, y);
+        } else if (tool === 'chart') {
+            fresh = newChartBox(x, y, 4.5, 2.8);
         } else if (tool === 'signature') {
             fresh = newSignatureBox(x, y);
         } else {
