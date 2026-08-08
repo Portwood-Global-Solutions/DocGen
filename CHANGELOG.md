@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Canvas bold is no longer a silent no-op on `'Arial Unicode MS'` (#281).** The PDF
+  engine (`Blob.toPdf`/Flying Saucer) embeds Arial Unicode MS with no bold face, so a
+  bold box set to it printed regular while the canvas showed bold — WYSIWYG said
+  "weight" where the PDF could not deliver. The Bold control is now disabled for that
+  font (and cleared if you switch a bold box to it), the canvas stops showing it as on,
+  and the serializer stops emitting the no-op `font-weight: bold`. The corrected
+  `FONT_CHOICES` note no longer claims bold. The generic families are unaffected: they
+  resolve to the base-14 bold faces (verified selecting Helvetica-Bold / Times-Bold /
+  Courier-Bold in a real org).
+
 ## v3.55.0 — Element linking, named blocks, client-side charts
 
 Released 2026-08-08 · `04tVx0000010fXFIAY` · ancestor 3.54.0 · 1,957 tests, 78% coverage

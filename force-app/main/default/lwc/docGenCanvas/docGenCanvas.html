@@ -221,7 +221,13 @@
                     </div>
 
                     <div class="dg-prop-row">
-                        <button class={boldClass} data-key="bold" onclick={handleStyleToggle} title="Bold">
+                        <button
+                            class={boldClass}
+                            data-key="bold"
+                            onclick={handleStyleToggle}
+                            disabled={boxBoldDisabled}
+                            title={boldTitle}
+                        >
                             <b>B</b>
                         </button>
                         <button class={italicClass} data-key="italic" onclick={handleStyleToggle} title="Italic">
@@ -447,6 +453,8 @@
                             data-which="header"
                             data-key="bold"
                             onclick={handleRowTextChange}
+                            disabled={headerBoldDisabled}
+                            title={headerBoldTitle}
                         >
                             <b>B</b>
                         </button>
@@ -483,7 +491,14 @@
                             data-key="color"
                             onchange={handleRowTextChange}
                         />
-                        <button class={rowBoldClass} data-which="row" data-key="bold" onclick={handleRowTextChange}>
+                        <button
+                            class={rowBoldClass}
+                            data-which="row"
+                            data-key="bold"
+                            onclick={handleRowTextChange}
+                            disabled={rowBoldDisabled}
+                            title={rowBoldTitle}
+                        >
                             <b>B</b>
                         </button>
                     </div>
@@ -570,7 +585,8 @@
                                 data-which="totals"
                                 data-key="bold"
                                 onclick={handleRowTextChange}
-                                title="Bold"
+                                disabled={totalsBoldDisabled}
+                                title={totalsBoldTitle}
                             >
                                 <b>B</b>
                             </button>

@@ -163,7 +163,58 @@ sigB.signature = { role: 'Customer', order: 1, type: 'Date', inline: true };
 sigDoc.artboards[0].boxes.push(sigA, sigB);
 const sigHtml = m.serialize(sigDoc, geo);
 
+// --- #281: Arial Unicode MS has no bold face in the PDF engine -----------------
+// Blob.toPdf embeds Arial Unicode MS WITHOUT a bold variant, so font-weight:bold on
+// it silently prints regular — the canvas promised a weight the PDF cannot deliver.
+// The serializer must NOT emit that no-op bold, while the generic families (which
+// resolve to Helvetica-Bold / Times-Bold / Courier-Bold) must still serialize bold.
+const UNICODE = m.UNICODE_FONT;
+const boldChecks = [
+    ['canRenderBold: Arial Unicode MS (quoted) has no bold', m.canRenderBold(UNICODE) === false],
+    ['canRenderBold: Arial Unicode MS (unquoted) has no bold', m.canRenderBold('Arial Unicode MS') === false],
+    ['canRenderBold: generic sans-serif supports bold', m.canRenderBold('sans-serif') === true],
+    ['canRenderBold: generic serif supports bold', m.canRenderBold('serif') === true],
+    ['canRenderBold: no font supports bold', m.canRenderBold(undefined) === true]
+];
+
+// A generic-font bold box must still serialize font-weight:bold (renders Helvetica-Bold).
+const boldGenericDoc = m.blankDocument();
+const boldGenericBox = m.newTextBox(1, 1, 4, 0.5);
+boldGenericBox.style = { ...boldGenericBox.style, bold: true, font: 'sans-serif' };
+boldGenericBox.text = 'Generic bold';
+boldGenericDoc.artboards[0].boxes.push(boldGenericBox);
+const boldGenericHtml = m.serialize(boldGenericDoc, geo);
+
+// An Arial-Unicode bold box must NOT serialize a no-op bold.
+const boldUnicodeDoc = m.blankDocument();
+const boldUnicodeBox = m.newTextBox(1, 1, 4, 0.5);
+boldUnicodeBox.style = { ...boldUnicodeBox.style, bold: true, font: UNICODE };
+boldUnicodeBox.text = 'Unicode bold';
+boldUnicodeDoc.artboards[0].boxes.push(boldUnicodeBox);
+const boldUnicodeHtml = m.serialize(boldUnicodeDoc, geo);
+
+// The same for table bands (header/totals) under Arial Unicode MS.
+const boldUnicodeTblDoc = m.blankDocument();
+const boldUnicodeTbl = m.newTableBox(1, 3, 5);
+boldUnicodeTbl.style = { ...boldUnicodeTbl.style, font: UNICODE };
+boldUnicodeTbl.table.rows = [['Item', '1']];
+boldUnicodeTbl.table.totals = { enabled: true, cells: ['Subtotal', '{Total}'] };
+boldUnicodeTbl.table.headerText = { ...boldUnicodeTbl.table.headerText, font: UNICODE, bold: true };
+boldUnicodeTbl.table.totalsText = { ...boldUnicodeTbl.table.totalsText, font: UNICODE, bold: true };
+boldUnicodeTblDoc.artboards[0].boxes.push(boldUnicodeTbl);
+const boldUnicodeTblHtml = m.serialize(boldUnicodeTblDoc, geo);
+
+boldChecks.push(
+    ['generic-font bold box still serializes bold', boldGenericHtml.includes('font-weight: bold;')],
+    ['ArialUnicode bold box does not serialize a no-op bold', !boldUnicodeHtml.includes('font-weight: bold;')],
+    [
+        'ArialUnicode table header/totals bold suppressed',
+        !boldUnicodeTblHtml.includes('font-weight: bold;') && boldUnicodeTblHtml.includes('font-weight: normal;')
+    ]
+);
+
 const checks = [
+    ...boldChecks,
     // 2.5in authored is the OUTER width. The default 2pt padding sits inside it, so the
     // emitted content width is 2.5 - 2x2pt = 2.444in and the box still measures 2.5in
     // edge to edge — which is what the author dragged and what the canvas draws.
