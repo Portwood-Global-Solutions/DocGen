@@ -518,6 +518,37 @@ export default class DocGenCanvas extends LightningElement {
      * place, and it cannot: the file is read here and written to whichever Canvas
      * template is already open.
      */
+    /**
+     * Downloads the canvas as a standalone .html file.
+     *
+     * Deliberately the SAME output `serialize` writes on save, not a cleaned-up
+     * or flattened variant. It therefore still carries the data-dg-* authoring
+     * attributes, which is what lets Import HTML read it straight back — export
+     * then import is a round trip, so this doubles as "take this template to
+     * another org" and as a backup before a risky edit.
+     */
+    handleExportHtml() {
+        try {
+            const html = serialize(this.doc, this.geo);
+            const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = this.exportFileName;
+            a.click();
+            // Revoke on the next tick: revoking synchronously can cancel the
+            // download in Safari before it has read the blob.
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+            this.statusText = 'Exported ' + this.exportFileName;
+        } catch (e) {
+            this.statusText = 'Export failed: ' + (e && e.message ? e.message : 'unknown error');
+        }
+    }
+
+    get exportFileName() {
+        const base = String(this.baseObject || 'canvas').replace(/[^A-Za-z0-9_-]+/g, '-');
+        return 'portwood-' + base.toLowerCase() + '-canvas.html';
+    }
+
     async handleImportFile(event) {
         const file = (event.target.files || [])[0];
         // Cleared immediately so re-picking the same file fires change again.

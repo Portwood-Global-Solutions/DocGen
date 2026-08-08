@@ -1231,6 +1231,13 @@
                     Import HTML
                 </button>
                 <input type="file" accept=".html,.htm,text/html" class="dg-import-input" onchange={handleImportFile} />
+                <button
+                    class="dg-qb-btn dg-qb-wide"
+                    onclick={handleExportHtml}
+                    title="Download this canvas as an HTML file you can import again"
+                >
+                    Export HTML
+                </button>
                 <button class="dg-qb-save" onclick={handleSave} disabled={isSaving}>
                     <template lwc:if={isSaving}>Saving…</template>
                     <template lwc:else>Save</template>
