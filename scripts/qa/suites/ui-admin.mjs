@@ -799,12 +799,20 @@ export async function run({ org, headed }) {
          * record is created, and the editor it opens is the CANVAS artboard, not the
          * flow designer. They are different components with different markup — a probe
          * for `.dg-pv` would pass on a Canvas template only by accident. */
-        await clickByText(page, 'lightning-button', 'Back', { exact: true });
+        // Re-enter the wizard from the tab rather than pressing Back. Back depended on
+        // whatever state the previous phase left behind, and after the file-path create
+        // that is no longer the card screen — so the canvas card was never clicked and
+        // the whole phase reported three blockers for a path that works. Verified by
+        // hand: this sequence creates the record and types it Canvas.
+        await clickByText(page, '[role="tab"]', 'Your Templates');
+        await wait(1500);
+        await clickByText(page, '[role="tab"]', 'Create New');
         await wait(2500);
+        await drainToasts(page);
         await mouseClick(page, '[data-mode="canvas"]');
-        await wait(1200);
+        await wait(1500);
         await typeField(page, 'Template Name', NAME_STARTER);
-        await wait(600);
+        await wait(800);
         await drainToasts(page);
         await clickByText(page, 'lightning-button', 'Create & Open Canvas');
         const canvasUp = await until(
