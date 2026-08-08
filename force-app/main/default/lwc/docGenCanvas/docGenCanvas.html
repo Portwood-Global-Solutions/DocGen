@@ -903,6 +903,23 @@
                         than 100% by design.
                     </p>
 
+                    <label class="dg-panel-label">Label size</label>
+                    <input
+                        class="dg-panel-input dg-panel-input_sm"
+                        type="number"
+                        min="6"
+                        max="48"
+                        step="1"
+                        value={selChart.fontSize}
+                        placeholder="12"
+                        data-key="fontSize"
+                        onchange={handleChartChange}
+                    />
+                    <p class="dg-panel-note">
+                        Size of the axis labels and values, in pixels. Leave blank for the default of 12, which prints
+                        at about 9pt. Worth raising when the chart sits in a small box — the labels shrink with it.
+                    </p>
+
                     <template lwc:if={selChartIsCrossTab}>
                         <label class="dg-panel-label">Split columns by (required)</label>
                         <input

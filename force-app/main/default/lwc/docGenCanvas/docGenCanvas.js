@@ -58,18 +58,23 @@ import {
     anchorRoot,
     wouldCycle,
     boxLabel,
-    normalizeCustomPage as normalizeCustom
+    normalizeCustomPage as normalizeCustom,
+    canRenderBold
 } from './canvasModel';
 
 /**
- * Arial Unicode MS has no bold face in the PDF engine (Blob.toPdf), so a bold this
- * font carries silently prints regular. The canvas disables the Bold control for it
- * so it stops promising a weight the PDF cannot deliver. Mirrors canRenderBold in
- * canvasModel (which also suppresses serialization) — keeping both in sync:
- * canRenderBold must stay the exact inverse of this.
+ * Arial Unicode MS has no bold face in the PDF engine (Blob.toPdf), so a bold this font
+ * carries silently prints regular. The canvas disables the Bold control for it, so
+ * authoring and output agree.
+ *
+ * Derived from canvasModel's canRenderBold rather than restating it. This began as a
+ * second copy of the rule with a comment asking future editors to keep the two as exact
+ * inverses — which is how layerLabel came to disagree with boxLabel in this same file,
+ * silently, for as long as it took someone to notice a name showing up in three places
+ * out of four. One function decides; this reads it.
  */
 function isUnicodeFont(font) {
-    return typeof font === 'string' && font.replace(/['"]/g, '').toLowerCase() === 'arial unicode ms';
+    return !canRenderBold(font);
 }
 
 /**
@@ -2366,7 +2371,11 @@ export default class DocGenCanvas extends LightningElement {
                     model.id,
                     renderChartToCanvas(ChartCtor, canvas, buckets, {
                         style: c.style || 'bar',
-                        title: c.title || ''
+                        title: c.title || '',
+                        // The preview has to honour the label size too, or the artboard
+                        // shows one thing and the PDF prints another — which is the
+                        // whole premise of this editor.
+                        fontSize: c.fontSize
                     })
                 );
             } catch (e) {

@@ -151,7 +151,7 @@ export function finalizeBuckets(acc, paletteOverride) {
  * rasterizer emits. Chart.js core has no datalabels plugin and we are not
  * shipping another dependency for one string per bar.
  */
-function valueLabelPlugin(style, buckets) {
+function valueLabelPlugin(style, buckets, fontPx) {
     return {
         id: 'docgenValueLabels',
         afterDatasetsDraw(chart) {
@@ -162,7 +162,9 @@ function valueLabelPlugin(style, buckets) {
             }
             ctx.save();
             ctx.fillStyle = '#334155';
-            ctx.font = `500 12px ${FONT_STACK}`;
+            // Scaled like every other label; a hardcoded size here would be the one
+            // piece of text that still shrank as the chart grew.
+            ctx.font = `500 ${fontPx || 12}px ${FONT_STACK}`;
             meta.data.forEach((element, i) => {
                 const b = buckets[i];
                 if (!b) {
@@ -185,11 +187,58 @@ function valueLabelPlugin(style, buckets) {
     };
 }
 
+/** Tick, legend and value-label size, in canvas pixels. */
+const BASE_TICK_PX = 12;
+
+/** Title size, in canvas pixels. */
+const BASE_TITLE_PX = 16;
+
+/**
+ * The tick, legend and value-label size for these options.
+ *
+ * ABSOLUTE, deliberately, and it took a wrong turn to be sure of it.
+ *
+ * The first attempt scaled these with `width=`, reasoning that Chart.js sizes text in
+ * canvas pixels and PowerPoint then stretches the PNG to whatever its shape is — so a
+ * fixed pixel size does not survive that trip, and raising `width=` to sharpen a chart
+ * actually shrinks its labels.
+ *
+ * All true for PowerPoint. False for the Canvas designer, where chartToHtml emits
+ * `width=inToCssPx(box.w)` — the tag's width IS the block's physical width, and the
+ * image is placed at exactly that size. There, 12px has always meant a steady ~9pt at
+ * any box size, and scaling it would have made a 3-inch chart render ~5pt labels.
+ *
+ * One rule cannot be right for both, because `width=` means different things on each
+ * path. So the default stays absolute — no regression to the case that was already
+ * correct — and `fontSize=` is the explicit knob for the case that is not. The Canvas
+ * chart properties expose it directly; a hand-written tag can set it too.
+ *
+ * A function rather than a value stashed on the config: `common` is spread into
+ * `options`, so anything hung on it lands at `config.options.*` and a reader looking
+ * for `config.*` finds undefined. The chart and the value-label plugin both ask here,
+ * so they cannot disagree.
+ */
+function resolveTickPx(opts) {
+    const requested = Number((opts || {}).fontSize);
+    return requested > 0 ? Math.round(requested) : BASE_TICK_PX;
+}
+
+/** Title size — proportional to the ticks, so one override moves both. */
+function resolveTitlePx(opts) {
+    const requested = Number((opts || {}).fontSize);
+    return requested > 0 ? Math.round(requested * 1.34) : BASE_TITLE_PX;
+}
+
 function buildConfig(style, buckets, opts) {
     const labels = buckets.map((b) => b.key_label);
     const data = buckets.map((b) => b.count);
     const colors = buckets.map((b) => b.color);
     const title = opts.title || '';
+
+    // fontSize= is the author's override, in points at the baseline width; it scales
+    // with the canvas like the defaults do, so it means the same thing at any width.
+    const tickPx = resolveTickPx(opts);
+    const titlePx = resolveTitlePx(opts);
 
     const common = {
         responsive: false,
@@ -203,7 +252,7 @@ function buildConfig(style, buckets, opts) {
                       text: title,
                       align: 'start',
                       color: '#0f172a',
-                      font: { family: FONT_STACK, size: 16, weight: '600' },
+                      font: { family: FONT_STACK, size: titlePx, weight: '600' },
                       padding: { top: 0, bottom: 16 }
                   }
                 : { display: false }
@@ -211,7 +260,7 @@ function buildConfig(style, buckets, opts) {
     };
 
     const gridColor = '#e2e8f0';
-    const tickFont = { family: FONT_STACK, size: 12 };
+    const tickFont = { family: FONT_STACK, size: tickPx };
 
     if (style === 'pie' || style === 'donut') {
         return {
@@ -353,7 +402,7 @@ export function renderChartToCanvas(ChartCtor, canvas, buckets, opts) {
     const requested = (opts.style || 'bar').toLowerCase();
     const style = isStyleSupported(requested) ? requested : 'bar';
     const config = buildConfig(style, buckets, opts || {});
-    config.plugins = [valueLabelPlugin(style, buckets)];
+    config.plugins = [valueLabelPlugin(style, buckets, resolveTickPx(opts))];
     return new ChartCtor(canvas.getContext('2d'), config);
 }
 
@@ -377,7 +426,7 @@ export function renderChartPng(ChartCtor, buckets, opts) {
     ctx.scale(scale, scale);
 
     const config = buildConfig(style, buckets, opts);
-    config.plugins = [valueLabelPlugin(style, buckets)];
+    config.plugins = [valueLabelPlugin(style, buckets, resolveTickPx(opts))];
 
     const chart = new ChartCtor(ctx, config);
     try {
@@ -535,4 +584,16 @@ export async function prepareChartsClientSide({ templateId, recordId, ChartCtor,
     }
 
     return { map, cvIds, bucketMap };
+}
+
+/**
+ * The assembled Chart.js config, for tests.
+ *
+ * Label sizing is derived from `width=` and `fontSize=` and then used in three places
+ * — ticks, title, and the value-label plugin. That arithmetic is worth pinning down,
+ * and reading it off the real config is the only way to check it without a browser
+ * canvas. scripts/qa/chart-font-scale-check.mjs is the caller.
+ */
+export function buildChartConfigForTest(style, buckets, opts) {
+    return buildConfig(style, buckets, opts || {});
 }
