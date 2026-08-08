@@ -1238,99 +1238,12 @@
                 >
                     Export HTML
                 </button>
-                <template lwc:if={showAiButton}>
-                    <button
-                        class="dg-qb-btn dg-qb-wide"
-                        onclick={handleAiOpen}
-                        title="Rewrite the selected element, or draft a new document, with Agentforce"
-                    >
-                        Agentforce
-                    </button>
-                </template>
                 <button class="dg-qb-save" onclick={handleSave} disabled={isSaving}>
                     <template lwc:if={isSaving}>Saving…</template>
                     <template lwc:else>Save</template>
                 </button>
                 <span class="dg-qb-status">{statusText}</span>
             </div>
-
-            <template lwc:if={aiPanelOpen}>
-                <div class="dg-data-wrap">
-                    <div class="dg-data-bar">
-                        Agentforce
-                        <button class="dg-sbtn" onclick={handleAiClose}>Close</button>
-                    </div>
-                    <div class="dg-ai-body">
-                        <lightning-radio-group
-                            class="dg-ai-mode"
-                            label="What should it do?"
-                            variant="label-hidden"
-                            type="button"
-                            options={aiModeOptions}
-                            value={aiMode}
-                            onchange={handleAiModeChange}
-                        ></lightning-radio-group>
-
-                        <template lwc:if={aiRewriteBlocked}>
-                            <p class="dg-panel-warn">{aiRewriteBlocked}</p>
-                        </template>
-
-                        <lightning-textarea
-                            class="dg-ai-instruction"
-                            label={aiInstructionLabel}
-                            placeholder={aiInstructionPlaceholder}
-                            value={aiInstruction}
-                            onchange={handleAiInstructionChange}
-                        ></lightning-textarea>
-
-                        <template lwc:if={isAiRewrite}>
-                            <p class="dg-ai-note">
-                                Only the selected element's content changes. Its position, size and any links to other
-                                elements stay exactly as they are, and undo brings the old content back.
-                            </p>
-                        </template>
-                        <template lwc:else>
-                            <p class="dg-ai-note">
-                                Drafting replaces everything on the canvas. Page furniture — titles, dates, bands,
-                                footers — arrives placed where it belongs; anything that grows with your data, like a
-                                table, is left flowing beneath it. Expect to nudge things. Nothing reaches the template
-                                until you press Save.
-                            </p>
-                            <template lwc:if={aiNeedsDiscardConfirm}>
-                                <lightning-input
-                                    type="checkbox"
-                                    label="Yes, replace what is on this canvas"
-                                    checked={aiConfirmDiscard}
-                                    onchange={handleAiConfirmDiscardChange}
-                                ></lightning-input>
-                            </template>
-                        </template>
-
-                        <div class="dg-ai-actions">
-                            <button class="dg-qb-save" onclick={handleAiSubmit} disabled={aiSubmitDisabled}>
-                                {aiSubmitLabel}
-                            </button>
-                        </div>
-
-                        <template lwc:if={aiError}>
-                            <p class="dg-panel-warn">{aiError}</p>
-                        </template>
-                        <template lwc:if={aiSummary}>
-                            <p class="dg-ai-summary">{aiSummary}</p>
-                        </template>
-                        <template lwc:if={hasAiReport}>
-                            <ul class="dg-import-list">
-                                <template for:each={aiFindings} for:item="f">
-                                    <li key={f.key}>
-                                        <span class={f.badgeClass}>{f.badge}</span>
-                                        {f.rule} — {f.detail}
-                                    </li>
-                                </template>
-                            </ul>
-                        </template>
-                    </div>
-                </div>
-            </template>
 
             <template lwc:if={hasImportReport}>
                 <div class="dg-import-report">

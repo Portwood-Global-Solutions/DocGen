@@ -3,11 +3,10 @@
  *
  *   node scripts/qa/canvas-import-placement-check.mjs
  *
- * The canvas import honours `position: absolute` and pins the block at its declared
- * inch coordinates. That is what lets a generated document arrive already laid out
- * rather than as a stack, so it is worth pinning down: the Agentforce draft prompt now
- * teaches placement, and a silent regression here would turn every placed block back
- * into a flowing one with no error anywhere.
+ * Import HTML honours `position: absolute` and pins the block at its declared inch
+ * coordinates. That is what lets an existing laid-out document arrive laid out rather
+ * than as a stack, and a regression here would quietly turn every placed block into a
+ * flowing one with no error anywhere.
  *
  * The bug this also covers: only flow boxes advanced the import cursor, so a document
  * that placed a title and then let a table flow put the table at y=0 — printed on top
