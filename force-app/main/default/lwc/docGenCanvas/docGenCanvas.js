@@ -9,7 +9,7 @@ import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
 import { extractQueryShape } from 'c/docGenAuthoringKit';
 import { loadScript } from 'lightning/platformResourceLoader';
 import CHARTJS_RESOURCE from '@salesforce/resourceUrl/DocGenChartJs';
-import { renderChartToCanvas, SAMPLE_CHART_BUCKETS } from 'c/docGenChartJs';
+import { renderChartToCanvas, SAMPLE_CHART_BUCKETS, prepareChartsClientSide } from 'c/docGenChartJs';
 import { updateRecord } from 'lightning/uiRecordApi';
 import LightningConfirm from 'lightning/confirm';
 import ID_FIELD from '@salesforce/schema/DocGen_Template__c.Id';
@@ -1516,12 +1516,18 @@ export default class DocGenCanvas extends LightningElement {
                 if (win) win.close();
                 return;
             }
+            // Charts must be prepared BEFORE generating. Passing null here meant
+            // every {Chart:...} fell through to the HTML CSS-bar path, which only
+            // implements bar/pivot/clustered/stacked — so a column, pie, donut,
+            // line or area chart came back as a "supported ... only via
+            // htmlRender=svg" error block instead of a picture.
+            const charts = await this.prepareChartsForPreview();
             const res = await generatePdf({
                 templateId: this.templateId,
                 recordId: this.effectiveSampleRecordId,
                 saveToRecord: false,
-                chartCvMap: null,
-                chartBucketMap: null
+                chartCvMap: charts.map,
+                chartBucketMap: charts.bucketMap
             });
             if (!res || !res.base64) {
                 this.statusText = 'Preview did not return a document';
@@ -2162,6 +2168,38 @@ export default class DocGenCanvas extends LightningElement {
         }
         await loadScript(this, CHARTJS_RESOURCE);
         return window.Chart;
+    }
+
+    /**
+     * Rasterizes the document's charts against the sample record before a
+     * preview is generated.
+     *
+     * The board preview draws representative buckets, but the PDF must show the
+     * sample record's real numbers — this is the author's check that the tag
+     * points at the right relationship and field. Failure is non-fatal: an empty
+     * map falls through to the server-side path, same as any other caller.
+     */
+    async prepareChartsForPreview() {
+        const none = { map: null, bucketMap: null };
+        if (!this.templateId || !this.effectiveSampleRecordId) {
+            return none;
+        }
+        try {
+            const ChartCtor = await this.ensureChartJs();
+            if (!ChartCtor) {
+                return none;
+            }
+            this.statusText = 'Building charts…';
+            const res = await prepareChartsClientSide({
+                templateId: this.templateId,
+                recordId: this.effectiveSampleRecordId,
+                ChartCtor
+            });
+            return res || none;
+        } catch (e) {
+            console.warn('Portwood: chart preparation failed; falling back to the server path', e);
+            return none;
+        }
     }
 
     refreshChartPreview() {

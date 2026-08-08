@@ -889,6 +889,64 @@ private class DocGenChartImageControllerTest {
     }
 
     @IsTest
+    static void soqlFallback_nonGroupableField_returnsEmptyInsteadOfKillingTheTransaction() {
+        // Contact.Description is a Long Text Area. Asking SOQL to GROUP BY one
+        // throws System.UnexpectedException("... can not be grouped in a query
+        // call"), and that exception is NOT catchable — without the isGroupable
+        // guard it takes the whole document generation down rather than the one
+        // chart. Reaching the end of this test at all is the assertion.
+        Account acc = new Account(Name = 'Non-groupable chart test');
+        insert acc;
+        insert new Contact(LastName = 'Rider', AccountId = acc.Id, Description = 'Drove Alone');
+
+        Map<String, Object> data = new Map<String, Object>{ 'Id' => acc.Id };
+        // Contacts is deliberately absent from `data`, so the resolver has no
+        // in-memory rows and must take the SOQL fallback.
+        String xml = '{#ChartBucket:Contacts:Description}{key_label}{/ChartBucket}';
+
+        Test.startTest();
+        String out = DocGenChartBucketResolver.preprocessInline(xml, data);
+        Test.stopTest();
+
+        System.assertNotEquals(null, out, 'A non-groupable field must not abort the merge.');
+    }
+
+    @IsTest
+    static void soqlFallback_groupableField_stillAggregates() {
+        // Control for the guard above: a groupable field must keep working, or
+        // the fix would have silently disabled every server-side chart.
+        Account acc = new Account(Name = 'Groupable chart test');
+        insert acc;
+        insert new List<Contact>{
+            new Contact(LastName = 'A', AccountId = acc.Id, Department = 'Engineering'),
+            new Contact(LastName = 'B', AccountId = acc.Id, Department = 'Engineering'),
+            new Contact(LastName = 'C', AccountId = acc.Id, Department = 'Sales')
+        };
+
+        Map<String, Object> data = new Map<String, Object>{ 'Id' => acc.Id };
+        String xml = '{#ChartBucket:Contacts:Department}[{key_label}={count}]{/ChartBucket}';
+
+        Test.startTest();
+        DocGenChartBucketResolver.preprocessInline(xml, data);
+        Test.stopTest();
+
+        Boolean found = false;
+        for (String k : data.keySet()) {
+            if (!k.startsWith('_cb_')) {
+                continue;
+            }
+            List<Object> rows = (List<Object>) data.get(k);
+            if (rows != null && rows.size() == 2) {
+                Map<String, Object> top = (Map<String, Object>) rows[0];
+                System.assertEquals('Engineering', top.get('key_label'), 'Buckets sort by count desc.');
+                System.assertEquals(2, Integer.valueOf(String.valueOf(top.get('count'))));
+                found = true;
+            }
+        }
+        System.assert(found, 'A groupable field must still aggregate through the SOQL fallback.');
+    }
+
+    @IsTest
     static void suppliedBuckets_malformedPayload_fallsBackInsteadOfThrowing() {
         // A bad client build must degrade to server resolution, not fail the doc.
         String xml = '{#ChartBucket:Contacts:Department}{key_label}{/ChartBucket}';

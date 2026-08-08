@@ -554,6 +554,30 @@ public with sharing class DocGenChartBucketResolver {
      * fixed style token so a `{Chart:rel:field:bar}` and a
      * `{#ChartBucket:rel:field}` over the same data never collide.
      */
+    /**
+     * Whether SOQL will accept this field in a GROUP BY.
+     *
+     * This guard is not defensive tidiness — it prevents a hard failure. Asking
+     * SOQL to group a Long Text Area throws
+     *
+     *     System.UnexpectedException: field 'X' can not be grouped in a query call
+     *
+     * and that exception is NOT catchable: a try/catch around the Database.query
+     * does not stop it, so it takes down the whole document generation rather
+     * than the one chart. Any long textarea qualifies — including the
+     * VMR_Tracker Answer_N columns a commuter survey charts.
+     *
+     * Returning empty buckets instead degrades to an empty chart the author can
+     * see and fix, which is the same outcome as every other unresolvable tag.
+     */
+    private static Boolean isGroupable(Map<String, Schema.SObjectField> childFieldMap, String fieldApi) {
+        Schema.SObjectField f = childFieldMap.get(fieldApi.toLowerCase());
+        if (f == null) {
+            return false;
+        }
+        return f.getDescribe().isGroupable();
+    }
+
     public static String bucketSignature(String relName, String fieldApi, Map<String, String> mods) {
         return DocGenChartImageController.tagSignature(relName, fieldApi, CHARTBUCKET_STYLE_TOKEN, mods);
     }
@@ -791,6 +815,9 @@ public with sharing class DocGenChartBucketResolver {
         if (!childFieldMap.containsKey(fieldApi.toLowerCase())) {
             return empty;
         }
+        if (!isGroupable(childFieldMap, fieldApi)) {
+            return empty;
+        }
 
         String soql =
             'SELECT ' +
@@ -1015,6 +1042,12 @@ public with sharing class DocGenChartBucketResolver {
         }
         // groupByField must also exist on the child schema
         if (String.isNotBlank(groupByField) && !childFieldMap.containsKey(groupByField.toLowerCase())) {
+            return empty;
+        }
+        if (!isGroupable(childFieldMap, fieldApi)) {
+            return empty;
+        }
+        if (String.isNotBlank(groupByField) && !isGroupable(childFieldMap, groupByField)) {
             return empty;
         }
 

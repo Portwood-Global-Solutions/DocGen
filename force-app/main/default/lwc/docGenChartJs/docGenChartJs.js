@@ -25,6 +25,10 @@
  * "Not Specified" handling, same percent rounding.
  */
 
+import getChartTagsForTemplate from '@salesforce/apex/DocGenChartImageController.getChartTagsForTemplate';
+import getChildRecordPage from '@salesforce/apex/DocGenController.getChildRecordPage';
+import uploadChartImage from '@salesforce/apex/DocGenChartImageController.uploadChartImage';
+
 // Mirrors DocGenChartBucketResolver.PALETTE.
 const PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
@@ -389,4 +393,136 @@ export function renderChartPng(ChartCtor, buckets, opts) {
         // multi-chart deck slows every subsequent render.
         chart.destroy();
     }
+}
+
+/**
+ * Discovers a template's chart tags, aggregates the child rows in the browser,
+ * rasterizes with Chart.js and uploads each PNG.
+ *
+ * Lives here rather than in the runner because the canvas designer needs the
+ * exact same thing: it was passing chartCvMap: null, so every chart fell
+ * through to the HTML CSS-bar path and any style outside
+ * bar/pivot/clustered/stacked came back as a "supported ... only via
+ * htmlRender=svg" error block. One implementation, both surfaces.
+ *
+ * Returns {map, cvIds, bucketMap}, or null to fall back to the Apex renderer.
+ */
+export async function prepareChartsClientSide({ templateId, recordId, ChartCtor, onProgress }) {
+    let tags;
+    try {
+        tags = await getChartTagsForTemplate({ templateId });
+    } catch (e) {
+        console.warn('Portwood: getChartTagsForTemplate failed; using Apex chart path', e);
+        return null;
+    }
+    if (!Array.isArray(tags) || tags.length === 0) {
+        return { map: {}, cvIds: [] };
+    }
+
+    // Every tag must be servable here, or we hand the whole deck back.
+    // 'bucket' tags only need counts, so the style restriction is a
+    // chart-only concern — a {#ChartBucket} table has no style at all.
+    const renderable = tags.every(
+        (t) => t.childObject && t.lookupField && t.fieldApi && (t.kind === 'bucket' || isStyleSupported(t.style))
+    );
+    if (!renderable) {
+        return null;
+    }
+
+    // Group by relationship so N charts over the same child cost ONE paging
+    // pass. Our commuter deck has 8 charts on one relationship — this is the
+    // difference between 8 sweeps of 3,553 rows and a single sweep.
+    const byRel = new Map();
+    for (const tag of tags) {
+        const key = `${tag.childObject}|${tag.lookupField}`;
+        if (!byRel.has(key)) {
+            byRel.set(key, {
+                childObject: tag.childObject,
+                lookupField: tag.lookupField,
+                tags: []
+            });
+        }
+        byRel.get(key).tags.push(tag);
+    }
+
+    const map = {};
+    const cvIds = [];
+    const bucketMap = {};
+
+    for (const group of byRel.values()) {
+        const fields = Array.from(new Set(['Id', ...group.tags.map((t) => t.fieldApi)])).join(', ');
+        const accs = group.tags.map(() => newBucketAccumulator());
+
+        let cursor = null;
+        let hasMore = true;
+        let swept = 0;
+        while (hasMore) {
+            // eslint-disable-next-line no-await-in-loop
+            const page = await getChildRecordPage({
+                childObject: group.childObject,
+                lookupField: group.lookupField,
+                parentId: recordId,
+                lastCursorId: cursor,
+                fields,
+                pageSize: 500
+            });
+            const records = (page && page.records) || [];
+            group.tags.forEach((tag, i) => {
+                accumulatePage(accs[i], records, tag.fieldApi, tag.options && tag.options.split);
+            });
+            swept += records.length;
+            cursor = page ? page.lastId : null;
+            hasMore = Boolean(page && page.hasMore && records.length);
+            if (onProgress) onProgress(swept);
+        }
+
+        for (let i = 0; i < group.tags.length; i++) {
+            const tag = group.tags[i];
+            const opts = tag.options || {};
+            const palette = opts.colors
+                ? opts.colors
+                      .split(',')
+                      .map((c) => c.trim())
+                      .filter(Boolean)
+                : null;
+            const buckets = finalizeBuckets(accs[i], palette);
+            if (!buckets.length) {
+                continue;
+            }
+
+            // A {#ChartBucket:...} table wants the counts, not a picture.
+            // Same accumulator either way, so the table and the chart beside
+            // it can never disagree.
+            if (tag.kind === 'bucket') {
+                bucketMap[tag.signature] = JSON.stringify(buckets);
+                continue;
+            }
+
+            try {
+                const png = renderChartPng(ChartCtor, buckets, {
+                    style: tag.style,
+                    title: opts.title,
+                    width: opts.width,
+                    height: opts.height,
+                    scale: opts.scale
+                });
+                // eslint-disable-next-line no-await-in-loop
+                const cvId = await uploadChartImage({
+                    recordId,
+                    signature: tag.signature,
+                    base64Png: png.base64
+                });
+                if (cvId) {
+                    map[tag.signature] = `${cvId}|${png.width}x${png.height}`;
+                    cvIds.push(cvId);
+                }
+            } catch (chartErr) {
+                const errMsg =
+                    (chartErr && (chartErr.body ? chartErr.body.message : chartErr.message)) || String(chartErr);
+                console.warn(`Portwood: Chart.js render failed for ${tag.signature} — ${errMsg}`, chartErr);
+            }
+        }
+    }
+
+    return { map, cvIds, bucketMap };
 }
