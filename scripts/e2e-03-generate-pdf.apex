@@ -64,7 +64,7 @@ try {
 // ===== Generate PDF via processAndReturnDocument =====
 String base64Pdf;
 try {
-    Map<String, Object> genResult = DocGenController.processAndReturnDocument(tmplId, acctId, null);
+    Map<String, Object> genResult = DocGenController.processAndReturnDocument(tmplId, acctId, null, null);
 
     if (genResult == null) {
         fail++;

@@ -102,6 +102,10 @@
                 <behavior>Readonly</behavior>
                 <field>Parent_Record_Id__c</field>
             </layoutItems>
+            <layoutItems>
+                <behavior>Edit</behavior>
+                <field>Sort_Order__c</field>
+            </layoutItems>
         </layoutColumns>
         <style>TwoColumnsTopToBottom</style>
     </layoutSections>

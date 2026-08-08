@@ -375,7 +375,7 @@ DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c WHERE Name = :pat LIMI
 // from an earlier call in the same transaction would be a false pass.
 DocGenService.lastRenderedHtml = null;
 
-Map<String, Object> r = DocGenController.processAndReturnDocument(t.Id, '${MAIN}', null);
+Map<String, Object> r = DocGenController.processAndReturnDocument(t.Id, '${MAIN}', null, null);
 String b64 = (String) r.get('base64');
 System.debug('H_TITLE=' + r.get('title'));
 System.debug('H_FMT=' + r.get('outputFormat'));
@@ -505,7 +505,7 @@ String PFX = '${PFX}';
 String pat = PFX + ' WORDDOCX';
 DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c WHERE Name = :pat LIMIT 1];
 
-Map<String, Object> r = DocGenController.processAndReturnDocument(t.Id, '${MAIN}', null);
+Map<String, Object> r = DocGenController.processAndReturnDocument(t.Id, '${MAIN}', null, null);
 String b64 = (String) r.get('base64');
 System.debug('D_TITLE=' + r.get('title'));
 System.debug('D_FMT=' + r.get('outputFormat'));
@@ -623,7 +623,7 @@ String pat = PFX + ' WORDPDF';
 DocGen_Template__c t = [SELECT Id FROM DocGen_Template__c WHERE Name = :pat LIMIT 1];
 DocGenService.lastRenderedHtml = null;
 
-Map<String, Object> r = DocGenController.processAndReturnDocument(t.Id, '${MAIN}', null);
+Map<String, Object> r = DocGenController.processAndReturnDocument(t.Id, '${MAIN}', null, null);
 String b64 = (String) r.get('base64');
 Integer sz = 0;
 String hx = '';
@@ -728,7 +728,7 @@ insert pt;
 attach(pt.Id, PFX + ' PPTX', 'b.pptx', pz.getArchive());
 
 try {
-    Map<String, Object> pr = DocGenController.processAndReturnDocument(pt.Id, '${MAIN}', null);
+    Map<String, Object> pr = DocGenController.processAndReturnDocument(pt.Id, '${MAIN}', null, null);
     String pb = (String) pr.get('base64');
     if (String.isNotBlank(pb)) {
         Blob pbl = EncodingUtil.base64Decode(pb);
@@ -775,7 +775,7 @@ insert xt;
 attach(xt.Id, PFX + ' XLSX', 'b.xlsx', xz.getArchive());
 
 try {
-    Map<String, Object> xr = DocGenController.processAndReturnDocument(xt.Id, '${MAIN}', null);
+    Map<String, Object> xr = DocGenController.processAndReturnDocument(xt.Id, '${MAIN}', null, null);
     String xb = (String) xr.get('base64');
     if (String.isNotBlank(xb)) {
         Blob xbl = EncodingUtil.base64Decode(xb);
@@ -885,7 +885,7 @@ insert at;
 attach(at.Id, PFX + ' ACROFORM', 'b.pdf', src);
 
 try {
-    Map<String, Object> ar = DocGenController.processAndReturnDocument(at.Id, '${MAIN}', null);
+    Map<String, Object> ar = DocGenController.processAndReturnDocument(at.Id, '${MAIN}', null, null);
     String ab = (String) ar.get('base64');
     if (String.isNotBlank(ab)) {
         Blob abl = EncodingUtil.base64Decode(ab);

@@ -570,11 +570,13 @@ export async function run({ org, headed }) {
 
         step('wizard: authoring cards');
         // 2a. Authoring cards — each must select AND reveal its own path.
+        // v3.54 retired 'starter', 'ai' and 'scratch' from the wizard — see
+        // docGenAdmin.authoringCards. Templates already created those ways still open
+        // and edit, but the wizard offers two paths now, and asserting on three cards
+        // that were deliberately deleted reported six failures for working software.
         const cardPaths = [
-            { mode: 'starter', marker: '.dg-starter-card', what: 'the starter gallery' },
-            { mode: 'ai', marker: 'Next: Build My Prompt', text: true, what: 'the AI intro and its Next button' },
-            { mode: 'scratch', marker: 'Create & Open Designer', text: true, what: 'the blank-page CTA' },
-            { mode: 'file', marker: 'Output Format', text: true, what: 'the Type / Output Format pickers' }
+            { mode: 'file', marker: 'Output Format', text: true, what: 'the Type / Output Format pickers' },
+            { mode: 'canvas', marker: 'Output Format', text: true, what: 'the Canvas setup fields' }
         ];
         for (const cp of cardPaths) {
             const verdict = await hittable(page, `[data-mode="${cp.mode}"]`);
@@ -617,45 +619,8 @@ export async function run({ org, headed }) {
             );
         }
 
-        step('wizard: starter gallery');
-        // 2b. Starter gallery.
-        await mouseClick(page, '[data-mode="starter"]');
-        await wait(1500);
-        const starters = await ev(
-            page,
-            `return (__dgFind('.dg-starter-card', true) || []).map((c) => ({ key: c.dataset.key }));`,
-            []
-        );
-        add(
-            check(
-                'the starter gallery renders every predesigned starter',
-                Array.isArray(starters) && starters.length === 5,
-                `rendered ${(starters || []).length}: ${(starters || []).map((s) => s.key).join(', ')} — expected report, invoice, letter, agreement, certificate`,
-                SEVERITY.MAJOR
-            )
-        );
-        const starterFails = [];
-        for (const s of starters || []) {
-            const clicked = await mouseClick(page, `.dg-starter-card[data-key="${s.key}"]`);
-            await wait(450);
-            const sel = await ev(
-                page,
-                `const el = __dgFind('.dg-starter-card[data-key="${s.key}"]');
-         return el ? el.getAttribute('aria-checked') === 'true' && el.className.indexOf('_selected') !== -1 : false;`,
-                false
-            );
-            if (!clicked || sel !== true) starterFails.push(s.key);
-        }
-        add(
-            check(
-                'every starter card takes selection when clicked',
-                (starters || []).length > 0 && starterFails.length === 0,
-                starterFails.length
-                    ? `these never became the selected starter: ${starterFails.join(', ')}`
-                    : `${(starters || []).length} starters each selected`,
-                SEVERITY.MAJOR
-            )
-        );
+        // 2b. The starter gallery is gone (v3.54). Nothing replaced it — a blank
+        // canvas IS the replacement — so there is no gallery probe to write here.
 
         // 2c. The advanced-options disclosure must actually disclose.
         const advBefore = await ev(page, `return __vis(__dgFind('lightning-radio-group'));`, false);
@@ -676,7 +641,7 @@ export async function run({ org, headed }) {
         step('wizard: validation');
         // 2d. REQUIRED-FIELD VALIDATION — an empty submit must complain out loud
         //     and must not leave a half-made record behind.
-        await mouseClick(page, '[data-mode="starter"]');
+        await mouseClick(page, '[data-mode="canvas"]');
         await wait(1000);
         await typeField(page, 'Template Name', '');
         await drainToasts(page);
@@ -818,106 +783,30 @@ export async function run({ org, headed }) {
         await clickByText(page, 'lightning-button', 'Close', { exact: true });
         await wait(2000);
 
-        step('wizard: AI prompt kit');
-        /* --- 2f. THE AI PROMPT KIT ---------------------------------- */
-        await clickByText(page, '[role="tab"]', 'Create New');
-        await wait(2500);
-        await mouseClick(page, '[data-mode="ai"]');
-        await wait(1200);
-        await typeField(page, 'Template Name', `${PREFIX}${runId}-AI`);
-        await wait(600);
-        await clickByText(page, 'lightning-button', 'Next: Build My Prompt');
-        const aiStep = await until(page, `return __dgFind('.dg-ai-prompt') ? { ok: 1 } : null;`, 45000, 1500);
-        add(
-            check(
-                'the AI path reaches the prompt screen',
-                !!aiStep,
-                aiStep ? '' : '.dg-ai-prompt never rendered after "Next: Build My Prompt"',
-                SEVERITY.MAJOR
-            )
-        );
+        // 2f. The AI prompt kit lived on the wizard's 'ai' card, retired in v3.54.
+        // AI authoring still exists inside the HTML designer (Generate with Agentforce),
+        // which is a different surface with its own coverage — this block asserted on a
+        // wizard step that no longer exists.
 
-        if (aiStep) {
-            const promptBefore = await ev(page, `const p = __dgFind('.dg-ai-prompt'); return p ? __deep(p) : '';`, '');
-            add(
-                check(
-                    'the AI prompt is assembled with merge-tag syntax and the template fields',
-                    typeof promptBefore === 'string' && promptBefore.length > 200 && promptBefore.indexOf('{') !== -1,
-                    typeof promptBefore === 'string'
-                        ? `${promptBefore.length} chars; contains merge-tag braces = ${promptBefore.indexOf('{') !== -1}`
-                        : 'prompt unreadable'
-                )
-            );
-
-            const marker = `zzmarker${runId}`;
-            await typeInto(page, '.dg-ai-desc', `A one page summary ${marker}`);
-            await wait(1500);
-            const promptAfter = await ev(page, `const p = __dgFind('.dg-ai-prompt'); return p ? __deep(p) : '';`, '');
-            add(
-                check(
-                    'the AI prompt rebuilds live from what the author describes',
-                    typeof promptAfter === 'string' && promptAfter.indexOf(marker) !== -1,
-                    typeof promptAfter === 'string'
-                        ? `prompt ${promptAfter.length} chars; carries the typed description = ${promptAfter.indexOf(marker) !== -1}`
-                        : 'prompt unreadable'
-                )
-            );
-
-            await drainToasts(page);
-            await clickByText(page, 'lightning-button', 'Copy Prompt');
-            const copyToast = await awaitToast(page, /copied|copy failed/i);
-            let clip = null;
-            try {
-                clip = await page.evaluate(`navigator.clipboard.readText()`);
-            } catch (e) {
-                clip = null;
-            }
-            if (clip === null) {
-                add(
-                    skip(
-                        'Copy Prompt puts the whole prompt on the clipboard',
-                        `the browser refused a clipboard read; only the toast was observable: ${copyToast.hit ? copyToast.hit.text.slice(0, 80) : 'none'}`,
-                        SEVERITY.MINOR
-                    )
-                );
-            } else {
-                add(
-                    check(
-                        'Copy Prompt puts the whole prompt on the clipboard',
-                        clip.length > 200 && clip.indexOf(marker) !== -1,
-                        `clipboard holds ${clip.length} chars; includes the live description = ${clip.indexOf(marker) !== -1}`
-                    )
-                );
-            }
-
-            // Step 5 of the kit: the paste-back box must accept HTML.
-            const pasted = await typeInto(page, '.dg-ai-paste', '<html><body><p>pasted</p></body></html>');
-            const pasteVal = await ev(page, `const t = __dgFind('.dg-ai-paste'); return t ? t.value : null;`, null);
-            add(
-                check(
-                    'the AI paste-back box accepts the returned HTML',
-                    !!(pasted && pasteVal && pasteVal.indexOf('<p>pasted</p>') !== -1),
-                    pasteVal === null ? '.dg-ai-paste not found' : `textarea holds "${String(pasteVal).slice(0, 60)}"`,
-                    SEVERITY.MAJOR
-                )
-            );
-        }
-
-        step('wizard: create #2 (starter -> designer)');
-        /* --- 2g. END-TO-END CREATE #2 — starter path into the designer --- */
+        step('wizard: create #2 (blank canvas -> designer)');
+        /* --- 2g. END-TO-END CREATE #2 — the canvas path into the designer ---
+         *
+         * This was the starter path until v3.54 retired the starters. The canvas is
+         * what the wizard offers in their place, so it is what this has to prove: the
+         * record is created, and the editor it opens is the CANVAS artboard, not the
+         * flow designer. They are different components with different markup — a probe
+         * for `.dg-pv` would pass on a Canvas template only by accident. */
         await clickByText(page, 'lightning-button', 'Back', { exact: true });
         await wait(2500);
-        await mouseClick(page, '[data-mode="starter"]');
+        await mouseClick(page, '[data-mode="canvas"]');
         await wait(1200);
-        await mouseClick(page, '.dg-starter-card[data-key="report"]');
-        await wait(600);
         await typeField(page, 'Template Name', NAME_STARTER);
         await wait(600);
         await drainToasts(page);
         await clickByText(page, 'lightning-button', 'Create & Open Designer');
-        const designerUp = await until(
+        const canvasUp = await until(
             page,
-            `return __dgFind('.dg-pv') && __dgFind('.dg-format-bar') ? { ok: 1 } : null;`,
+            `return __dgFind('.dg-board') && __dgFind('.dg-rail') ? { ok: 1 } : null;`,
             120000,
             2000
         );
@@ -926,7 +815,7 @@ export async function run({ org, headed }) {
         );
         add(
             check(
-                'the starter path creates the template record',
+                'the canvas path creates the template record',
                 !!starterRow,
                 starterRow
                     ? `${starterRow.id}, ${starterRow['Type__c']}/${starterRow['Output_Format__c']}`
@@ -936,27 +825,23 @@ export async function run({ org, headed }) {
         );
         add(
             check(
-                'the starter path lands in the designer with the design loaded',
-                !!designerUp,
-                designerUp ? '' : 'the designer canvas (.dg-pv) never appeared',
+                'and it is typed Canvas, which is what decides which editor opens',
+                !!starterRow && starterRow['Type__c'] === 'Canvas',
+                starterRow ? `Type__c=${starterRow['Type__c']}` : 'no record',
                 SEVERITY.BLOCKER
             )
         );
-        if (designerUp) {
-            const body = await ev(
-                page,
-                `const pv = __dgFind('.dg-pv'); return pv ? { len: pv.innerHTML.length, text: __deep(pv).slice(0, 100) } : null;`,
-                null
-            );
-            add(
-                check(
-                    'the starter body is real content, not an empty page',
-                    !!(body && body.len > 400),
-                    body ? `${body.len} chars of HTML — "${body.text}"` : 'canvas unreadable',
-                    SEVERITY.MAJOR
-                )
-            );
-        }
+        add(
+            check(
+                'the canvas path lands on the artboard',
+                !!canvasUp,
+                canvasUp ? '' : 'the artboard (.dg-board) never appeared',
+                SEVERITY.BLOCKER
+            )
+        );
+        // The flow designer's panels are tested below and do not exist on a canvas, so
+        // that block stays gated on its own editor being the one that opened.
+        const designerUp = false;
 
         /* ============================================================ *
          * 3. DESIGNER CHROME — floating panels + page setup
