@@ -28,7 +28,8 @@ survives content that grows at merge time:
 | 5 | `position: absolute` child inside a `position: relative` flowing parent | **Anchors to the parent, exactly.** Child styled `top:1in; left:2in` rendered at +72.0pt / +144.0pt from the parent's origin |
 | 6 | `page-break-inside: avoid` on a group that FITS a page | **Honoured.** Moved whole to the next page rather than straddling |
 | 7 | Same group without `avoid` (control) | Split across pages — confirms 6 is the property, not chance |
-| 4 | `<thead>` on a table split across pages | **Does not repeat.** Header appears once, on the first page of the table |
+| 4 | *bare* `<thead>` on a table split across pages | **Does not repeat** — header appears once |
+| 4b | `<thead style="display: table-header-group">` | **Repeats on every page** the table spans |
 | 8 | Same box emitted pinned vs. flow, identical authored coords | **Renders in the identical place** — x=144.0/y=291.5 both ways, and unchanged with a pinned neighbour on the same artboard |
 
 Probe 3 (`avoid` on a group taller than a page) split, which is correct — the
@@ -126,9 +127,18 @@ box rather than dropping it, and that a cycle terminates.
 
 ## Open, not yet answered
 
-- **Repeating headers.** Finding 4 means a table spanning pages loses its header.
-  That is independent of linking but will be the first complaint about any
-  expanding table, so it wants its own decision.
+- ~~**Repeating headers.**~~ **Answered, and my first reading of probe 4 was
+  wrong.** Flying Saucer does not repeat a *bare* `<thead>`, which is what probe 4
+  used — but it does repeat one that explicitly declares
+  `display: table-header-group`. The canvas already emits exactly that
+  (`canvasModel.js:1407`), so a canvas table keeps its header across pages today.
+  Verified in the linked demo: the header appears on all three pages.
+
+  Worth noting `DocGenHtmlRenderer.cls:2571` wraps header rows in a plain
+  `<thead>` and relies on a base CSS rule to supply the display property. That
+  works while the rule is in scope; a template whose own CSS resets `thead`
+  would silently lose repeating headers. The canvas's inline declaration is the
+  more robust of the two.
 - **Groups taller than a page.** `avoid` cannot help. Either the group breaks, or
   the author is warned at design time that it cannot be kept together.
 - **Cross-artboard flow.** Artboards are discrete `<div>`s; a group still cannot
