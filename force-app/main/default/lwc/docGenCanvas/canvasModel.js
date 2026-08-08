@@ -1946,6 +1946,11 @@ function baseAuthoringAttrs(box) {
         ' data-dg-z="' +
         (box.z || 0) +
         '"' +
+        // Position mode and anchor ride as attributes for the same reason the
+        // geometry does: the emitted CSS is a rendering instruction, and for a
+        // grouped member it no longer describes where the author put it.
+        (box.positionMode === 'follows' && box.anchorTo ? ' data-dg-anchor="' + esc(box.anchorTo) + '"' : '') +
+        (box.keepTogether ? ' data-dg-keep="1"' : '') +
         (box.condition ? ' data-dg-if="' + esc(box.condition) + '"' : '')
     );
 }
@@ -2001,6 +2006,155 @@ function wrapCondition(box, inner) {
         return inner;
     }
     return '{#IF ' + esc(cond) + '}' + inner + '{/IF}';
+}
+
+/**
+ * How a box decides where to sit. Mutually exclusive by nature — an element
+ * cannot both hold its spot and travel with something else — so this is a mode,
+ * not a set of flags.
+ *
+ * 'repeat' (appears on every page) is deliberately absent: it is a different
+ * mechanism, not a third position. CSS cannot repeat an in-flow element, so it
+ * has to be lifted out of the artboard into Header_Html__c/Footer_Html__c.
+ */
+export const POSITION_MODES = [
+    { label: 'Stays put', value: 'fixed' },
+    { label: 'Moves with another element', value: 'follows' }
+];
+
+export const DEFAULT_POSITION_MODE = 'fixed';
+
+/** True when the box travels with an anchor rather than holding its spot. */
+function isFollower(box) {
+    return box && box.positionMode === 'follows' && !!box.anchorTo;
+}
+
+/**
+ * Walks a box up to the head of its anchor chain.
+ *
+ * Returns null when the chain is broken (anchor deleted) or cyclic. Both are
+ * reachable from the UI — delete a target, or link A to B and B back to A — so
+ * neither can be allowed to reach the serializer. The visited set is what stops
+ * a cycle spinning forever.
+ */
+export function anchorRoot(box, byId) {
+    let cur = box;
+    const seen = new Set();
+    while (isFollower(cur)) {
+        if (seen.has(cur.id)) {
+            return null; // cycle
+        }
+        seen.add(cur.id);
+        const next = byId.get(cur.anchorTo);
+        if (!next) {
+            return null; // anchor was deleted
+        }
+        cur = next;
+    }
+    return cur;
+}
+
+/**
+ * Groups boxes into anchor sets: each head plus everything that transitively
+ * follows it, ordered by authored y so document order matches what the author
+ * sees. Boxes with a broken or cyclic anchor come back as singletons rather
+ * than vanishing — a bad link should render the element in the wrong place,
+ * never drop it from the document.
+ */
+export function buildAnchorGroups(boxes) {
+    const byId = new Map((boxes || []).map((b) => [b.id, b]));
+    const groups = new Map();
+    const orphans = [];
+    for (const b of boxes || []) {
+        const root = anchorRoot(b, byId);
+        if (!root) {
+            orphans.push(b);
+            continue;
+        }
+        if (!groups.has(root.id)) {
+            groups.set(root.id, []);
+        }
+        groups.get(root.id).push(b);
+    }
+    const out = [];
+    for (const members of groups.values()) {
+        members.sort((p, q) => p.y - q.y);
+        out.push(members);
+    }
+    for (const o of orphans) {
+        out.push([o]);
+    }
+    // Group order follows the head's y, matching the flow chain's ordering.
+    out.sort((a, c) => a[0].y - c[0].y);
+    return out;
+}
+
+/**
+ * Emits an anchor group as ONE flow container whose members are also in flow.
+ *
+ * Members are in flow, NOT absolutely positioned inside the container. That is
+ * the whole mechanism: an absolute follower would hold its offset while the
+ * anchor grew and get overrun — the exact bug this feature exists to fix. In
+ * flow, each member's margin-top is its authored gap from the previous member's
+ * bottom, so growth pushes everything after it.
+ *
+ * The container itself carries no height: it takes its height from its content,
+ * which is what lets the whole set push the artboard when the set grows.
+ */
+function groupToHtml(members, cursor) {
+    const head = members[0];
+    let inner = '';
+    let bottom = head.y;
+    members.forEach((m, i) => {
+        const gapTop = i === 0 ? 0 : Math.max(0, round3(m.y - bottom));
+        const gapLeft = round3(Math.max(0, m.x - head.x));
+        inner +=
+            '<div class="dg-anchored"' +
+            authoringAttrs(m) +
+            ' style="margin: ' +
+            gapTop +
+            'in 0 0 ' +
+            gapLeft +
+            'in; width: ' +
+            outerToContentWidth(m) +
+            'in; ' +
+            styleCss(m) +
+            '">' +
+            boxInnerHtml(m) +
+            '</div>';
+        bottom = m.y + m.h;
+    });
+    const keep = members.some((m) => m.keepTogether) ? ' page-break-inside: avoid;' : '';
+    return wrapCondition(
+        head,
+        '<div class="dg-group" style="position: relative; margin: ' +
+            round3(Math.max(0, head.y - (cursor || 0))) +
+            'in 0 0 ' +
+            head.x +
+            'in;' +
+            keep +
+            '">' +
+            inner +
+            '</div>'
+    );
+}
+
+/** The rendered content of a box, without its positioning wrapper. */
+function boxInnerHtml(box) {
+    if (box.kind === 'table') {
+        return tableToHtml(box);
+    } else if (box.kind === 'image') {
+        return imageToHtml(box);
+    } else if (box.kind === 'shape') {
+        return shapeToHtml(box);
+    } else if (box.kind === 'code') {
+        return codeToHtml(box);
+    } else if (box.kind === 'signature') {
+        return signatureToHtml(box);
+    } else if (box.kind === 'chart') {
+        return chartToHtml(box);
+    }
+    return textToHtml(box);
 }
 
 function boxToHtml(box, cursor) {
@@ -2074,18 +2228,33 @@ export function serialize(doc, geo) {
             // Ascending z, so document order and paint order agree even where z ties —
             // the later box in the markup wins a tie, which is what "bring to front"
             // means when two boxes share a level.
+            // An anchor group always flows — that is what lets growth push it —
+            // so its members leave the pinned set regardless of their own mode.
+            const anchored = new Set();
+            for (const g of buildAnchorGroups(b.boxes || [])) {
+                if (g.length > 1) {
+                    g.forEach((m) => anchored.add(m.id));
+                }
+            }
             const pinned = (b.boxes || [])
+                .filter((x) => !anchored.has(x.id))
                 .filter((x) => x.mode !== 'flow')
                 .slice()
                 .sort((p, q) => (p.z || 0) - (q.z || 0));
-            const flowing = (b.boxes || [])
+            // Anchor groups and plain flow boxes share ONE chain, ordered by y, so a
+            // group is pushed by a flow box above it and vice versa. Emitting them in
+            // separate passes would let the two interleave wrongly on the page.
+            const groups = buildAnchorGroups(b.boxes || []).filter((g) => g.length > 1);
+            const flowSingles = (b.boxes || [])
+                .filter((x) => !anchored.has(x.id))
                 .filter((x) => x.mode === 'flow')
-                .slice()
-                .sort((p, q) => p.y - q.y);
+                .map((x) => [x]);
+            const chain = [...groups, ...flowSingles].sort((p, q) => p[0].y - q[0].y);
             let cursor = 0;
-            const flowHtml = flowing.map((x) => {
-                const out = boxToHtml(x, cursor);
-                cursor = x.y + x.h;
+            const flowHtml = chain.map((members) => {
+                const out = members.length > 1 ? groupToHtml(members, cursor) : boxToHtml(members[0], cursor);
+                const last = members[members.length - 1];
+                cursor = last.y + last.h;
                 return out;
             });
             const inner = [...pinned.map((x) => boxToHtml(x, 0)), ...flowHtml].join('\n  ');
@@ -2315,7 +2484,13 @@ export function deserialize(html) {
         css: carriedCss,
         artboards: boards.map((boardEl) => {
             const board = newArtboard();
-            board.boxes = [...boardEl.querySelectorAll('.dg-pin, .dg-flow')].map((el) => {
+            // .dg-anchored is included because a linked member lives inside a
+            // .dg-group wrapper rather than sitting directly on the artboard.
+            // Without it the reader simply does not see followers, and every
+            // linked element vanishes on reload. The .dg-group wrapper itself is
+            // NOT a box — it carries no authoring attributes and is rebuilt from
+            // the members' anchors on the way out.
+            board.boxes = [...boardEl.querySelectorAll('.dg-pin, .dg-flow, .dg-anchored')].map((el) => {
                 const style = el.getAttribute('style') || '';
                 const isFlow = el.classList.contains('dg-flow');
                 const box = newTextBox(0, 0, 2, 0.5);
@@ -2387,7 +2562,18 @@ export function deserialize(html) {
                     // its fill, border and kind on every reload.
                     box.kind = 'shape';
                     box.shape = readShape(el, style);
-                } else {
+                }
+                // Position mode is orthogonal to kind — any box can follow another.
+                if (el.hasAttribute('data-dg-anchor')) {
+                    box.positionMode = 'follows';
+                    box.anchorTo = el.getAttribute('data-dg-anchor') || '';
+                }
+                if (el.hasAttribute('data-dg-keep')) {
+                    box.keepTogether = true;
+                }
+                // Only a plain text box keeps its markup; every other kind rebuilds
+                // its content from its own config on the way out.
+                if (!box.kind || box.kind === 'text') {
                     // Keep BOTH: the markup is what renders, the flattened text is what
                     // a plain-text edit would start from. Keeping only the text lost
                     // every author's formatting on reload.

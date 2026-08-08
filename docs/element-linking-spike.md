@@ -52,10 +52,19 @@ give up precise placement to gain flow behaviour:
 ```
 
 So the model is not "linking on top of absolute positioning". It is: **an
-anchored group becomes a flow container, and its members become absolute
-relative to the group.** The author's layout is preserved to the inch; the
-browser resolves the pushing instead of us predicting heights from stale
-authored dimensions.
+anchored group becomes a flow container.**
+
+> **Correction.** An earlier draft of this said members become *absolute*
+> relative to the group. That is wrong, and wrong in the way that matters: an
+> absolutely-positioned follower holds its offset while the anchor grows and gets
+> overrun — precisely the bug the feature exists to fix. Probe 5 shows absolute
+> children *anchor* correctly to a positioned parent, which is useful for future
+> side-by-side layouts, but it is **probe 2** that describes the mechanism here.
+> Members nest **in flow**, each carrying its authored gap as a `margin-top`, so
+> growth pushes everything below it.
+
+The author's layout is preserved; the browser resolves the pushing instead of us
+predicting heights from stale authored dimensions.
 
 That also disposes of the `flowMarginTop` problem — nothing has to compute a gap
 from a height that no longer exists.
@@ -95,6 +104,25 @@ What DOES change is narrower than it first appears:
   hang the serializer.
 - Validation in the `chartConfigIssue` style — an anchor pointing at a deleted
   box should surface on the artboard, not fail silently at merge.
+
+## Built and verified end to end
+
+Implemented as `positionMode: 'fixed' | 'follows'` + `anchorTo`, emitted through
+`buildAnchorGroups`/`groupToHtml`. Rendered through `Blob.toPdf` against 60 child
+rows, in the shape that failed as probe 1:
+
+| Element | Result |
+|---------|--------|
+| Caption linked to the table | **page 3, y=624.8** — below the table's last row (y=455.2), having travelled across two page breaks with it |
+| Identical caption, NOT linked (control) | **page 1, y=437.7** — buried under a table running to y=747.3, exactly as before |
+
+The control is the point: same document, same data, same authored position. The
+only difference is the link, so the behaviour cannot be attributed to anything
+else.
+
+`scripts/qa/canvas-anchor-check.mjs` covers the model — 14 assertions including
+that members are never emitted absolute, that a dangling anchor still renders its
+box rather than dropping it, and that a cycle terminates.
 
 ## Open, not yet answered
 
