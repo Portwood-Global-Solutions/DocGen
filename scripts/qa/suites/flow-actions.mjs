@@ -1275,18 +1275,28 @@ ${bodyLines}
         );
         if (res.map.OUT && unesc(res.map.OUT).startsWith('THREW')) threw.push(label);
     }
-    // …but they all share ONE design decision, so the fix list gets ONE row.
-    // The class documents the throw as deliberate ("preserves existing Flow
-    // behavior where bad input stops the Flow"), which is defensible — except
-    // that Result advertises Success and Error Message outputs that this path
-    // never reaches, so a Flow author who wired up a fault path never sees them.
+    // …and they all share ONE design decision, which this now asserts rather than
+    // objects to.
+    //
+    // The split is deliberate and tested: INPUT validation throws, so the interview
+    // stops on a fault connector; RUNTIME failure returns Result.success = false with
+    // Error Message. DocGenSignatureFlowActionTest has eight tests pinning the throwing
+    // half, so it is a contract, not an oversight.
+    //
+    // This check used to demand the opposite — success=false for bad input — and
+    // reported MAJOR every run for behaviour working as designed. Flipping it would
+    // also have been the more dangerous change: a Flow that faults today is loud, and
+    // one that quietly carries on with success=false, in an interview whose author
+    // never wired those outputs, is not. Documented in UserGuide §11.11.
     out.push(
         check(
-            `${A}: input validation reports through Success/Error Message rather than faulting the Flow`,
-            threw.length === 0,
-            threw.length
-                ? `throws DocGenException instead of returning Result.success=false for: ${threw.join('; ')}. The Result class advertises "Success" and "Error Message" outputs that are unreachable on these paths — the Flow interview faults instead. Deliberate per the class comment, but it makes those two outputs a lie for the most common author mistakes.`
-                : '',
+            `${A}: invalid input faults the Flow, which is the documented contract`,
+            threw.length === edges.length,
+            threw.length === edges.length
+                ? `all ${threw.length} input-validation paths throw, as designed`
+                : `expected all ${edges.length} input-validation paths to throw so a fault connector can catch them. ` +
+                      `Threw: ${threw.join('; ') || '(none)'}. Any path that now returns instead has changed ` +
+                      `the contract — Flows relying on the fault path would stop being told.`,
             SEVERITY.MAJOR
         )
     );

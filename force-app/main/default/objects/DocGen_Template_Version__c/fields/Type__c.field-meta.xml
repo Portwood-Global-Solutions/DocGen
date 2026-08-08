@@ -10,7 +10,7 @@
             <sorted>false</sorted>
             <value>
                 <fullName>Word</fullName>
-                <default>true</default>
+                <default>false</default>
                 <label>Word</label>
             </value>
             <value>

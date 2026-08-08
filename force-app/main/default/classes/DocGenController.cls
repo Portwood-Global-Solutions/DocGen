@@ -1994,76 +1994,6 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
 
 
     /**
-     * Drops templates the runner already knows it cannot generate.
-     *
-     * A template with nothing to merge used to be offered in the picker and then fail on
-     * Generate with "No template file found (active or attached)" — the user commits to a
-     * choice the runner could have ruled out before showing it.
-     *
-     * "Something to merge" is deliberately the same test DocGenTemplateManager applies:
-     * an ACTIVE VERSION carrying a Content_Version_Id__c, or failing that an ATTACHED
-     * file. Filtering on the version alone would have been the obvious fix and the wrong
-     * one — it would hide templates that generate perfectly well from an attachment.
-     *
-     * Two queries, not a semi-join: ContentDocumentLink cannot be used as a subquery
-     * (the platform requires it be filtered by a single ContentDocumentId or
-     * LinkedEntityId), and it is only consulted for the templates that failed the
-     * version test, so the common case costs one extra query and usually zero rows.
-     *
-     * Admin surfaces call getAllTemplates(), which does not filter — a half-built
-     * template stays visible and fixable in the Template Manager.
-     */
-    private static List<DocGen_Template__c> withSomethingToMerge(List<DocGen_Template__c> all) {
-        Set<Id> ids = new Set<Id>();
-        for (DocGen_Template__c t : all) {
-            ids.add(t.Id);
-        }
-
-        Set<Id> ready = new Set<Id>();
-        /* code-analyzer-suppress ApexFlsViolation */
-        for (DocGen_Template_Version__c v : [
-            SELECT Template__c
-            FROM DocGen_Template_Version__c
-            WHERE Template__c IN :ids AND Is_Active__c = TRUE AND Content_Version_Id__c != NULL
-            WITH SYSTEM_MODE
-        ]) {
-            ready.add(v.Template__c);
-        }
-
-        Set<Id> unresolved = new Set<Id>();
-        for (Id id : ids) {
-            if (!ready.contains(id)) {
-                unresolved.add(id);
-            }
-        }
-        if (!unresolved.isEmpty()) {
-            try {
-                for (ContentDocumentLink l : [
-                    SELECT LinkedEntityId
-                    FROM ContentDocumentLink
-                    WHERE LinkedEntityId IN :unresolved
-                    WITH USER_MODE
-                ]) {
-                    ready.add(l.LinkedEntityId);
-                }
-            } catch (Exception e) {
-                // A file-visibility problem must not empty the picker. Fall back to
-                // offering them: the old behaviour, which fails later with a clear
-                // message, is better than a picker that silently has nothing in it.
-                ready.addAll(unresolved);
-            }
-        }
-
-        List<DocGen_Template__c> out = new List<DocGen_Template__c>();
-        for (DocGen_Template__c t : all) {
-            if (ready.contains(t.Id)) {
-                out.add(t);
-            }
-        }
-        return out;
-    }
-
-    /**
      * Shared filter implementation for getTemplatesForObject and getTemplatesForObjectAndRecord.
      */
     private static List<DocGen_Template__c> getTemplatesForObjectInternal(String objectApiName, String recordId) {
@@ -2120,10 +2050,6 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         ];
         // CxSAST: USER_MODE not viable in managed package (namespace resolution breaks unqualified field names); CRUD/FLS enforced by permission sets
 
-        if (all.isEmpty())
-            return all;
-
-        all = withSomethingToMerge(all);
         if (all.isEmpty())
             return all;
 
@@ -4487,7 +4413,15 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             template.Query_Config__c = version.Query_Config__c;
             template.Category__c = version.Category__c;
             template.Description__c = version.Description__c;
-            template.Type__c = version.Type__c;
+            // Only when the version actually states one. Type__c on the version used to
+            // default to Word, so a version created without it — by a script, a data
+            // load, or any integration — retyped its template to Word on activation and
+            // changed how the template generates. The picklist default is gone as of
+            // v3.55; this is the other half, and it also protects templates whose
+            // versions were created under the old default and left blank since.
+            if (String.isNotBlank(version.Type__c)) {
+                template.Type__c = version.Type__c;
+            }
             template.Base_Object_API__c = version.Base_Object_API__c;
 
             // v2.0.1 — per-field FLS enforcement (Checkmarx "FLS Update").

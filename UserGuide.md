@@ -3362,6 +3362,27 @@ Always add a Decision element after the action that branches on `success`. The m
 - **Locked output format conflicts with the requested override.** Either unlock the template or stop overriding the format in the Flow.
 - **Heap limit exceeded** on a sync action. Switch to **Generate Document (Auto Giant Query)** so the engine routes to async automatically.
 
+**Two kinds of error, and they arrive by different routes.** A Decision on `success`
+catches only one of them, so signature Flows need both:
+
+| What went wrong                                                                                               | How you find out                                | What to wire                        |
+| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ----------------------------------- |
+| **Runtime failure** — template deleted, DML rejected, limit hit                                               | `success = false` with `errorMessage`           | A Decision element after the action |
+| **Invalid input** — no Template Id, no Related Record Id, an empty Signers collection, a signer with no email | The action **throws**, and the interview faults | A **fault connector** on the action |
+
+The signature actions validate their inputs strictly and stop the interview rather than
+returning `success = false`. That is deliberate: a missing Template Id is an authoring
+mistake, and failing loudly at build time beats a Flow that quietly continues down its
+success path having created nothing. It does mean `success` and `errorMessage` are not
+reached on those paths — drag the fault connector, or those mistakes look like silence.
+
+**Bulk batches.** Flow can hand an invocable action up to 200 requests at once, and
+**Validate Signature Token** queries per token. Past roughly fifty it runs out of the
+transaction's SOQL allowance; rather than faulting and losing the whole batch, it
+validates as many as it can afford and returns the rest with `Is Valid = false` and an
+Error Message saying they were not attempted. Check `Is Valid` per row, and validate in
+smaller batches if you are processing many at once.
+
 ---
 
 ## 12. Apex API reference
