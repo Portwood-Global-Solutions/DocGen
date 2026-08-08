@@ -19,6 +19,17 @@ PowerPoint and Excel templates are also supported as **alpha-stage** formats —
 > - **Fixed:** `.docx` / `.pptx` / `.xlsx` downloads and Canvas Export HTML failed in
 >   LWS-enabled orgs. [§14.6](#146-lightning-web-security-lws)
 > - **Fixed:** a long verify URL ran off the edge of the signature Certificate of Completion.
+> - **Fixed:** a `<style>` block inside `<body>` had its CSS eaten by the merge engine and
+>   printed a line of bare selectors at the top of the document.
+>   [§15.2](#152-raw-css-appears-at-the-top-of-generated-pdfs)
+> - **Fixed:** a Flow validating signature tokens in bulk faulted with a governor limit
+>   and lost the whole batch. [§11.11](#1111-error-handling)
+> - **Upgrading?** One change does not travel with the upgrade. `Type__c` on Portwood
+>   Template Version no longer defaults to **Word**, but Salesforce does not push a removed
+>   picklist default to an org that already has the package. If you create template
+>   versions from a script or integration without setting the type, clear it by hand:
+>   Setup → Object Manager → **Portwood Template Version** → **Type** → edit the **Word**
+>   value → untick **Default**. New installs already have it.
 
 [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Support](https://portwood.dev/support) · [Expert Services](https://portwood.dev/services)
 

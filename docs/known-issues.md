@@ -14,9 +14,20 @@ Kept here briefly so an older report reading "known issue" is not confusing.
   syntax, so each declaration resolved to nothing and left its selector printed on the
   page. Customer-reported. Now stripped before the merge, with the stylesheet hoisted
   into `<head>` so nothing is lost. See UserGuide §15.2.
-- **`DocGen_Template_Version__c.Type__c` defaulted to Word.** A version created without an
-  explicit type retyped its template through `activateVersion`. The picklist default is
-  gone, and `activateVersion` now ignores a blank type rather than copying it.
+- **`DocGen_Template_Version__c.Type__c` defaulted to Word** — **on new installs only.**
+  A version created without an explicit type retyped its template through
+  `activateVersion`. The picklist default is removed and `activateVersion` now ignores a
+  blank type.
+
+    **Salesforce does not push a removed picklist default to existing subscriber orgs.**
+    Measured on two upgraded orgs: a fresh 3.55 install describes the field with no
+    default, while orgs upgraded from 3.53 and 3.48 still report `Word`. So an existing
+    customer keeps the old behaviour until an admin clears it by hand — Setup → Object
+    Manager → Portwood Template Version → Type → edit the Word value → untick Default.
+
+    All of Portwood's own creation paths set the type explicitly, so this only bites code
+    that creates versions without one: scripts, data loads, integrations.
+
 - **`Validate Signature Token` faulted a bulk Flow.** It queries per token, so past
   roughly fifty requests the transaction died on `Too many SOQL queries: 101` and lost
   every result. It now validates as many as the allowance affords and returns the rest
