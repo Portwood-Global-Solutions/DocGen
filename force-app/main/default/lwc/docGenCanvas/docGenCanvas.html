@@ -39,8 +39,21 @@
         <!-- Panel: in-depth controls for whatever is selected. Draggable in X. -->
         <div class="dg-panel" style={panelStyle}>
             <template lwc:if={hasSelection}>
-                <h3 class="dg-panel-title">Box</h3>
+                <h3 class="dg-panel-title">{selectedBoxLabel}</h3>
                 <p class="dg-panel-hint">Drag to move. Handles on the right and bottom edges resize.</p>
+
+                <input
+                    class="dg-panel-input dg-box-name"
+                    type="text"
+                    value={selectedName}
+                    placeholder="Name this block, e.g. Line items"
+                    title="A name for this block. Shown wherever it is referred to — the element list, and the Follows picker."
+                    onchange={handleNameChange}
+                />
+                <p class="dg-panel-note">
+                    Optional, and worth it once a page has more than a few blocks — this is the name shown when
+                    something else follows it.
+                </p>
 
                 <template lwc:if={canEditRichText}>
                     <div class="dg-row dg-srctoggle">

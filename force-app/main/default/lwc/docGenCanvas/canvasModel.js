@@ -1233,11 +1233,26 @@ function styleCss(box) {
 }
 
 /** Escapes only what would break the markup — merge tags must survive verbatim. */
+/**
+ * HTML-escape, including the double quote.
+ *
+ * The quote is not decoration. Most callers here write an ATTRIBUTE value delimited by
+ * double quotes — data-dg-name, data-dg-if, data-dg-chart-title, the code and signature
+ * fields — all of them free text an author types. Without it a chart titled
+ * `Q1 "final" numbers` closes the attribute early and the rest of the tag becomes
+ * garbage: the box came back with its name truncated at the quote and the attributes
+ * after it lost entirely.
+ *
+ * Safe for the text-content callers too. `&quot;` renders as `"`, and the merge engine
+ * already decodes it — DocGenService.evaluateIfExpression un-escapes
+ * &gt;/&lt;/&amp;/&apos;/&quot; because Word escapes the same set in its text runs.
+ */
 function esc(v) {
     return String(v == null ? '' : v)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 /**
@@ -1975,6 +1990,9 @@ function baseAuthoringAttrs(box, withId) {
         // Position mode and anchor ride as attributes for the same reason the
         // geometry does: the emitted CSS is a rendering instruction, and for a
         // grouped member it no longer describes where the author put it.
+        // The author's own name for the block. Emitted only when set, so an unnamed
+        // document's markup is byte-for-byte what it was before naming existed.
+        (box.name ? ' data-dg-name="' + esc(box.name) + '"' : '') +
         (box.positionMode === 'follows' && box.anchorTo ? ' data-dg-anchor="' + esc(box.anchorTo) + '"' : '') +
         (box.keepTogether ? ' data-dg-keep="1"' : '') +
         (box.condition ? ' data-dg-if="' + esc(box.condition) + '"' : '')
@@ -2123,6 +2141,14 @@ export function wouldCycle(box, candidateId, byId) {
 export function boxLabel(box) {
     if (!box) {
         return '';
+    }
+    // An author-given name always wins. Everything below it is a guess derived from
+    // content, and a guess is only useful until someone has said what the thing is —
+    // which is the whole reason naming exists. Truncated on the same rule as derived
+    // text so one long name cannot stretch the picker.
+    if (box.name && box.name.trim()) {
+        const n = box.name.trim();
+        return n.length > 32 ? n.slice(0, 32).trim() + '…' : n;
     }
     if (box.kind === 'table') {
         const rel = box.table && box.table.relationship;
@@ -2609,6 +2635,7 @@ export function deserialize(html) {
                 const az = parseInt(el.getAttribute('data-dg-z'), 10);
                 box.z = isNaN(az) ? 0 : az;
                 box.condition = el.getAttribute('data-dg-if') || '';
+                box.name = el.getAttribute('data-dg-name') || '';
                 // Prefer the AUTHORING attributes; fall back to reading the CSS only
                 // for documents saved before they existed.
                 const ax = parseFloat(el.getAttribute('data-dg-x'));

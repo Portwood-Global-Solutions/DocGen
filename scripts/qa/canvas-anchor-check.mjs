@@ -329,5 +329,74 @@ function tableBox(x, y, w) {
     ok(m.boxLabel(null) === '', 'and a missing box does not throw');
 }
 
+// --- author-given names -------------------------------------------------------
+// A derived label is a guess from content, useful only until someone says what the
+// thing is. On a page with six similar blocks the guesses collide and the Follows
+// picker stops being usable, which is what naming is for.
+{
+    const named = tableBox(1, 2, 5);
+    named.name = 'Line items';
+    ok(m.boxLabel(named) === 'Line items', 'a name beats the derived label');
+
+    const blank = tableBox(1, 2, 5);
+    blank.name = '   ';
+    ok(m.boxLabel(blank) === 'Contacts table', 'an all-whitespace name is no name');
+
+    const longName = tableBox(1, 2, 5);
+    longName.name = 'N'.repeat(80);
+    ok(m.boxLabel(longName).length <= 33, 'a long name is truncated like any other label');
+    ok(m.boxLabel(longName).endsWith('…'), 'and says so');
+}
+
+// --- names survive the round trip ---------------------------------------------
+{
+    const doc = m.blankDocument();
+    const table = tableBox(1, 1.5, 6);
+    table.name = 'Line items';
+    const total = m.newTextBox(1, 3, 6, 0.4);
+    total.text = 'Total';
+    total.name = 'Grand total';
+    total.positionMode = 'follows';
+    total.anchorTo = table.id;
+    doc.artboards[0].boxes.push(table, total);
+
+    const html = m.serialize(doc, geo);
+    ok(html.includes('data-dg-name="Line items"'), 'a name is emitted');
+
+    const back = m.deserialize(html);
+    const bt = back.artboards[0].boxes.find((x) => x.kind === 'table');
+    const bl = back.artboards[0].boxes.find((x) => (x.text || '').includes('Total'));
+    ok(bt && bt.name === 'Line items', 'and survives a reload');
+    ok(bl && bl.name === 'Grand total', 'on a group member too');
+    ok(bl && bl.anchorTo === bt.id, 'with the link intact alongside it');
+
+    // Free text in an attribute. A double quote used to close the attribute early and
+    // turn the rest of the tag into garbage — the name came back truncated at the
+    // quote and every attribute after it was lost.
+    const tricky = m.blankDocument();
+    const q = m.newTextBox(1, 1, 3, 0.5);
+    q.name = 'Bob\'s "big" <block> & co';
+    q.condition = 'Status = "Won"';
+    q.positionMode = 'follows';
+    const host = m.newTextBox(1, 0.5, 3, 0.5);
+    host.name = 'Host';
+    q.anchorTo = host.id;
+    tricky.artboards[0].boxes.push(host, q);
+    const rt = m.deserialize(m.serialize(tricky, geo));
+    const rq = rt.artboards[0].boxes.find((x) => x.name && x.name.startsWith('Bob'));
+    ok(rq && rq.name === 'Bob\'s "big" <block> & co', 'quotes, brackets and ampersands round-trip: ' + (rq && rq.name));
+    ok(rq && rq.condition === 'Status = "Won"', 'a quoted condition survives: ' + (rq && rq.condition));
+    ok(rq && rq.anchorTo === rt.artboards[0].boxes[0].id, 'and attributes AFTER the quoted one are not lost');
+}
+
+// --- an unnamed document is unchanged by the feature --------------------------
+{
+    const doc = m.blankDocument();
+    const b = m.newTextBox(1, 1, 3, 0.5);
+    b.text = 'Plain';
+    doc.artboards[0].boxes.push(b);
+    ok(!m.serialize(doc, geo).includes('data-dg-name'), 'no attribute is emitted when nothing is named');
+}
+
 console.log(fail ? `\n${fail} FAILED` : '\nanchors OK');
 process.exit(fail ? 1 : 0);

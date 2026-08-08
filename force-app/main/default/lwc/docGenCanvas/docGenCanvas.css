@@ -1031,3 +1031,10 @@ textarea.dg-cbox-text {
     stroke-dasharray: 4 3;
     opacity: 0.85;
 }
+
+/* The block name sits directly under the panel title, so it reads as the heading's
+   editable form rather than as the first of the styling fields. */
+.dg-box-name {
+    margin-bottom: 2px;
+    font-weight: var(--slds-g-font-weight-7, 700);
+}

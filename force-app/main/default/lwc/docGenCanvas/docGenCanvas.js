@@ -861,7 +861,16 @@ export default class DocGenCanvas extends LightningElement {
                 // NOTHING is edited on the artboard now — text through the panel's
                 // rich-text editor, tables through the column editor. The artboard is a
                 // faithful preview you arrange, which is what makes it trustworthy.
-                readout: b.x.toFixed(2) + 'in, ' + b.y.toFixed(2) + 'in · ' + b.w.toFixed(2) + 'in',
+                // A named block leads with its name — on a busy page that is the only
+                // part of this badge anyone reads.
+                readout:
+                    (b.name ? b.name + ' · ' : '') +
+                    b.x.toFixed(2) +
+                    'in, ' +
+                    b.y.toFixed(2) +
+                    'in · ' +
+                    b.w.toFixed(2) +
+                    'in',
                 // A linked box reported "Pinned" here, which is what its `mode` field
                 // still says — but the link is what actually decides where it lands,
                 // so that was the panel confidently describing the wrong thing.
@@ -1882,6 +1891,31 @@ export default class DocGenCanvas extends LightningElement {
 
     get hasSelection() {
         return !!this.selectedBox;
+    }
+
+    /** The author's name for the selection, or '' — never the derived label. */
+    get selectedName() {
+        const b = this.selectedBox;
+        return (b && b.name) || '';
+    }
+
+    /**
+     * The panel heading. "Box" told the author nothing they could not already see;
+     * naming the selection is how you know which of six similar blocks you are editing.
+     */
+    get selectedBoxLabel() {
+        const b = this.selectedBox;
+        return b ? boxLabel(b) : 'Box';
+    }
+
+    handleNameChange(event) {
+        const box = this.selectedBox;
+        if (!box) {
+            return;
+        }
+        // Trimmed, and an all-whitespace name is no name — it would render as a blank
+        // row in the Follows picker and read as a bug.
+        this.applyToBox(box.id, { name: (event.target.value || '').trim() });
     }
 
     get selectedIsFlow() {
