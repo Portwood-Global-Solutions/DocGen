@@ -71,3 +71,29 @@ who builds templates through the API.
 
 The durable fix is for the designer to fall back to the active version's
 `Content_Version_Id__c` when the well-known title is absent.
+
+## 5. Signature Flow actions are not bulkified
+
+`Validate Signature Token` queries per request. A Flow that hands the action a batch —
+the suite uses 60, the platform allows up to 200 — hits `Too many SOQL queries: 101` and
+the interview faults. `flow-actions` separately reports SOQL and DML inside the
+per-request loop of `DocGenFlowAction.generateDocument`.
+
+**Consequence:** any Flow that processes signature tokens in bulk fails partway with a
+governor limit rather than returning results. Single-request Flows are unaffected, which
+is why this has gone unnoticed.
+
+## 6. Signature actions fault the Flow instead of returning an error
+
+`Create Signature Request` throws `DocGenException` for a null Template Id, a null
+Related Record Id, an empty Signers collection, or a signer with no email —
+the four most common author mistakes. `Finalize Signature Image` throws
+`SignatureException` on a malformed token.
+
+Both actions publish `Success` and `Error Message` output variables. On these paths those
+outputs are unreachable: the interview faults before it can read them, so a Flow author
+who wired up error handling never sees it run.
+
+Deliberate per the class comment, but it makes the two advertised outputs a lie for
+exactly the cases they exist to report. Either validate into `Result.success = false`, or
+drop the outputs and document that these actions fault.
