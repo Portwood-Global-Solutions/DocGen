@@ -1,5 +1,51 @@
 # Changelog
 
+## v3.56.0 — Chart label size, and bold that tells the truth
+
+Released 2026-08-08 · ancestor 3.55.0
+
+Two small fixes where the editor promised something the PDF did not deliver.
+
+### Added
+
+- **Label size on charts.** `fontSize=` on a `{Chart:...}` tag, and a **Label size** box
+  in the Canvas chart properties — which is what makes it reachable, since a Canvas
+  author never writes the tag by hand. The live preview honours it, so the artboard and
+  the PDF agree.
+
+    Sizes are absolute canvas pixels, deliberately. Scaling them with `width=` was tried
+    first and reverted: it is right for PowerPoint, where the shape stretches the image
+    independently, and wrong for the Canvas, where `chartToHtml` emits
+    `width=inToCssPx(box.w)` and the image is placed at exactly its own size. There 12px
+    has always meant a steady ~9pt; scaling would have made a 3-inch chart print ~5pt
+    labels. One rule cannot serve both, so the size is now something you set rather than
+    something guessed at.
+
+### Fixed
+
+- **Bold on `'Arial Unicode MS'` was a no-op** (#281, PR #286 by @ssk42). The PDF engine
+  embeds that family with no bold face, so a bold it carried printed regular — the
+  control looked on and did nothing. It is now disabled for that font, and no bold is
+  emitted for it. Established by reading `/BaseFont` out of a rendered PDF: the generic
+  families _do_ register bold (`Helvetica-Bold`, `Times-Bold`, `Courier-Bold`), so the
+  issue's suggested fix — disabling bold everywhere — would have been wrong. Generic
+  families are untouched.
+
+### Changed
+
+- **The package description is static and written for customers.** It was a per-release
+  changelog, which is the wrong thing to put on the screen someone reads while deciding
+  whether to install. Release detail lives here and in the GitHub release.
+
+### Internal
+
+- `canRenderBold` has one definition. The Bold control's copy was a hand-maintained
+  inverse with a comment asking editors to keep the two in sync — the same shape as the
+  `layerLabel`/`boxLabel` drift found in v3.55.
+- Claude review skips fork PRs rather than failing them. GitHub withholds secrets and
+  `id-token: write` from fork runs, so the check could never pass and gated merges it
+  had no bearing on.
+
 ## Unreleased
 
 ### Fixed
