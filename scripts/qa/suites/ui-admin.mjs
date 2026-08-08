@@ -576,7 +576,10 @@ export async function run({ org, headed }) {
         // that were deliberately deleted reported six failures for working software.
         const cardPaths = [
             { mode: 'file', marker: 'Output Format', text: true, what: 'the Type / Output Format pickers' },
-            { mode: 'canvas', marker: 'Output Format', text: true, what: 'the Canvas setup fields' }
+            // "Create & Open Canvas", not "…Designer" — the canvas path has its own
+            // button label, and Output Format is not shown at all because a Canvas
+            // template can only be PDF.
+            { mode: 'canvas', marker: 'Create & Open Canvas', text: true, what: 'the Canvas setup fields' }
         ];
         for (const cp of cardPaths) {
             const verdict = await hittable(page, `[data-mode="${cp.mode}"]`);
@@ -645,7 +648,7 @@ export async function run({ org, headed }) {
         await wait(1000);
         await typeField(page, 'Template Name', '');
         await drainToasts(page);
-        await clickByText(page, 'lightning-button', 'Create & Open Designer');
+        await clickByText(page, 'lightning-button', 'Create & Open Canvas');
         const emptyName = await awaitToast(page, /name it first|template name|required/i);
         add(
             check(
@@ -803,7 +806,7 @@ export async function run({ org, headed }) {
         await typeField(page, 'Template Name', NAME_STARTER);
         await wait(600);
         await drainToasts(page);
-        await clickByText(page, 'lightning-button', 'Create & Open Designer');
+        await clickByText(page, 'lightning-button', 'Create & Open Canvas');
         const canvasUp = await until(
             page,
             `return __dgFind('.dg-board') && __dgFind('.dg-rail') ? { ok: 1 } : null;`,
@@ -819,7 +822,7 @@ export async function run({ org, headed }) {
                 !!starterRow,
                 starterRow
                     ? `${starterRow.id}, ${starterRow['Type__c']}/${starterRow['Output_Format__c']}`
-                    : 'no record was created by "Create & Open Designer"',
+                    : 'no record was created by "Create & Open Canvas"',
                 SEVERITY.BLOCKER
             )
         );

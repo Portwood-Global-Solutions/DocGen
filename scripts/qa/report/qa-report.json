@@ -1,20 +1,20 @@
 {
   "meta": {
     "org": "designer-ns",
-    "startedAt": "2026-08-08T09:10:32.315Z",
-    "durationMs": 2022305,
+    "startedAt": "2026-08-08T09:49:40.611Z",
+    "durationMs": 1992980,
     "args": "--org designer-ns"
   },
   "tally": {
-    "passed": 1126,
-    "failed": 187,
-    "skipped": 20,
-    "evaluated": 1313,
-    "total": 1333,
-    "rate": 85.8,
+    "passed": 1200,
+    "failed": 171,
+    "skipped": 19,
+    "evaluated": 1371,
+    "total": 1390,
+    "rate": 87.5,
     "bySeverity": {
-      "blocker": 14,
-      "major": 24,
+      "blocker": 9,
+      "major": 13,
       "minor": 149
     }
   },
@@ -900,8 +900,8 @@
         },
         {
           "name": "DocGen_Job__c.Sort_Order__c is on the page layout",
-          "ok": false,
-          "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+          "ok": true,
+          "detail": "",
           "severity": "major",
           "skipped": false
         },
@@ -2853,8 +2853,8 @@
         },
         {
           "name": "DocGen_Template__c.Draft_Body__c is on the page layout",
-          "ok": false,
-          "detail": "field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.",
+          "ok": true,
+          "detail": "",
           "severity": "major",
           "skipped": false
         },
@@ -3647,7 +3647,7 @@
         {
           "name": "DocGenButtonAdminController meets the 75% packaging bar",
           "ok": true,
-          "detail": "80% (106/132 lines)",
+          "detail": "90% (119/132 lines)",
           "severity": "minor",
           "skipped": false
         },
@@ -3948,7 +3948,7 @@
         {
           "name": "org-wide coverage is at or above 75%",
           "ok": true,
-          "detail": "79% (25000/31696 lines) — a 2GP build fails below 75%",
+          "detail": "79% (25013/31696 lines) — a 2GP build fails below 75%",
           "severity": "blocker",
           "skipped": false
         }
@@ -4089,7 +4089,7 @@
         {
           "name": "{Now:yyyy-MM-dd HH:mm} formats a timestamp",
           "ok": true,
-          "detail": "actual: 2026-08-08 02:25",
+          "detail": "actual: 2026-08-08 03:04",
           "severity": "major",
           "skipped": false
         },
@@ -6574,38 +6574,283 @@
       "area": "Output formats",
       "checks": [
         {
-          "name": "HTML template renders to PDF",
-          "ok": false,
-          "detail": "phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6.\nError (executeCompileFailure): Compilation failed at Line 10 column 42 with the error:\n\nMethod does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGenController\n\n\n [apex: /var/folders/pj/r60drhl55075qbd73_c6hyqh0000gn/T/dgqa-fail-frvyOc/P1.apex]",
+          "name": "HTML→PDF: generation returned bytes",
+          "ok": true,
+          "detail": "74965 bytes",
           "severity": "blocker",
           "skipped": false
         },
         {
-          "name": "Word template renders to DOCX",
-          "ok": false,
-          "detail": "phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6.\nError (executeCompileFailure): Compilation failed at Line 6 column 42 with the error:\n\nMethod does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGenController\n\n\n [apex: /var/folders/pj/r60drhl55075qbd73_c6hyqh0000gn/T/dgqa-fail-PqfhmH/P2.apex]",
+          "name": "HTML→PDF: magic bytes are %PDF",
+          "ok": true,
+          "detail": "leading bytes 255044462D312E34, expected 25504446",
           "severity": "blocker",
           "skipped": false
         },
         {
-          "name": "Word template renders to PDF (converter path)",
-          "ok": false,
-          "detail": "phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6.\nError (executeCompileFailure): Compilation failed at Line 7 column 42 with the error:\n\nMethod does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGenController\n\n\n [apex: /var/folders/pj/r60drhl55075qbd73_c6hyqh0000gn/T/dgqa-fail-H0MpJW/P3.apex]",
+          "name": "HTML→PDF: size above 800 bytes",
+          "ok": true,
+          "detail": "74965 bytes",
           "severity": "blocker",
           "skipped": false
         },
         {
-          "name": "PowerPoint and Excel generation",
-          "ok": false,
-          "detail": "phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6.\nError (executeCompileFailure): Compilation failed at Line 41 column 47 with the error:\n\nMethod does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGenController\n\n\n [apex: /var/folders/pj/r60drhl55075qbd73_c6hyqh0000gn/T/dgqa-fail-njCfmj/P4.apex]",
+          "name": "HTML→PDF: DocGenService.lastRenderedHtml captured for inspection",
+          "ok": true,
+          "detail": "675 chars",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "HTML→PDF: merged parent field appears in the rendered document",
+          "ok": true,
+          "detail": "both {Name} and {Industry} resolved in the rendered HTML",
           "severity": "blocker",
           "skipped": false
         },
         {
-          "name": "PDF AcroForm fill",
-          "ok": false,
-          "detail": "phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6.\nError (executeCompileFailure): Compilation failed at Line 44 column 47 with the error:\n\nMethod does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGenController\n\n\n [apex: /var/folders/pj/r60drhl55075qbd73_c6hyqh0000gn/T/dgqa-fail-lGOVta/P5.apex]",
+          "name": "HTML→PDF: every child-loop row rendered",
+          "ok": true,
+          "detail": "ROW-Alpha, ROW-Bravo and ROW-Charlie all present",
           "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "HTML→PDF: non-Latin / unicode merge values survive the round trip",
+          "ok": true,
+          "detail": "expected \"Kabushiki 日本語 Ünïcødé Ω €\" to appear; rendered slice was \"UNI:Kabushiki <span style=\\\"font-family:'Arial Unicode MS', s\"",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "HTML→PDF: no unresolved merge tags leak into the output",
+          "ok": true,
+          "detail": "no {Tag} or {#Loop} survived into the rendered HTML",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Document_Title_Format__c produces the document title",
+          "ok": true,
+          "detail": "expected \"QAOF183534137-QAOF183534137 Corp-Technology\", got \"QAOF183534137-QAOF183534137 Corp-Technology\"",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "HTML→PDF: result is labelled PDF",
+          "ok": true,
+          "detail": "outputFormat=PDF templateType=HTML",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Word→DOCX: generation returned bytes",
+          "ok": true,
+          "detail": "1286 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→DOCX: magic bytes are PK (ZIP)",
+          "ok": true,
+          "detail": "leading bytes 504B030414000808, expected 504B0304",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→DOCX: size above 400 bytes",
+          "ok": true,
+          "detail": "1286 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→DOCX: output opens as a ZIP archive",
+          "ok": true,
+          "detail": "entries: word/document.xml&#124;word/_rels/document.xml.rels&#124;[Content_Types].xml&#124;_rels/.rels",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→DOCX: contains word/document.xml, [Content_Types].xml and _rels/.rels",
+          "ok": true,
+          "detail": "document.xml=true content-types=true rels=true; parts: word/document.xml&#124;word/_rels/document.xml.rels&#124;[Content_Types].xml&#124;_rels/.rels",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→DOCX: merged data is inside the produced document.xml",
+          "ok": true,
+          "detail": "{Name}=true {Industry}=true",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→DOCX: every child-loop row rendered",
+          "ok": true,
+          "detail": "all three rows present in the produced word/document.xml",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→DOCX: no unresolved merge tags leak into the output",
+          "ok": true,
+          "detail": "no {Tag} survived into word/document.xml",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→DOCX: Document_Title_Format__c applied",
+          "ok": true,
+          "detail": "expected \"QAOF183534137-QAOF183534137 Corp\", got \"QAOF183534137-QAOF183534137 Corp\"",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Word→PDF: generation returned bytes",
+          "ok": true,
+          "detail": "1053 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→PDF: magic bytes are %PDF",
+          "ok": true,
+          "detail": "leading bytes 255044462D312E34, expected 25504446",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→PDF: size above 800 bytes",
+          "ok": true,
+          "detail": "1053 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→PDF: merged data survives the DOCX→HTML conversion",
+          "ok": true,
+          "detail": "name=true rows=true",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→PDF: no raw OOXML reaches the PDF renderer",
+          "ok": true,
+          "detail": "the converter emitted clean HTML — no <w:t>/<w:p> left",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Word→PDF: no unresolved merge tags leak into the output",
+          "ok": true,
+          "detail": "no {Tag} survived the converter path",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PowerPoint→PPTX: generation returned bytes",
+          "ok": true,
+          "detail": "1227 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PowerPoint→PPTX: magic bytes are PK (ZIP)",
+          "ok": true,
+          "detail": "leading bytes 504B030414000808, expected 504B0304",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PowerPoint→PPTX: size above 400 bytes",
+          "ok": true,
+          "detail": "1227 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PowerPoint→PPTX: ppt/slides/slide1.xml survives the repack",
+          "ok": true,
+          "detail": "parts: ppt/_rels/presentation.xml.rels&#124;[Content_Types].xml&#124;_rels/.rels&#124;ppt/slides/slide1.xml",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PowerPoint→PPTX: merged data is inside the produced slide",
+          "ok": true,
+          "detail": "merged=true leakedTags=false",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Excel→XLSX: generation returned bytes",
+          "ok": true,
+          "detail": "1436 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Excel→XLSX: magic bytes are PK (ZIP)",
+          "ok": true,
+          "detail": "leading bytes 504B030414000808, expected 504B0304",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Excel→XLSX: size above 400 bytes",
+          "ok": true,
+          "detail": "1436 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Excel→XLSX: xl/worksheets/sheet1.xml survives the repack",
+          "ok": true,
+          "detail": "parts: xl/_rels/workbook.xml.rels&#124;[Content_Types].xml&#124;xl/sharedStrings.xml&#124;xl/worksheets/sheet1.xml&#124;_rels/.rels",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Excel→XLSX: merged data is inside the produced sheet",
+          "ok": true,
+          "detail": "merged=true leakedTags=false",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PDF AcroForm: generation returned bytes",
+          "ok": true,
+          "detail": "795 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PDF AcroForm: magic bytes are %PDF",
+          "ok": true,
+          "detail": "leading bytes 255044462D312E34, expected 25504446",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PDF AcroForm: size above 300 bytes",
+          "ok": true,
+          "detail": "795 bytes",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PDF AcroForm: merged value is written into the PDF",
+          "ok": true,
+          "detail": "expected \"QAOF183534137 Corp\" in the filled PDF bytes; A_MERGED=true",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "PDF AcroForm: incremental update appended (output larger than template)",
+          "ok": true,
+          "detail": "template 513 bytes → output 795 bytes; equal size means no field was filled",
+          "severity": "major",
           "skipped": false
         },
         {
@@ -6625,14 +6870,14 @@
         {
           "name": "Deactivated version with an attached file yields a valid PDF or a clean error, never a corrupt one",
           "ok": true,
-          "detail": "size=66565 hex=255044462D312E34 threw=false",
+          "detail": "size=66513 hex=255044462D312E34 threw=false",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "Zero-row child loop: generation returned bytes",
           "ok": true,
-          "detail": "67647 bytes",
+          "detail": "67551 bytes",
           "severity": "blocker",
           "skipped": false
         },
@@ -6646,7 +6891,7 @@
         {
           "name": "Zero-row child loop: size above 800 bytes",
           "ok": true,
-          "detail": "67647 bytes",
+          "detail": "67551 bytes",
           "severity": "blocker",
           "skipped": false
         },
@@ -6681,7 +6926,7 @@
         {
           "name": "Header image: generation returned bytes",
           "ok": true,
-          "detail": "90746 bytes",
+          "detail": "90663 bytes",
           "severity": "blocker",
           "skipped": false
         },
@@ -6695,7 +6940,7 @@
         {
           "name": "Header image: size above 800 bytes",
           "ok": true,
-          "detail": "90746 bytes",
+          "detail": "90663 bytes",
           "severity": "blocker",
           "skipped": false
         },
@@ -6716,7 +6961,7 @@
         {
           "name": "Missing image CV: generation returned bytes",
           "ok": true,
-          "detail": "67877 bytes",
+          "detail": "67779 bytes",
           "severity": "blocker",
           "skipped": false
         },
@@ -6730,7 +6975,7 @@
         {
           "name": "Missing image CV: size above 800 bytes",
           "ok": true,
-          "detail": "67877 bytes",
+          "detail": "67779 bytes",
           "severity": "blocker",
           "skipped": false
         },
@@ -6758,21 +7003,21 @@
         {
           "name": "Very large document body: valid PDF or a clean, catchable error",
           "ok": true,
-          "detail": "size=505506 hex=255044462D312E34 at body length 1152000",
+          "detail": "size=505433 hex=255044462D312E34 at body length 1152000",
           "severity": "blocker",
           "skipped": false
         },
         {
           "name": "Very large document body: PDF is complete, not truncated",
           "ok": true,
-          "detail": "%%EOF trailer present in 505506 bytes",
+          "detail": "%%EOF trailer present in 505433 bytes",
           "severity": "blocker",
           "skipped": false
         },
         {
           "name": "Very large document body: output size reflects the content",
           "ok": true,
-          "detail": "1152000-char body → 505506 bytes of PDF",
+          "detail": "1152000-char body → 505433 bytes of PDF",
           "severity": "major",
           "skipped": false
         },
@@ -6821,7 +7066,7 @@
         {
           "name": "Giant-query PDF: generation returned bytes",
           "ok": true,
-          "detail": "109328 bytes",
+          "detail": "109334 bytes",
           "severity": "blocker",
           "skipped": false
         },
@@ -6835,21 +7080,21 @@
         {
           "name": "Giant-query PDF: size above 30000 bytes",
           "ok": true,
-          "detail": "109328 bytes",
+          "detail": "109334 bytes",
           "severity": "blocker",
           "skipped": false
         },
         {
           "name": "Giant-query PDF is complete, not truncated",
           "ok": true,
-          "detail": "%%EOF trailer present in 109328 bytes",
+          "detail": "%%EOF trailer present in 109334 bytes",
           "severity": "blocker",
           "skipped": false
         },
         {
           "name": "Giant-query output is named from Document_Title_Format__c",
           "ok": true,
-          "detail": "ContentVersion.Title was \"QAOF181187350-giant-QAOF181187350 Giant\", expected it to start with \"QAOF181187350-giant-\"",
+          "detail": "ContentVersion.Title was \"QAOF183534137-giant-QAOF183534137 Giant\", expected it to start with \"QAOF183534137-giant-\"",
           "severity": "major",
           "skipped": false
         },
@@ -6863,7 +7108,7 @@
         {
           "name": "Suite fixtures cleaned up",
           "ok": true,
-          "detail": "removed 11 templates, 3 accounts, 11 files, 1 jobs",
+          "detail": "removed 14 templates, 3 accounts, 14 files, 1 jobs",
           "severity": "minor",
           "skipped": false
         }
@@ -6940,48 +7185,6 @@
           "skipped": false
         },
         {
-          "name": "authoring card \"starter\" is reachable by a mouse",
-          "ok": false,
-          "detail": "hit-test says: missing",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "authoring card \"starter\" selects and reveals the starter gallery",
-          "ok": false,
-          "detail": "clicked=false selected=false otherCardsSelected=1 pathContentShown=false",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "authoring card \"ai\" is reachable by a mouse",
-          "ok": false,
-          "detail": "hit-test says: missing",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "authoring card \"ai\" selects and reveals the AI intro and its Next button",
-          "ok": false,
-          "detail": "clicked=false selected=false otherCardsSelected=1 pathContentShown=false",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "authoring card \"scratch\" is reachable by a mouse",
-          "ok": false,
-          "detail": "hit-test says: missing",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "authoring card \"scratch\" selects and reveals the blank-page CTA",
-          "ok": false,
-          "detail": "clicked=false selected=false otherCardsSelected=1 pathContentShown=false",
-          "severity": "major",
-          "skipped": false
-        },
-        {
           "name": "authoring card \"file\" is reachable by a mouse",
           "ok": true,
           "detail": "",
@@ -6996,23 +7199,23 @@
           "skipped": false
         },
         {
-          "name": "the starter gallery renders every predesigned starter",
-          "ok": false,
-          "detail": "rendered 0:  — expected report, invoice, letter, agreement, certificate",
+          "name": "authoring card \"canvas\" is reachable by a mouse",
+          "ok": true,
+          "detail": "",
           "severity": "major",
           "skipped": false
         },
         {
-          "name": "every starter card takes selection when clicked",
+          "name": "authoring card \"canvas\" selects and reveals the Canvas setup fields",
           "ok": false,
-          "detail": "0 starters each selected",
+          "detail": "clicked=true selected=true otherCardsSelected=0 pathContentShown=false",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "Advanced options discloses the power-user fields",
-          "ok": false,
-          "detail": "Data Source radio group visible before=true after=true",
+          "ok": true,
+          "detail": "Data Source radio group visible before=false after=true",
           "severity": "major",
           "skipped": false
         },
@@ -7047,7 +7250,7 @@
         {
           "name": "wizard Back returns to step 1 and keeps what was typed",
           "ok": true,
-          "detail": "onStep1=true name=\"QAUI-k68gzp-File\" (expected \"QAUI-k68gzp-File\")",
+          "detail": "onStep1=true name=\"QAUI-k7mluw-File\" (expected \"QAUI-k7mluw-File\")",
           "severity": "major",
           "skipped": false
         },
@@ -7068,7 +7271,7 @@
         {
           "name": "the wizard creates a template record end to end",
           "ok": true,
-          "detail": "a0BRK00000gttDO2AY, base object Account",
+          "detail": "a0BRK00000gtxbx2AA, base object Account",
           "severity": "blocker",
           "skipped": false
         },
@@ -7080,23 +7283,23 @@
           "skipped": false
         },
         {
-          "name": "the AI path reaches the prompt screen",
-          "ok": false,
-          "detail": ".dg-ai-prompt never rendered after \"Next: Build My Prompt\"",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "the starter path creates the template record",
+          "name": "the canvas path creates the template record",
           "ok": false,
           "detail": "no record was created by \"Create & Open Designer\"",
           "severity": "blocker",
           "skipped": false
         },
         {
-          "name": "the starter path lands in the designer with the design loaded",
+          "name": "and it is typed Canvas, which is what decides which editor opens",
           "ok": false,
-          "detail": "the designer canvas (.dg-pv) never appeared",
+          "detail": "no record",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "the canvas path lands on the artboard",
+          "ok": false,
+          "detail": "the artboard (.dg-board) never appeared",
           "severity": "blocker",
           "skipped": false
         },
@@ -7110,21 +7313,21 @@
         {
           "name": "the template list renders rows",
           "ok": true,
-          "detail": "12 rows; count label \"12 templates\"",
+          "detail": "13 rows; count label \"13 templates\"",
           "severity": "blocker",
           "skipped": false
         },
         {
           "name": "search narrows the list to matching rows only",
           "ok": true,
-          "detail": "12 -> 1 rows for \"k68gzp\"; every remaining row matches = true",
+          "detail": "13 -> 1 rows for \"k7mluw\"; every remaining row matches = true",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "the row-count label reports the filtered subset",
           "ok": true,
-          "detail": "label reads \"1 of 12 templates\"",
+          "detail": "label reads \"1 of 13 templates\"",
           "severity": "minor",
           "skipped": false
         },
@@ -7138,21 +7341,21 @@
         {
           "name": "clearing the search restores the full list",
           "ok": true,
-          "detail": "12 rows (expected 12)",
+          "detail": "13 rows (expected 13)",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "clicking a column header re-orders the rows both ways",
           "ok": true,
-          "detail": "clicked=true; first row \"QAUI-k68gzp-File Word PDF Ac\" -> asc \"QA Fixtures Anchor Demo Canv\" -> desc \"Verify — Designer (pill-dens\"",
+          "detail": "clicked=true; first row \"QAUI-k7mluw-File Word PDF Ac\" -> asc \"QA Fixtures Anchor Demo Canv\" -> desc \"Verify — Designer (pill-dens\"",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "Refresh reloads the list without emptying it",
           "ok": true,
-          "detail": "hit-test=ok; 12 rows after refresh (expected 12)",
+          "detail": "hit-test=ok; 13 rows after refresh (expected 13)",
           "severity": "major",
           "skipped": false
         },
@@ -7173,14 +7376,14 @@
         {
           "name": "row action View opens the template on its Copy-Paste Tags tab",
           "ok": false,
-          "detail": "could not drive the row menu: row \"QAUI-k68gzp-Starter\": no row",
+          "detail": "could not drive the row menu: row \"QAUI-k7mluw-Starter\": no row",
           "severity": "major",
           "skipped": true
         },
         {
           "name": "row action Export downloads a valid .docgen.json bundle",
           "ok": false,
-          "detail": "no download event fired: row \"QAUI-k68gzp-Starter\": no row",
+          "detail": "no download event fired: row \"QAUI-k7mluw-Starter\": no row",
           "severity": "major",
           "skipped": true
         },
@@ -7194,14 +7397,14 @@
         {
           "name": "row action Clone creates a copy and opens it for editing",
           "ok": true,
-          "detail": "created \"QAUI-k68gzp-File (Copy)\" (a0BRK00000gtuCf2AI); the edit modal opened = true",
+          "detail": "created \"QAUI-k7mluw-File (Copy)\" (a0BRK00000gtxvJ2AQ); the edit modal opened = true",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "row action Delete removes the template",
           "ok": true,
-          "detail": "\"QAUI-k68gzp-File (Copy)\" is gone from the org",
+          "detail": "\"QAUI-k7mluw-File (Copy)\" is gone from the org",
           "severity": "major",
           "skipped": false
         },
@@ -7215,7 +7418,7 @@
         {
           "name": "row action Design opens that template in the designer",
           "ok": false,
-          "detail": "could not drive the row menu: row \"QAUI-k68gzp-Starter\": no row",
+          "detail": "could not drive the row menu: row \"QAUI-k7mluw-Starter\": no row",
           "severity": "major",
           "skipped": true
         },
@@ -7369,7 +7572,7 @@
         {
           "name": "the generated document's title resolves merge tokens against the record",
           "ok": true,
-          "detail": "Document_Title_Format__c = \"UIQA-msk6idqk {Name}\" → title was \"UIQA-msk6idqk UIQA Alpha\", expected \"UIQA-msk6idqk UIQA Alpha\"",
+          "detail": "Document_Title_Format__c = \"UIQA-msk7vad0 {Name}\" → title was \"UIQA-msk7vad0 UIQA Alpha\", expected \"UIQA-msk7vad0 UIQA Alpha\"",
           "severity": "minor",
           "skipped": false,
           "area": "Runner (server contract)"
@@ -7408,24 +7611,24 @@
         },
         {
           "name": "the runner shows an actionable empty state when no template matches the record",
-          "ok": false,
-          "detail": "the runner did not render at all",
+          "ok": true,
+          "detail": "with every Account template inactive the runner rendered 769 chars; Create Document disabled=true. The user must be told WHY there is nothing to pick, and must not be able to press a button that cannot work.",
           "severity": "major",
           "skipped": false,
           "area": "Runner (record page)"
         },
         {
           "name": "docGenRunner renders on a record page",
-          "ok": false,
-          "detail": "no portwoodglobal-doc-gen-runner, c-doc-gen-runner in the DOM. If this org lost the QA host page, re-run scripts/qa/fixtures/deploy.sh — do not re-skip this check.",
+          "ok": true,
+          "detail": "rendered 694 chars, 2 picker(s), 1 primary button(s)",
           "severity": "blocker",
           "skipped": false,
           "area": "Runner (record page)"
         },
         {
           "name": "the runner shows neither an error nor an empty state on a record that has templates",
-          "ok": false,
-          "detail": "component text starts: ",
+          "ok": true,
+          "detail": "component text starts: Portwood Create or combine documents for this record. Create Document Document Packet Combine PDFs Category All Categories QA Fixtures UIQA (Uncategorized) Select Template Choose a template... [QA Fix",
           "severity": "blocker",
           "skipped": false,
           "area": "Runner (record page)"
@@ -7439,16 +7642,177 @@
           "area": "Runner (record page)"
         },
         {
-          "name": "record-page runner interaction checks",
-          "ok": false,
-          "detail": "the runner did not render its template picker, so nothing downstream could be driven",
+          "name": "the record-page template picker lists a template the user can actually run",
+          "ok": true,
+          "detail": "picker showed: Choose a template... / [QA Fixtures] Anchor Demo / [QA Fixtures] Anchor E2E / [QA Fixtures] Canvas Export Test / canvs / [QA Fixtures] Chart Scale Demo (client-side) / [QA Fixtures] Chart Scale Test (PowerPoint) / [QA Fixtures] Flow Spike / [QA Fixtures] Flow Spike 2 / [QA Fixtures] Flow Spike 3 / PDFQA Giant Chrome / Test / [UIQA] UIQA Good PDF / [UIQA] UIQA Locked Format / [UIQA] UIQA No Version / Verify — Designer (pill-dense)",
           "severity": "blocker",
-          "skipped": true
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the record-page picker applies the active and audience rules",
+          "ok": true,
+          "detail": "Inactive, Record_Filter__c-excluded and permission-gated templates were all withheld",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the template picker is reachable by a mouse",
+          "ok": true,
+          "detail": "found=true hit=ok",
+          "severity": "blocker",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "choosing a category narrows the template list to that category",
+          "ok": true,
+          "detail": "after picking category \"UIQA\" the picker showed: [UIQA] UIQA Good PDF / [UIQA] UIQA Locked Format / [UIQA] UIQA No Version",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the Save to Record output choice is reachable",
+          "ok": true,
+          "detail": "found=true hit=ok",
+          "severity": "blocker",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "choosing Save to Record is honoured by the UI",
+          "ok": true,
+          "detail": "output pills after the click: both, download, save(active)",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the Create Document button is reachable",
+          "ok": true,
+          "detail": "found=true hit=ok",
+          "severity": "blocker",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "pressing Create Document in Save to Record mode puts the document ON the record",
+          "ok": true,
+          "detail": "ContentDocument \"UIQA-msk7vad0 UIQA Alpha\" linked to 001RK00002RBu9hYAD",
+          "severity": "blocker",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the saved file is in the template's own output format",
+          "ok": true,
+          "detail": "Output_Format__c = PDF, file extension = .pdf",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "choosing Download is honoured by the UI",
+          "ok": true,
+          "detail": "output pills after the click: both, download(active), save",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "pressing Create Document in Download mode downloads the document to the browser",
+          "ok": true,
+          "detail": "the browser received \"UIQA-msk7vad0 UIQA Alpha.pdf\"",
+          "severity": "blocker",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "Download does NOT also attach the document to the record",
+          "ok": true,
+          "detail": "files linked to the record: 3 before the run, 3 after. Download and Save to Record are the two halves of one choice; honouring it means Download leaves the record untouched.",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "choosing Save & Download is honoured by the UI",
+          "ok": true,
+          "detail": "output pills after the click: both(active), download, save",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "Save & Download hands the file to the browser",
+          "ok": true,
+          "detail": "the browser received \"UIQA-msk7vad0 UIQA Alpha.pdf\"",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "Save & Download also attaches the document to the record",
+          "ok": true,
+          "detail": "files linked to the record: 3 before the run, 4 after. A download alone would leave this unchanged — which is exactly the bug this mode exists to avoid.",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "a template with Lock_Output_Format__c exposes no runtime file-format control",
+          "ok": true,
+          "detail": "with the locked template selected the runner offered 2 picker(s) (category + template) and the choice widgets [both, download, save], which are output DESTINATIONS, not formats. The server half of this contract — an explicit override being refused — is asserted in the server-contract area.",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the Document Packet tab renders its template chooser and it is reachable",
+          "ok": true,
+          "detail": "packet tab active=true, dual listboxes=1, source list hit=ok",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the packet chooser offers the record's PDF templates",
+          "ok": true,
+          "detail": "chooser offered 14 template(s): Anchor Demo / Anchor E2E / Canvas Export Test / canvs / Chart Scale Demo (client-side) / Flow Spike",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the Create Packet button is reachable and refuses to run with nothing chosen",
+          "ok": true,
+          "detail": "button hit=ok, disabled=true",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the Combine PDFs tab lists the record's existing PDFs and they are reachable",
+          "ok": true,
+          "detail": "tab active=true, source list hit=ok, it offered 2 file(s) of which 2 are the two PDFs this suite attached to the record",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
+        },
+        {
+          "name": "the Combine PDFs button is reachable and refuses to run with fewer than two files chosen",
+          "ok": true,
+          "detail": "button hit=ok, disabled=true with nothing moved into the Combine list",
+          "severity": "major",
+          "skipped": false,
+          "area": "Runner (record page)"
         },
         {
           "name": "docGenSignatureSender renders on a record page",
-          "ok": false,
-          "detail": "component text: (nothing — is the QA host page still deployed?)",
+          "ok": true,
+          "detail": "rendered 323 chars with its template picker, signer table and send button",
           "severity": "blocker",
           "skipped": false,
           "area": "Signature sender (record page)"
@@ -7462,9 +7826,25 @@
           "area": "Signature sender (record page)"
         },
         {
+          "name": "the send button refuses to send with no document and no signer details",
+          "ok": true,
+          "detail": "found=true disabled=true",
+          "severity": "major",
+          "skipped": false,
+          "area": "Signature sender (record page)"
+        },
+        {
+          "name": "the signature document picker is reachable",
+          "ok": false,
+          "detail": "found=false hit=missing",
+          "severity": "blocker",
+          "skipped": false,
+          "area": "Signature sender (record page)"
+        },
+        {
           "name": "docGenSignatureSender validates its fields and writes the signature rows",
           "ok": false,
-          "detail": "the component did not render, so nothing could be driven",
+          "detail": "no template could be selected, so no request could be sent",
           "severity": "blocker",
           "skipped": true
         },
@@ -7495,7 +7875,7 @@
         {
           "name": "focusing the template box lists the available templates",
           "ok": true,
-          "detail": "15 options offered",
+          "detail": "16 options offered",
           "severity": "major",
           "skipped": false,
           "area": "Bulk runner"
@@ -7575,7 +7955,7 @@
         {
           "name": "pressing Run creates a bulk job on the server",
           "ok": true,
-          "detail": "DocGen_Job__c a03RK00001uHaDmYAK status Completed",
+          "detail": "DocGen_Job__c a03RK00001uGh9wYAC status Completed",
           "severity": "blocker",
           "skipped": false,
           "area": "Bulk runner"
@@ -7591,7 +7971,7 @@
         {
           "name": "each generated document is attached to its own record",
           "ok": true,
-          "detail": "4 pdf files across 2 records (expected 1 each on 2 records) — Output Mode was Individual Files",
+          "detail": "6 pdf files across 2 records (expected 1 each on 2 records) — Output Mode was Individual Files",
           "severity": "blocker",
           "skipped": false,
           "area": "Bulk runner"
@@ -7615,7 +7995,7 @@
         {
           "name": "the failing job records WHY each record failed",
           "ok": true,
-          "detail": "Error_Log__c = 001RK00002RDLhBYAX — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached).\n001RK00002RDLhCYAX — portwoodglobal.DocGenException: Error retrieving ",
+          "detail": "Error_Log__c = 001RK00002RBu9hYAD — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached).\n001RK00002RBu9iYAD — portwoodglobal.DocGenException: Error retrieving ",
           "severity": "major",
           "skipped": false,
           "area": "Bulk runner"
@@ -7623,7 +8003,7 @@
         {
           "name": "the Recent Jobs list shows the error count to the user",
           "ok": true,
-          "detail": "Recent Jobs did not show \"UIQA-msk6idqk-err\" with \"2 errors\" — a user would see the run as finished with no indication anything went wrong",
+          "detail": "Recent Jobs did not show \"UIQA-msk7vad0-err\" with \"2 errors\" — a user would see the run as finished with no indication anything went wrong",
           "severity": "major",
           "skipped": false,
           "area": "Bulk runner"
@@ -7679,29 +8059,57 @@
         {
           "name": "the document Button builder mounts from the Command Hub",
           "ok": true,
-          "detail": "rendered 761 chars of text",
+          "detail": "rendered 994 chars of text",
           "severity": "major",
           "skipped": false,
           "area": "Command Hub"
         },
         {
-          "name": "the DocGen quick action is present on the record",
-          "ok": false,
-          "detail": "no action labelled \"DocGen Button (QA)\" on the Account highlights panel — the QuickAction or its layout entry did not deploy. Re-run scripts/qa/setup-org.sh.",
+          "name": "the DocGen quick action is reachable by a mouse",
+          "ok": true,
+          "detail": "clickable on the highlights panel",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "a retired or wrong-object button configuration never appears",
+          "ok": true,
+          "detail": "getButtons returned only QA_Account_Doc — the inactive fixture and the Contact fixture were both withheld, so the component takes its run-immediately branch",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "pressing the record action does not error",
+          "ok": true,
+          "detail": "the action screen had already closed itself, which it only does after a successful generate",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "the record action delivers a document to the browser",
+          "ok": true,
+          "detail": "downloaded \"QA Button Document.pdf\"",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Save To Record = false leaves the record untouched",
+          "ok": true,
+          "detail": "5 files before and after",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "a user without the DocGen permission set gets a clear message, not a broken UI",
           "ok": false,
-          "detail": "could not create or resolve the restricted user via `sf org create user` — the org may be out of Salesforce licences.",
+          "detail": "the restricted user was sent to the first-login \"Change Your Password\" screen, so the record page was never reached. A session cookie IS set, which is why this slipped past the auth gate and previously got reported as the component rendering nothing — a product defect that did not exist. Set the password once by hand and this check runs.",
           "severity": "major",
           "skipped": true
         },
         {
           "name": "a Document Packet contains every document it was built from",
           "ok": false,
-          "detail": "packet tab not found",
+          "detail": "could not move templates into the packet: nothing reached the \"In Packet\" column — the move did not take",
           "severity": "major",
           "skipped": true
         }
@@ -7906,6 +8314,13 @@
           "name": "DocGen_Template__c.LastModifiedById renders on the record page",
           "ok": true,
           "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "DocGen_Template__c.Draft_Body__c renders on the record page",
+          "ok": false,
+          "detail": "on DocGen_Template__c-DocGen Template Layout.layout-meta.xml but not on the rendered page (looked for API \"Draft_Body__c\" and label \"Draft Body\"). Either that layout is not assigned to the running profile, or field-level security hides it.",
           "severity": "major",
           "skipped": false
         },
@@ -8263,6 +8678,13 @@
           "name": "DocGen_Job__c.Parent_Record_Id__c renders on the record page",
           "ok": true,
           "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "DocGen_Job__c.Sort_Order__c renders on the record page",
+          "ok": false,
+          "detail": "on DocGen_Job__c-DocGen Job Layout.layout-meta.xml but not on the rendered page (looked for API \"Sort_Order__c\" and label \"Sort Order\"). Either that layout is not assigned to the running profile, or field-level security hides it.",
           "severity": "major",
           "skipped": false
         },
@@ -9458,7 +9880,7 @@
       "area": "Crashed",
       "checks": [],
       "skipped": true,
-      "reason": "threw: Command failed: pdftotext -layout -enc UTF-8 /var/folders/pj/r60drhl55075qbd73_c6hyqh0000gn/T/dgqa-pdf-bfSpBo/doc.pdf -\nSyntax Warning: May not be a PDF file (continuing anyway)\nSyntax Error (2): Ille"
+      "reason": "threw: Command failed: pdftotext -layout -enc UTF-8 /var/folders/pj/r60drhl55075qbd73_c6hyqh0000gn/T/dgqa-pdf-6AT34o/doc.pdf -\nSyntax Warning: May not be a PDF file (continuing anyway)\nSyntax Error (2): Ille"
     },
     {
       "suite": "template-integrity",
@@ -9466,15 +9888,15 @@
       "checks": [
         {
           "name": "every HTML template returns a body to the visual Designer",
-          "ok": true,
-          "detail": "all 1 HTML templates return a non-empty body from getHtmlTemplateBody",
+          "ok": false,
+          "detail": "3 of 5 return NOTHING — those open to an empty canvas however well they generate. The Designer reads a ContentVersion titled docgen_html_body_<templateId>, not the version's Content_Version_Id__c: Chart Scale Demo (client-side) &#124; Flow Spike &#124; Flow Spike 3",
           "severity": "blocker",
           "skipped": false
         },
         {
           "name": "each template agrees with its active version about its own type",
           "ok": false,
-          "detail": "5 disagree. Type__c on the VERSION has Word as its picklist default, so any programmatic creation that omits it silently mistypes an HTML template — and the template derives its behaviour from the version: Verify — Designer (pill-dense) (tpl=Canvas ver=HTML) &#124; Chart Scale Demo (client-side) (tpl=Canvas ver=HTML) &#124; Flow Spike (tpl=Canvas ver=HTML) &#124; Flow Spike 3 (tpl=Canvas ver=HTML) &#124; Flow Spike 2 (tpl=Canvas ver=HTML)",
+          "detail": "1 disagree. Type__c on the VERSION has Word as its picklist default, so any programmatic creation that omits it silently mistypes an HTML template — and the template derives its behaviour from the version: Verify — Designer (pill-dense) (tpl=Canvas ver=HTML)",
           "severity": "blocker",
           "skipped": false
         },

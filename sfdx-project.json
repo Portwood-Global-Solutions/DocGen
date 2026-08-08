@@ -1,15 +1,15 @@
 {
   "packageDirectories": [
     {
-      "versionName": "v3.54.0 — Canvas designer (Beta)",
-      "versionNumber": "3.54.0.NEXT",
+      "versionName": "v3.55.0 — Element linking, named blocks, client-side charts",
+      "versionNumber": "3.55.0.NEXT",
       "path": "force-app",
       "default": true,
       "definitionFile": "config/build-def.json",
       "postInstallScript": "DocGenEmailTemplateInstall",
       "package": "Portwood",
-      "ancestorVersion": "3.53.0",
-      "versionDescription": "Portwood turns any Salesforce record into a finished document — quotes, invoices, contracts, certificates, letters and reports — as PDF, Word, Excel or PowerPoint. New in 3.54: the Canvas designer (Beta). Drag text, tables, images, shapes, QR codes, barcodes and signature blocks exactly where you want them and they land there in the PDF, to the inch — while line-item lists still flow across as many pages as the data needs. Tables can nest a second list under each row, boxes can be shown conditionally, and symbols such as checkmarks now print. 100% native Salesforce — no external services or callouts. Free for all users."
+      "ancestorVersion": "3.54.0",
+      "versionDescription": "Portwood turns any Salesforce record into a finished document — quotes, invoices, contracts, certificates, letters and reports — as PDF, Word, Excel or PowerPoint. New in 3.55, all on the Canvas designer (Beta): ELEMENT LINKING — set a block to follow another and it travels with it, so a summary, note or signature panel lands below a table however far that table grows at merge time, and follows it onto whatever page it ends on. Links chain, can be kept together on one page, and cannot be made to loop. NAMED BLOCKS — give a block a name and it is what the properties panel, the on-canvas badge and every Follows picker call it. CHART BLOCKS with a live preview while you design, and EXPORT HTML alongside Import HTML. Also: PowerPoint and Excel now assemble in the browser the way Word always has, with charts rendered by Chart.js, so the 6 MB synchronous Apex heap is no longer the ceiling on how many child records a document can carry — tested to 30,000. Fixes: .docx/.pptx/.xlsx downloads and Canvas Export HTML failed in orgs with Lightning Web Security enabled; a long verification URL ran off the edge of the signature Certificate of Completion. 100% native Salesforce — no external services or callouts. Free for all users."
     },
     {
       "versionName": "v1.1.0 — Free install, no installation key",

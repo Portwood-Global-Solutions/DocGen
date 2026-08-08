@@ -51,3 +51,23 @@ and checks every template against its active version.
 Removing the picklist default is not obviously the fix: an omitted type would then be
 null, and a silent null is no better than a silent Word. The durable fix is for every
 creation path to set the type explicitly and for the version to reject a blank one.
+
+## 4. A template created outside the designer opens to an empty canvas
+
+The visual Designer loads a template body from a ContentVersion titled
+`docgen_html_body_<templateId>` (and, for pre-decomposed types,
+`docgen_tmpl_xml_<templateId>`). It does **not** read the active version's
+`Content_Version_Id__c`.
+
+**Consequence:** a template whose body was written any other way — the API, a script, a
+data load — generates perfectly but opens to a blank designer, with nothing to say why.
+The fix from the author's side is to re-save once through the Template Manager UI, which
+writes the CV the designer expects.
+
+`scripts/qa/suites/template-integrity.mjs` checks this directly ("every HTML template
+returns a body to the visual Designer") and will report any fixture created by script.
+That is the check working, not a fixture problem: the same thing happens to a customer
+who builds templates through the API.
+
+The durable fix is for the designer to fall back to the active version's
+`Content_Version_Id__c` when the well-known title is absent.

@@ -1,37 +1,37 @@
 # DocGen QA report
 
-**Org** `designer-ns` · **Run** 2026-08-08T09:10:32.315Z · **Duration** 2022s
+**Org** `designer-ns` · **Run** 2026-08-08T09:49:40.611Z · **Duration** 1993s
 
 ## Headline
 
 | | |
 | --- | --- |
-| Checks evaluated | 1313 |
-| Passed | 1126 (85.8%) |
-| Failed | 187 |
-| Skipped (not counted) | 20 |
-| Blockers | 14 |
-| Major | 24 |
+| Checks evaluated | 1371 |
+| Passed | 1200 (87.5%) |
+| Failed | 171 |
+| Skipped (not counted) | 19 |
+| Blockers | 9 |
+| Major | 13 |
 | Minor | 149 |
 
 ## Coverage by area
 
 | Suite | Area | Passed | Failed | Skipped | Rate |
 | --- | --- | ---: | ---: | ---: | ---: |
-| `metadata-audit` | Metadata | 347 | 130 | 0 | 72.7% |
+| `metadata-audit` | Metadata | 349 | 128 | 0 | 73.2% |
 | `apex-e2e` | Apex end-to-end | 14 | 2 | 0 | 87.5% |
 | `apex-unit` | Apex unit | 53 | 13 | 0 | 80.3% |
 | `merge-tags` | Merge tags | 180 | 0 | 4 | 100% |
 | `flow-actions` | Flow actions & endpoints | 176 | 10 | 1 | 94.6% |
-| `output-formats` | Output formats | 35 | 5 | 2 | 87.5% |
+| `output-formats` | Output formats | 75 | 0 | 2 | 100% |
 | `ui-designer` | Designer UI | 0 | 2 | 0 | 0% |
-| `ui-admin` | Admin UI | 37 | 14 | 8 | 72.5% |
-| `ui-runner` | End-user UI | 37 | 8 | 4 | 82.2% |
-| `record-pages` | Record pages | 246 | 2 | 0 | 99.2% |
-| `pdf-content` | Crashed | — | — | — | _skipped: threw: Command failed: pdftotext -layout -enc UTF-8 /var/folders/pj/r60drhl55075qbd73_c6hyqh0000gn/T/dgqa-pdf-bfSpBo/doc.pdf -
+| `ui-admin` | Admin UI | 39 | 6 | 8 | 86.7% |
+| `ui-runner` | End-user UI | 68 | 4 | 3 | 94.4% |
+| `record-pages` | Record pages | 246 | 4 | 0 | 98.4% |
+| `pdf-content` | Crashed | — | — | — | _skipped: threw: Command failed: pdftotext -layout -enc UTF-8 /var/folders/pj/r60drhl55075qbd73_c6hyqh0000gn/T/dgqa-pdf-6AT34o/doc.pdf -
 Syntax Warning: May not be a PDF file (continuing anyway)
 Syntax Error (2): Ille_ |
-| `template-integrity` | Template integrity | 1 | 1 | 1 | 50% |
+| `template-integrity` | Template integrity | 0 | 2 | 1 | 0% |
 
 ## What to fix
 
@@ -41,41 +41,25 @@ Ordered by severity. The detail column is written to say WHERE to look.
 | --- | --- | --- | --- |
 | **blocker** | `apex-e2e` | PDF generation: e2e-03-generate-pdf.apex | CLI failed: Command failed: sf apex run --target-org designer-ns -f scripts/e2e-03-generate-pdf.apex  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilat |
 | **blocker** | `apex-e2e` | DOCX generation: e2e-04-generate-docx.apex | CLI failed: Command failed: sf apex run --target-org designer-ns -f scripts/e2e-04-generate-docx.apex  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compila |
-| **blocker** | `output-formats` | HTML template renders to PDF | phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 10 column 42 with the error:  Method does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGe |
-| **blocker** | `output-formats` | Word template renders to DOCX | phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 6 column 42 with the error:  Method does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGen |
-| **blocker** | `output-formats` | Word template renders to PDF (converter path) | phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 7 column 42 with the error:  Method does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGen |
-| **blocker** | `output-formats` | PowerPoint and Excel generation | phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 41 column 47 with the error:  Method does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGe |
-| **blocker** | `output-formats` | PDF AcroForm fill | phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 44 column 47 with the error:  Method does not exist or incorrect signature: void processAndReturnDocument(Id, String, NULL) from the type portwoodglobal.DocGe |
-| **blocker** | `ui-admin` | the starter path creates the template record | no record was created by "Create & Open Designer" |
-| **blocker** | `ui-admin` | the starter path lands in the designer with the design loaded | the designer canvas (.dg-pv) never appeared |
+| **blocker** | `ui-admin` | the canvas path creates the template record | no record was created by "Create & Open Designer" |
+| **blocker** | `ui-admin` | and it is typed Canvas, which is what decides which editor opens | no record |
+| **blocker** | `ui-admin` | the canvas path lands on the artboard | the artboard (.dg-board) never appeared |
 | **blocker** | `ui-admin` | row action Edit opens the edit modal | the modal never opened, so nothing inside it could be tested |
-| **blocker** | `ui-runner` | docGenRunner renders on a record page | no portwoodglobal-doc-gen-runner, c-doc-gen-runner in the DOM. If this org lost the QA host page, re-run scripts/qa/fixtures/deploy.sh — do not re-skip this check. |
-| **blocker** | `ui-runner` | the runner shows neither an error nor an empty state on a record that has templates | component text starts:  |
-| **blocker** | `ui-runner` | docGenSignatureSender renders on a record page | component text: (nothing — is the QA host page still deployed?) |
-| **blocker** | `template-integrity` | each template agrees with its active version about its own type | 5 disagree. Type__c on the VERSION has Word as its picklist default, so any programmatic creation that omits it silently mistypes an HTML template — and the template derives its behaviour from the version: Verify — Designer (pill-dense) (tpl=Canvas ver=HTML) &#124; Chart Scale Demo (client-side) (tp |
-| **major** | `metadata-audit` | DocGen_Job__c.Sort_Order__c is on the page layout | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason. |
-| **major** | `metadata-audit` | DocGen_Template__c.Draft_Body__c is on the page layout | field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason. |
+| **blocker** | `ui-runner` | the signature document picker is reachable | found=false hit=missing |
+| **blocker** | `template-integrity` | every HTML template returns a body to the visual Designer | 3 of 5 return NOTHING — those open to an empty canvas however well they generate. The Designer reads a ContentVersion titled docgen_html_body_<templateId>, not the version's Content_Version_Id__c: Chart Scale Demo (client-side) &#124; Flow Spike &#124; Flow Spike 3 |
+| **blocker** | `template-integrity` | each template agrees with its active version about its own type | 1 disagree. Type__c on the VERSION has Word as its picklist default, so any programmatic creation that omits it silently mistypes an HTML template — and the template derives its behaviour from the version: Verify — Designer (pill-dense) (tpl=Canvas ver=HTML) |
 | **major** | `flow-actions` | Create Signature Request: input validation reports through Success/Error Message rather than faulting the Flow | throws DocGenException instead of returning Result.success=false for: a null Template Id; a null Related Record Id; an empty Signers collection; a signer with no email. The Result class advertises "Success" and "Error Message" outputs that are unreachable on these paths — the Flow interview faults i |
 | **major** | `flow-actions` | Validate Signature Token: survives a 60-request Flow batch | the action did not return — anonymous Apex died before it could report. System.LimitException: portwoodglobal:Too many SOQL queries: 101 |
 | **major** | `flow-actions` | Finalize Signature Image: a bad token is handled, not thrown into the Flow | got: THREW~portwoodglobal.DocGenSignatureService.SignatureException~Invalid security token format. |
 | **major** | `ui-designer` | designer opens (toolbar + canvas present) | {"bar":false,"pv":false} |
 | **major** | `ui-designer` | smoke run completed | Designer did not open — aborting |
-| **major** | `ui-admin` | authoring card "starter" is reachable by a mouse | hit-test says: missing |
-| **major** | `ui-admin` | authoring card "starter" selects and reveals the starter gallery | clicked=false selected=false otherCardsSelected=1 pathContentShown=false |
-| **major** | `ui-admin` | authoring card "ai" is reachable by a mouse | hit-test says: missing |
-| **major** | `ui-admin` | authoring card "ai" selects and reveals the AI intro and its Next button | clicked=false selected=false otherCardsSelected=1 pathContentShown=false |
-| **major** | `ui-admin` | authoring card "scratch" is reachable by a mouse | hit-test says: missing |
-| **major** | `ui-admin` | authoring card "scratch" selects and reveals the blank-page CTA | clicked=false selected=false otherCardsSelected=1 pathContentShown=false |
-| **major** | `ui-admin` | the starter gallery renders every predesigned starter | rendered 0:  — expected report, invoice, letter, agreement, certificate |
-| **major** | `ui-admin` | every starter card takes selection when clicked | 0 starters each selected |
-| **major** | `ui-admin` | Advanced options discloses the power-user fields | Data Source radio group visible before=true after=true |
+| **major** | `ui-admin` | authoring card "canvas" selects and reveals the Canvas setup fields | clicked=true selected=true otherCardsSelected=0 pathContentShown=false |
 | **major** | `ui-admin` | creating with an empty name is refused with a visible error | no error toast appeared — the button silently did nothing. Toasts seen: (none) |
-| **major** | `ui-admin` | the AI path reaches the prompt screen | .dg-ai-prompt never rendered after "Next: Build My Prompt" |
 | **major** | `ui-runner` | picker hides a template that has no active version | "UIQA No Version" is offered in the runner picker but cannot generate — the user gets "No template file found (active or attached)" only after pressing Generate. DocGenController.getTemplatesForObjectInternal filters on Is_Active__c/audience but never checks for an active DocGen_Template_Version__c. |
 | **major** | `ui-runner` | a record-filtered template is not silently applied to excluded records in bulk | "UIQA Filtered Out" carries a Record_Filter__c and is offered for bulk, where the filter is never evaluated — DocGenBulkController passes null to filterTemplatesForSender and the batch never calls the per-record check. Documents can be generated for records the template excludes. Either the batch mu |
-| **major** | `ui-runner` | the runner shows an actionable empty state when no template matches the record | the runner did not render at all |
-| **major** | `ui-runner` | the DocGen quick action is present on the record | no action labelled "DocGen Button (QA)" on the Account highlights panel — the QuickAction or its layout entry did not deploy. Re-run scripts/qa/setup-org.sh. |
+| **major** | `record-pages` | DocGen_Template__c.Draft_Body__c renders on the record page | on DocGen_Template__c-DocGen Template Layout.layout-meta.xml but not on the rendered page (looked for API "Draft_Body__c" and label "Draft Body"). Either that layout is not assigned to the running profile, or field-level security hides it. |
 | **major** | `record-pages` | DocGen_Template__c exposes every one of its fields somewhere on the record page | 1 field(s) exist on the object but render nowhere: Draft_Body__c "Draft Body" |
+| **major** | `record-pages` | DocGen_Job__c.Sort_Order__c renders on the record page | on DocGen_Job__c-DocGen Job Layout.layout-meta.xml but not on the rendered page (looked for API "Sort_Order__c" and label "Sort Order"). Either that layout is not assigned to the running profile, or field-level security hides it. |
 | **major** | `record-pages` | DocGen_Job__c exposes every one of its fields somewhere on the record page | 1 field(s) exist on the object but render nowhere: Sort_Order__c "Sort Order" |
 | **minor** | `metadata-audit` | DocGen_Asset__c.Asset_Key__c has a description or help text | no <description> or <inlineHelpText> — the admin has no idea what it does |
 | **minor** | `metadata-audit` | DocGen_Asset__c.Asset_Type__c has a description or help text | no <description> or <inlineHelpText> — the admin has no idea what it does |
@@ -239,17 +223,16 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - `output-formats` — Record hidden by sharing/FLS from a low-privilege user: requires generating as a second, restricted user; System.runAs is test-context only and anonymous Apex cannot impersonate. Covered here only by the deleted-record analogue.
 - `output-formats` — Giant-query PDF retains template chrome (title, column headers, footer): the giant path builds its HTML inside the assembler and does not set DocGenService.lastRenderedHtml, and Apex cannot extract text from a rendered PDF. This is the exact shape of the v2.5.0 regression, so it is a real gap — it needs a PDF text-extraction step outside Apex.
 - `ui-admin` — the floating panels open with their contents rendered: the designer never opened
-- `ui-admin` — row action View opens the template on its Copy-Paste Tags tab: could not drive the row menu: row "QAUI-k68gzp-Starter": no row
-- `ui-admin` — row action Export downloads a valid .docgen.json bundle: no download event fired: row "QAUI-k68gzp-Starter": no row
+- `ui-admin` — row action View opens the template on its Copy-Paste Tags tab: could not drive the row menu: row "QAUI-k7mluw-Starter": no row
+- `ui-admin` — row action Export downloads a valid .docgen.json bundle: no download event fired: row "QAUI-k7mluw-Starter": no row
 - `ui-admin` — Import Template restores an exported bundle as a new template: nothing was exported to import
-- `ui-admin` — row action Design opens that template in the designer: could not drive the row menu: row "QAUI-k68gzp-Starter": no row
+- `ui-admin` — row action Design opens that template in the designer: could not drive the row menu: row "QAUI-k7mluw-Starter": no row
 - `ui-admin` — the edit modal tabs render their panels: the edit modal never opened
 - `ui-admin` — Save as New Version persists the edited fields: the edit modal never opened
 - `ui-admin` — closing the modal with unsaved edits warns or preserves them: the edit modal never opened
-- `ui-runner` — record-page runner interaction checks: the runner did not render its template picker, so nothing downstream could be driven
-- `ui-runner` — docGenSignatureSender validates its fields and writes the signature rows: the component did not render, so nothing could be driven
-- `ui-runner` — a user without the DocGen permission set gets a clear message, not a broken UI: could not create or resolve the restricted user via `sf org create user` — the org may be out of Salesforce licences.
-- `ui-runner` — a Document Packet contains every document it was built from: packet tab not found
+- `ui-runner` — docGenSignatureSender validates its fields and writes the signature rows: no template could be selected, so no request could be sent
+- `ui-runner` — a user without the DocGen permission set gets a clear message, not a broken UI: the restricted user was sent to the first-login "Change Your Password" screen, so the record page was never reached. A session cookie IS set, which is why this slipped past the auth gate and previously got reported as the component rendering nothing — a product defect that did not exist. Set the password once by hand and this check runs.
+- `ui-runner` — a Document Packet contains every document it was built from: could not move templates into the packet: nothing reached the "In Packet" column — the move did not take
 - `template-integrity` — merge-tag pills stay inside their table cells: could not open a template in the Designer: no Designer tab
 
 ## Every check
@@ -381,7 +364,7 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ DocGen_Job__c.Query_Condition__c is on the page layout
 - ✅ DocGen_Job__c.Query_Condition__c is granted on DocGen_Admin
 - ✅ DocGen_Job__c.Query_Condition__c has a description or help text
-- ❌ DocGen_Job__c.Sort_Order__c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Job__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
+- ✅ DocGen_Job__c.Sort_Order__c is on the page layout
 - ✅ DocGen_Job__c.Sort_Order__c is granted on DocGen_Admin
 - ❌ DocGen_Job__c.Sort_Order__c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
 - ✅ DocGen_Job__c.Status__c is on the page layout
@@ -660,7 +643,7 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ DocGen_Template__c.Document_Title_Format__c is on the page layout
 - ✅ DocGen_Template__c.Document_Title_Format__c is granted on DocGen_Admin
 - ✅ DocGen_Template__c.Document_Title_Format__c has a description or help text
-- ❌ DocGen_Template__c.Draft_Body__c is on the page layout — field exists but no layout shows it — an admin cannot see or set it. Add to layouts/DocGen_Template__c-*.layout-meta.xml, or waive it in metadata-audit.mjs with a reason.
+- ✅ DocGen_Template__c.Draft_Body__c is on the page layout
 - ✅ DocGen_Template__c.Draft_Body__c is granted on DocGen_Admin
 - ❌ DocGen_Template__c.Draft_Body__c has a description or help text — no <description> or <inlineHelpText> — the admin has no idea what it does
 - ✅ DocGen_Template__c.Footer_Html__c is granted on DocGen_Admin
@@ -777,7 +760,7 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ❌ DocGenAcroFormService meets the 75% packaging bar — 65% (746/1154 lines)
 - ✅ DocGenAiStubProvider meets the 75% packaging bar — 100% (12/12 lines)
 - ✅ DocGenEmailTemplateController meets the 75% packaging bar — 88% (262/299 lines)
-- ✅ DocGenButtonAdminController meets the 75% packaging bar — 80% (106/132 lines)
+- ✅ DocGenButtonAdminController meets the 75% packaging bar — 90% (119/132 lines)
 - ✅ DocGenAssetKeyHandler meets the 75% packaging bar — 93% (38/41 lines)
 - ✅ DocGenSignatureFlowAction meets the 75% packaging bar — 97% (135/139 lines)
 - ✅ DocGenSignatureSenderController meets the 75% packaging bar — 85% (1371/1604 lines)
@@ -820,7 +803,7 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ DocGenAssetKeyTrigger meets the 75% packaging bar — 100% (1/1 lines)
 - ❌ DocGenFieldWritebackTrigger meets the 75% packaging bar — 67% (4/6 lines)
 - ✅ DocGenTemplateLinter meets the 75% packaging bar — 94% (310/329 lines)
-- ✅ org-wide coverage is at or above 75% — 79% (25000/31696 lines) — a 2GP build fails below 75%
+- ✅ org-wide coverage is at or above 75% — 79% (25013/31696 lines) — a 2GP build fails below 75%
 
 ### merge-tags — Merge tags
 
@@ -842,7 +825,7 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ {Today:yyyy-MM-dd} equals the org calendar date — actual: 2026-08-08
 - ✅ {Today:MMMM d, yyyy} formats the date — actual: August 8, 2026
 - ✅ {Today} renders a date containing the current year — actual: 2026-08-08 07:00:00
-- ✅ {Now:yyyy-MM-dd HH:mm} formats a timestamp — actual: 2026-08-08 02:25
+- ✅ {Now:yyyy-MM-dd HH:mm} formats a timestamp — actual: 2026-08-08 03:04
 - ✅ {RunningUser.Name} resolves the executing user — actual: User User
 - ✅ {RunningUser.Email} resolves the executing user email — actual: dave@portwood.dev
 - ✅ {runninguser.name} resolves case-insensitively — actual: User User
@@ -1201,48 +1184,83 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 
 ### output-formats — Output formats
 
-- ❌ HTML template renders to PDF — phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 10 column 42 with the error:  Method does not exist or inc
-- ❌ Word template renders to DOCX — phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 6 column 42 with the error:  Method does not exist or inco
-- ❌ Word template renders to PDF (converter path) — phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 7 column 42 with the error:  Method does not exist or inco
-- ❌ PowerPoint and Excel generation — phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 41 column 47 with the error:  Method does not exist or inc
-- ❌ PDF AcroForm fill — phase died:  ›   Warning: @salesforce/cli update available from 2.144.6 to 2.145.6. Error (executeCompileFailure): Compilation failed at Line 44 column 47 with the error:  Method does not exist or inc
+- ✅ HTML→PDF: generation returned bytes — 74965 bytes
+- ✅ HTML→PDF: magic bytes are %PDF — leading bytes 255044462D312E34, expected 25504446
+- ✅ HTML→PDF: size above 800 bytes — 74965 bytes
+- ✅ HTML→PDF: DocGenService.lastRenderedHtml captured for inspection — 675 chars
+- ✅ HTML→PDF: merged parent field appears in the rendered document — both {Name} and {Industry} resolved in the rendered HTML
+- ✅ HTML→PDF: every child-loop row rendered — ROW-Alpha, ROW-Bravo and ROW-Charlie all present
+- ✅ HTML→PDF: non-Latin / unicode merge values survive the round trip — expected "Kabushiki 日本語 Ünïcødé Ω €" to appear; rendered slice was "UNI:Kabushiki <span style=\"font-family:'Arial Unicode MS', s"
+- ✅ HTML→PDF: no unresolved merge tags leak into the output — no {Tag} or {#Loop} survived into the rendered HTML
+- ✅ Document_Title_Format__c produces the document title — expected "QAOF183534137-QAOF183534137 Corp-Technology", got "QAOF183534137-QAOF183534137 Corp-Technology"
+- ✅ HTML→PDF: result is labelled PDF — outputFormat=PDF templateType=HTML
+- ✅ Word→DOCX: generation returned bytes — 1286 bytes
+- ✅ Word→DOCX: magic bytes are PK (ZIP) — leading bytes 504B030414000808, expected 504B0304
+- ✅ Word→DOCX: size above 400 bytes — 1286 bytes
+- ✅ Word→DOCX: output opens as a ZIP archive — entries: word/document.xml&#124;word/_rels/document.xml.rels&#124;[Content_Types].xml&#124;_rels/.rels
+- ✅ Word→DOCX: contains word/document.xml, [Content_Types].xml and _rels/.rels — document.xml=true content-types=true rels=true; parts: word/document.xml&#124;word/_rels/document.xml.rels&#124;[Content_Types].xml&#124;_rels/.rels
+- ✅ Word→DOCX: merged data is inside the produced document.xml — {Name}=true {Industry}=true
+- ✅ Word→DOCX: every child-loop row rendered — all three rows present in the produced word/document.xml
+- ✅ Word→DOCX: no unresolved merge tags leak into the output — no {Tag} survived into word/document.xml
+- ✅ Word→DOCX: Document_Title_Format__c applied — expected "QAOF183534137-QAOF183534137 Corp", got "QAOF183534137-QAOF183534137 Corp"
+- ✅ Word→PDF: generation returned bytes — 1053 bytes
+- ✅ Word→PDF: magic bytes are %PDF — leading bytes 255044462D312E34, expected 25504446
+- ✅ Word→PDF: size above 800 bytes — 1053 bytes
+- ✅ Word→PDF: merged data survives the DOCX→HTML conversion — name=true rows=true
+- ✅ Word→PDF: no raw OOXML reaches the PDF renderer — the converter emitted clean HTML — no <w:t>/<w:p> left
+- ✅ Word→PDF: no unresolved merge tags leak into the output — no {Tag} survived the converter path
+- ✅ PowerPoint→PPTX: generation returned bytes — 1227 bytes
+- ✅ PowerPoint→PPTX: magic bytes are PK (ZIP) — leading bytes 504B030414000808, expected 504B0304
+- ✅ PowerPoint→PPTX: size above 400 bytes — 1227 bytes
+- ✅ PowerPoint→PPTX: ppt/slides/slide1.xml survives the repack — parts: ppt/_rels/presentation.xml.rels&#124;[Content_Types].xml&#124;_rels/.rels&#124;ppt/slides/slide1.xml
+- ✅ PowerPoint→PPTX: merged data is inside the produced slide — merged=true leakedTags=false
+- ✅ Excel→XLSX: generation returned bytes — 1436 bytes
+- ✅ Excel→XLSX: magic bytes are PK (ZIP) — leading bytes 504B030414000808, expected 504B0304
+- ✅ Excel→XLSX: size above 400 bytes — 1436 bytes
+- ✅ Excel→XLSX: xl/worksheets/sheet1.xml survives the repack — parts: xl/_rels/workbook.xml.rels&#124;[Content_Types].xml&#124;xl/sharedStrings.xml&#124;xl/worksheets/sheet1.xml&#124;_rels/.rels
+- ✅ Excel→XLSX: merged data is inside the produced sheet — merged=true leakedTags=false
+- ✅ PDF AcroForm: generation returned bytes — 795 bytes
+- ✅ PDF AcroForm: magic bytes are %PDF — leading bytes 255044462D312E34, expected 25504446
+- ✅ PDF AcroForm: size above 300 bytes — 795 bytes
+- ✅ PDF AcroForm: merged value is written into the PDF — expected "QAOF183534137 Corp" in the filled PDF bytes; A_MERGED=true
+- ✅ PDF AcroForm: incremental update appended (output larger than template) — template 513 bytes → output 795 bytes; equal size means no field was filled
 - ✅ Template with no active version and no file fails instead of returning bytes — raised: Error retrieving template data: No template file found (active or attached).
 - ✅ No-version failure message points at the template configuration — message was: Error retrieving template data: No template file found (active or attached). — an admin has to be able to tell what to fix
-- ✅ Deactivated version with an attached file yields a valid PDF or a clean error, never a corrupt one — size=66565 hex=255044462D312E34 threw=false
-- ✅ Zero-row child loop: generation returned bytes — 67647 bytes
+- ✅ Deactivated version with an attached file yields a valid PDF or a clean error, never a corrupt one — size=66513 hex=255044462D312E34 threw=false
+- ✅ Zero-row child loop: generation returned bytes — 67551 bytes
 - ✅ Zero-row child loop: magic bytes are %PDF — leading bytes 255044462D312E34, expected 25504446
-- ✅ Zero-row child loop: size above 800 bytes — 67647 bytes
+- ✅ Zero-row child loop: size above 800 bytes — 67551 bytes
 - ✅ Zero-row child collection: loop tags do not leak into the output — the loop collapsed cleanly with nothing to iterate
 - ✅ Zero-row child collection: content around the loop is preserved — the heading before the loop and the paragraph after it both survived
 - ✅ Zero-row child collection: no phantom row rendered — zero rows in, zero rows out
 - ✅ Source HTML's own @page rule wins over the engine's page fields — sourceSizePresent=true engineSizeAlsoEmitted=false — two competing @page size declarations make Flying Saucer pick one silently
-- ✅ Header image: generation returned bytes — 90746 bytes
+- ✅ Header image: generation returned bytes — 90663 bytes
 - ✅ Header image: magic bytes are %PDF — leading bytes 255044462D312E34, expected 25504446
-- ✅ Header image: size above 800 bytes — 90746 bytes
+- ✅ Header image: size above 800 bytes — 90663 bytes
 - ✅ Running header is wired into the @page margin box — running(dgheader)=true @top-center=true
 - ✅ Tall header image grows the top margin instead of overflowing onto the body — margin-top raised to 1.65in for the 1.5in header image
-- ✅ Missing image CV: generation returned bytes — 67877 bytes
+- ✅ Missing image CV: generation returned bytes — 67779 bytes
 - ✅ Missing image CV: magic bytes are %PDF — leading bytes 255044462D312E34, expected 25504446
-- ✅ Missing image CV: size above 800 bytes — 67877 bytes
+- ✅ Missing image CV: size above 800 bytes — 67779 bytes
 - ✅ Image field pointing at a missing ContentVersion does not abort generation — generation completed
 - ✅ Missing image degrades without dropping the rest of the document — content before and after the image tag both survived
 - ✅ Missing image does not leak the raw ContentVersion Id onto the page — no internal Id and no dangling <img src> in the output
-- ✅ Very large document body: valid PDF or a clean, catchable error — size=505506 hex=255044462D312E34 at body length 1152000
-- ✅ Very large document body: PDF is complete, not truncated — %%EOF trailer present in 505506 bytes
-- ✅ Very large document body: output size reflects the content — 1152000-char body → 505506 bytes of PDF
+- ✅ Very large document body: valid PDF or a clean, catchable error — size=505433 hex=255044462D312E34 at body length 1152000
+- ✅ Very large document body: PDF is complete, not truncated — %%EOF trailer present in 505433 bytes
+- ✅ Very large document body: output size reflects the content — 1152000-char body → 505433 bytes of PDF
 - ✅ Generating against a record the user cannot read returns no document — raised: Error retrieving template data: Record data not found.
 - ⊘ Record hidden by sharing/FLS from a low-privilege user — requires generating as a second, restricted user; System.runAs is test-context only and anonymous Apex cannot impersonate. Covered here only by the deleted-record analogue.
 - ✅ Giant-query fixture actually crosses the 2000-row threshold — 2100 child rows — over the hard-coded 2000 threshold
 - ✅ Over-threshold child collection routes to the giant-query path — isGiantQuery=true relationship=Contacts
 - ✅ Giant-query job reaches Completed — status=Completed label=Giant Query totalRecords=2100
 - ✅ Giant-query job harvested every child row — Total_Records__c=2100 of 2100 inserted
-- ✅ Giant-query PDF: generation returned bytes — 109328 bytes
+- ✅ Giant-query PDF: generation returned bytes — 109334 bytes
 - ✅ Giant-query PDF: magic bytes are %PDF — leading bytes 255044462D312E34, expected 25504446
-- ✅ Giant-query PDF: size above 30000 bytes — 109328 bytes
-- ✅ Giant-query PDF is complete, not truncated — %%EOF trailer present in 109328 bytes
-- ✅ Giant-query output is named from Document_Title_Format__c — ContentVersion.Title was "QAOF181187350-giant-QAOF181187350 Giant", expected it to start with "QAOF181187350-giant-"
+- ✅ Giant-query PDF: size above 30000 bytes — 109334 bytes
+- ✅ Giant-query PDF is complete, not truncated — %%EOF trailer present in 109334 bytes
+- ✅ Giant-query output is named from Document_Title_Format__c — ContentVersion.Title was "QAOF183534137-giant-QAOF183534137 Giant", expected it to start with "QAOF183534137-giant-"
 - ⊘ Giant-query PDF retains template chrome (title, column headers, footer) — the giant path builds its HTML inside the assembler and does not set DocGenService.lastRenderedHtml, and Apex cannot extract text from a rendered PDF. This is the exact shape of the v2.5.0 regression,
-- ✅ Suite fixtures cleaned up — removed 11 templates, 3 accounts, 11 files, 1 jobs
+- ✅ Suite fixtures cleaned up — removed 14 templates, 3 accounts, 14 files, 1 jobs
 
 ### ui-designer — Designer UI
 
@@ -1257,46 +1275,40 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ main tab "Designer" is reachable by a mouse
 - ✅ main tab "Your Templates" swaps in its own content
 - ✅ main tab "Create New" swaps in its own content
-- ❌ authoring card "starter" is reachable by a mouse — hit-test says: missing
-- ❌ authoring card "starter" selects and reveals the starter gallery — clicked=false selected=false otherCardsSelected=1 pathContentShown=false
-- ❌ authoring card "ai" is reachable by a mouse — hit-test says: missing
-- ❌ authoring card "ai" selects and reveals the AI intro and its Next button — clicked=false selected=false otherCardsSelected=1 pathContentShown=false
-- ❌ authoring card "scratch" is reachable by a mouse — hit-test says: missing
-- ❌ authoring card "scratch" selects and reveals the blank-page CTA — clicked=false selected=false otherCardsSelected=1 pathContentShown=false
 - ✅ authoring card "file" is reachable by a mouse
 - ✅ authoring card "file" selects and reveals the Type / Output Format pickers — clicked=true selected=true otherCardsSelected=0 pathContentShown=true
-- ❌ the starter gallery renders every predesigned starter — rendered 0:  — expected report, invoice, letter, agreement, certificate
-- ❌ every starter card takes selection when clicked — 0 starters each selected
-- ❌ Advanced options discloses the power-user fields — Data Source radio group visible before=true after=true
+- ✅ authoring card "canvas" is reachable by a mouse
+- ❌ authoring card "canvas" selects and reveals the Canvas setup fields — clicked=true selected=true otherCardsSelected=0 pathContentShown=false
+- ✅ Advanced options discloses the power-user fields — Data Source radio group visible before=false after=true
 - ❌ creating with an empty name is refused with a visible error — no error toast appeared — the button silently did nothing. Toasts seen: (none)
 - ✅ a refused create writes no template record
 - ✅ wizard Next refuses to advance without a name — error shown; still on step 1 = true
 - ✅ wizard Next advances to step 2 (Pick Your Data)
-- ✅ wizard Back returns to step 1 and keeps what was typed — onStep1=true name="QAUI-k68gzp-File" (expected "QAUI-k68gzp-File")
+- ✅ wizard Back returns to step 1 and keeps what was typed — onStep1=true name="QAUI-k7mluw-File" (expected "QAUI-k7mluw-File")
 - ✅ wizard step 2 refuses an empty query — Error notification. Error Please add at least one field to the query. Press Command + F6 to navigate to the next toast n
 - ✅ wizard step 3 reviews the name, object and query it will save — reviewScreen=true nameEchoed=true queryEchoed=true
-- ✅ the wizard creates a template record end to end — a0BRK00000gttDO2AY, base object Account
+- ✅ the wizard creates a template record end to end — a0BRK00000gtxbx2AA, base object Account
 - ✅ the created template keeps the query the wizard collected — Query_Config__c = Name, Industry, Phone
-- ❌ the AI path reaches the prompt screen — .dg-ai-prompt never rendered after "Next: Build My Prompt"
-- ❌ the starter path creates the template record — no record was created by "Create & Open Designer"
-- ❌ the starter path lands in the designer with the design loaded — the designer canvas (.dg-pv) never appeared
+- ❌ the canvas path creates the template record — no record was created by "Create & Open Designer"
+- ❌ and it is typed Canvas, which is what decides which editor opens — no record
+- ❌ the canvas path lands on the artboard — the artboard (.dg-board) never appeared
 - ⊘ the floating panels open with their contents rendered — the designer never opened
-- ✅ the template list renders rows — 12 rows; count label "12 templates"
-- ✅ search narrows the list to matching rows only — 12 -> 1 rows for "k68gzp"; every remaining row matches = true
-- ✅ the row-count label reports the filtered subset — label reads "1 of 12 templates"
+- ✅ the template list renders rows — 13 rows; count label "13 templates"
+- ✅ search narrows the list to matching rows only — 13 -> 1 rows for "k7mluw"; every remaining row matches = true
+- ✅ the row-count label reports the filtered subset — label reads "1 of 13 templates"
 - ✅ a search with no matches empties the list instead of ignoring the query — 0 rows survived a nonsense query
-- ✅ clearing the search restores the full list — 12 rows (expected 12)
-- ✅ clicking a column header re-orders the rows both ways — clicked=true; first row "QAUI-k68gzp-File Word PDF Ac" -> asc "QA Fixtures Anchor Demo Canv" -> desc "Verify — Designer (pill-dens"
-- ✅ Refresh reloads the list without emptying it — hit-test=ok; 12 rows after refresh (expected 12)
+- ✅ clearing the search restores the full list — 13 rows (expected 13)
+- ✅ clicking a column header re-orders the rows both ways — clicked=true; first row "QAUI-k7mluw-File Word PDF Ac" -> asc "QA Fixtures Anchor Demo Canv" -> desc "Verify — Designer (pill-dens"
+- ✅ Refresh reloads the list without emptying it — hit-test=ok; 13 rows after refresh (expected 13)
 - ✅ "New Template" switches to the Create New wizard
 - ✅ the row-action menu button is reachable by a mouse
-- ⊘ row action View opens the template on its Copy-Paste Tags tab — could not drive the row menu: row "QAUI-k68gzp-Starter": no row
-- ⊘ row action Export downloads a valid .docgen.json bundle — no download event fired: row "QAUI-k68gzp-Starter": no row
+- ⊘ row action View opens the template on its Copy-Paste Tags tab — could not drive the row menu: row "QAUI-k7mluw-Starter": no row
+- ⊘ row action Export downloads a valid .docgen.json bundle — no download event fired: row "QAUI-k7mluw-Starter": no row
 - ⊘ Import Template restores an exported bundle as a new template — nothing was exported to import
-- ✅ row action Clone creates a copy and opens it for editing — created "QAUI-k68gzp-File (Copy)" (a0BRK00000gtuCf2AI); the edit modal opened = true
-- ✅ row action Delete removes the template — "QAUI-k68gzp-File (Copy)" is gone from the org
+- ✅ row action Clone creates a copy and opens it for editing — created "QAUI-k7mluw-File (Copy)" (a0BRK00000gtxvJ2AQ); the edit modal opened = true
+- ✅ row action Delete removes the template — "QAUI-k7mluw-File (Copy)" is gone from the org
 - ✅ deleting a template asks for confirmation first — a confirmation step was shown
-- ⊘ row action Design opens that template in the designer — could not drive the row menu: row "QAUI-k68gzp-Starter": no row
+- ⊘ row action Design opens that template in the designer — could not drive the row menu: row "QAUI-k7mluw-Starter": no row
 - ❌ row action Edit opens the edit modal — the modal never opened, so nothing inside it could be tested
 - ⊘ the edit modal tabs render their panels — the edit modal never opened
 - ⊘ Save as New Version persists the edited fields — the edit modal never opened
@@ -1319,23 +1331,45 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ picker hides an inactive template — Picker: UIQA Good PDF, UIQA Locked Format, UIQA No Version
 - ❌ picker hides a template that has no active version — "UIQA No Version" is offered in the runner picker but cannot generate — the user gets "No template file found (active or attached)" only after pressing Generate. DocGenController.getTemplatesForObject
 - ✅ generating from the picked template produces a real document — DocGenService.processDocument returned 66207 bytes
-- ✅ the generated document's title resolves merge tokens against the record — Document_Title_Format__c = "UIQA-msk6idqk {Name}" → title was "UIQA-msk6idqk UIQA Alpha", expected "UIQA-msk6idqk UIQA Alpha"
+- ✅ the generated document's title resolves merge tokens against the record — Document_Title_Format__c = "UIQA-msk7vad0 {Name}" → title was "UIQA-msk7vad0 UIQA Alpha", expected "UIQA-msk7vad0 UIQA Alpha"
 - ✅ a locked output format cannot be overridden at run time — Lock_Output_Format__c = true, override 'Word' → "This template locks its output format. Override not permitted."
 - ✅ a template with no active version fails with a message, not a blank document — got: Error retrieving template data: No template file found (active or attached).
 - ✅ bulk template picker excludes deactivated templates — matches the single-record runner
 - ❌ a record-filtered template is not silently applied to excluded records in bulk — "UIQA Filtered Out" carries a Record_Filter__c and is offered for bulk, where the filter is never evaluated — DocGenBulkController passes null to filterTemplatesForSender and the batch never calls the
-- ❌ the runner shows an actionable empty state when no template matches the record — the runner did not render at all
-- ❌ docGenRunner renders on a record page — no portwoodglobal-doc-gen-runner, c-doc-gen-runner in the DOM. If this org lost the QA host page, re-run scripts/qa/fixtures/deploy.sh — do not re-skip this check.
-- ❌ the runner shows neither an error nor an empty state on a record that has templates — component text starts: 
+- ✅ the runner shows an actionable empty state when no template matches the record — with every Account template inactive the runner rendered 769 chars; Create Document disabled=true. The user must be told WHY there is nothing to pick, and must not be able to press a button that canno
+- ✅ docGenRunner renders on a record page — rendered 694 chars, 2 picker(s), 1 primary button(s)
+- ✅ the runner shows neither an error nor an empty state on a record that has templates — component text starts: Portwood Create or combine documents for this record. Create Document Document Packet Combine PDFs Category All Categories QA Fixtures UIQA (Uncategorized) Select Template Choos
 - ✅ docGenRunner boots without a console error
-- ⊘ record-page runner interaction checks — the runner did not render its template picker, so nothing downstream could be driven
-- ❌ docGenSignatureSender renders on a record page — component text: (nothing — is the QA host page still deployed?)
+- ✅ the record-page template picker lists a template the user can actually run — picker showed: Choose a template... / [QA Fixtures] Anchor Demo / [QA Fixtures] Anchor E2E / [QA Fixtures] Canvas Export Test / canvs / [QA Fixtures] Chart Scale Demo (client-side) / [QA Fixtures] Cha
+- ✅ the record-page picker applies the active and audience rules — Inactive, Record_Filter__c-excluded and permission-gated templates were all withheld
+- ✅ the template picker is reachable by a mouse — found=true hit=ok
+- ✅ choosing a category narrows the template list to that category — after picking category "UIQA" the picker showed: [UIQA] UIQA Good PDF / [UIQA] UIQA Locked Format / [UIQA] UIQA No Version
+- ✅ the Save to Record output choice is reachable — found=true hit=ok
+- ✅ choosing Save to Record is honoured by the UI — output pills after the click: both, download, save(active)
+- ✅ the Create Document button is reachable — found=true hit=ok
+- ✅ pressing Create Document in Save to Record mode puts the document ON the record — ContentDocument "UIQA-msk7vad0 UIQA Alpha" linked to 001RK00002RBu9hYAD
+- ✅ the saved file is in the template's own output format — Output_Format__c = PDF, file extension = .pdf
+- ✅ choosing Download is honoured by the UI — output pills after the click: both, download(active), save
+- ✅ pressing Create Document in Download mode downloads the document to the browser — the browser received "UIQA-msk7vad0 UIQA Alpha.pdf"
+- ✅ Download does NOT also attach the document to the record — files linked to the record: 3 before the run, 3 after. Download and Save to Record are the two halves of one choice; honouring it means Download leaves the record untouched.
+- ✅ choosing Save & Download is honoured by the UI — output pills after the click: both(active), download, save
+- ✅ Save & Download hands the file to the browser — the browser received "UIQA-msk7vad0 UIQA Alpha.pdf"
+- ✅ Save & Download also attaches the document to the record — files linked to the record: 3 before the run, 4 after. A download alone would leave this unchanged — which is exactly the bug this mode exists to avoid.
+- ✅ a template with Lock_Output_Format__c exposes no runtime file-format control — with the locked template selected the runner offered 2 picker(s) (category + template) and the choice widgets [both, download, save], which are output DESTINATIONS, not formats. The server half of thi
+- ✅ the Document Packet tab renders its template chooser and it is reachable — packet tab active=true, dual listboxes=1, source list hit=ok
+- ✅ the packet chooser offers the record's PDF templates — chooser offered 14 template(s): Anchor Demo / Anchor E2E / Canvas Export Test / canvs / Chart Scale Demo (client-side) / Flow Spike
+- ✅ the Create Packet button is reachable and refuses to run with nothing chosen — button hit=ok, disabled=true
+- ✅ the Combine PDFs tab lists the record's existing PDFs and they are reachable — tab active=true, source list hit=ok, it offered 2 file(s) of which 2 are the two PDFs this suite attached to the record
+- ✅ the Combine PDFs button is reachable and refuses to run with fewer than two files chosen — button hit=ok, disabled=true with nothing moved into the Combine list
+- ✅ docGenSignatureSender renders on a record page — rendered 323 chars with its template picker, signer table and send button
 - ✅ docGenSignatureSender boots without a console error
-- ⊘ docGenSignatureSender validates its fields and writes the signature rows — the component did not render, so nothing could be driven
+- ✅ the send button refuses to send with no document and no signer details — found=true disabled=true
+- ❌ the signature document picker is reachable — found=false hit=missing
+- ⊘ docGenSignatureSender validates its fields and writes the signature rows — no template could be selected, so no request could be sent
 - ✅ bulk generation UI renders on its tab — {"chars":250,"hasHeading":true,"hasStep1":true}
 - ✅ bulk generation UI boots without a console error
 - ✅ the screen stays usable while a job is still running — template search box is hittable with 1 non-terminal job(s) present
-- ✅ focusing the template box lists the available templates — 15 options offered
+- ✅ focusing the template box lists the available templates — 16 options offered
 - ✅ typing narrows the template list to the match — after typing "UIQA Good": UIQA Good PDF (Account • PDF)
 - ✅ a search with no matches says so instead of showing an empty box — expected the "No templates found" empty state in the dropdown
 - ✅ a template option can be clicked — found=true hit=ok
@@ -1345,23 +1379,27 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ the Validate Filter button is clickable — found=true hit=ok
 - ✅ Validate reports the true number of matching records — expected "2 Records Found" for Name LIKE 'UIQA%' (2 accounts seeded); component text did not contain it
 - ✅ the Run button is clickable once the filter is validated — found=true hit=ok
-- ✅ pressing Run creates a bulk job on the server — DocGen_Job__c a03RK00001uHaDmYAK status Completed
+- ✅ pressing Run creates a bulk job on the server — DocGen_Job__c a03RK00001uGh9wYAC status Completed
 - ✅ the job generates one document per matching record — status=Completed total=2 success=2 errors=0; error log: 
-- ✅ each generated document is attached to its own record — 4 pdf files across 2 records (expected 1 each on 2 records) — Output Mode was Individual Files
+- ✅ each generated document is attached to its own record — 6 pdf files across 2 records (expected 1 each on 2 records) — Output Mode was Individual Files
 - ✅ the output honours the template's Output Format (PDF) — extensions produced: pdf
 - ✅ a run where every record fails is reported as failed, not as success — status=Failed success=0 errors=2
-- ✅ the failing job records WHY each record failed — Error_Log__c = 001RK00002RDLhBYAX — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached). 001RK00002RDLhCYAX — portwoodglobal.DocGenException: Er
-- ✅ the Recent Jobs list shows the error count to the user — Recent Jobs did not show "UIQA-msk6idqk-err" with "2 errors" — a user would see the run as finished with no indication anything went wrong
+- ✅ the failing job records WHY each record failed — Error_Log__c = 001RK00002RBu9hYAD — portwoodglobal.DocGenException: Error retrieving template data: No template file found (active or attached). 001RK00002RBu9iYAD — portwoodglobal.DocGenException: Er
+- ✅ the Recent Jobs list shows the error count to the user — Recent Jobs did not show "UIQA-msk7vad0-err" with "2 errors" — a user would see the run as finished with no indication anything went wrong
 - ❌ a filter that matches no records leaves Run disabled — Validate returned 0 records but Run Bulk Generation is still enabled — the user can submit a job that will produce nothing. isRunDisabled only requires filterValidated, and runAnalysis() early-returns
 - ✅ the DocGen Command Hub renders with its navigation — {"present":true,"navs":["My Templates","Bulk Generation","Signatures","Assets","Buttons","Email Templates","Learning Center","MoreTabs","API Name Help Info","Type Help Info","Word","PDF"]}
 - ✅ Command Hub "Bulk Generation" mounts its component — rendered 369 chars of text; consoleErrors=none
 - ✅ Command Hub "Signatures" mounts its component — rendered 1265 chars of text; consoleErrors=none
 - ✅ Command Hub "Assets" mounts its component — rendered 179 chars of text; consoleErrors=none
 - ✅ Command Hub "Email Templates" mounts its component — rendered 1539 chars of text; consoleErrors=none
-- ✅ the document Button builder mounts from the Command Hub — rendered 761 chars of text
-- ❌ the DocGen quick action is present on the record — no action labelled "DocGen Button (QA)" on the Account highlights panel — the QuickAction or its layout entry did not deploy. Re-run scripts/qa/setup-org.sh.
-- ⊘ a user without the DocGen permission set gets a clear message, not a broken UI — could not create or resolve the restricted user via `sf org create user` — the org may be out of Salesforce licences.
-- ⊘ a Document Packet contains every document it was built from — packet tab not found
+- ✅ the document Button builder mounts from the Command Hub — rendered 994 chars of text
+- ✅ the DocGen quick action is reachable by a mouse — clickable on the highlights panel
+- ✅ a retired or wrong-object button configuration never appears — getButtons returned only QA_Account_Doc — the inactive fixture and the Contact fixture were both withheld, so the component takes its run-immediately branch
+- ✅ pressing the record action does not error — the action screen had already closed itself, which it only does after a successful generate
+- ✅ the record action delivers a document to the browser — downloaded "QA Button Document.pdf"
+- ✅ Save To Record = false leaves the record untouched — 5 files before and after
+- ⊘ a user without the DocGen permission set gets a clear message, not a broken UI — the restricted user was sent to the first-login "Change Your Password" screen, so the record page was never reached. A session cookie IS set, which is why this slipped past the auth gate and previousl
+- ⊘ a Document Packet contains every document it was built from — could not move templates into the packet: nothing reached the "In Packet" column — the move did not take
 
 ### record-pages — Record pages
 
@@ -1393,6 +1431,7 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ DocGen_Template__c.Query_Config__c renders on the record page
 - ✅ DocGen_Template__c.CreatedById renders on the record page
 - ✅ DocGen_Template__c.LastModifiedById renders on the record page
+- ❌ DocGen_Template__c.Draft_Body__c renders on the record page — on DocGen_Template__c-DocGen Template Layout.layout-meta.xml but not on the rendered page (looked for API "Draft_Body__c" and label "Draft Body"). Either that layout is not assigned to the running pro
 - ❌ DocGen_Template__c exposes every one of its fields somewhere on the record page — 1 field(s) exist on the object but render nowhere: Draft_Body__c "Draft Body"
 - ✅ DocGen_Template__c fields edited outside the record page are accounted for — Footer_Html__c (edited in the Designer footer band), Form_Fields_Config__c (edited on the Signer Inputs tab), Header_Html__c (edited in the Designer header band)
 - ✅ DocGen_Template__c related lists load without error — 7 related list container(s) rendered
@@ -1444,6 +1483,7 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 - ✅ DocGen_Job__c.Error_Log__c renders on the record page
 - ✅ DocGen_Job__c.Merged_PDF_CV__c renders on the record page
 - ✅ DocGen_Job__c.Parent_Record_Id__c renders on the record page
+- ❌ DocGen_Job__c.Sort_Order__c renders on the record page — on DocGen_Job__c-DocGen Job Layout.layout-meta.xml but not on the rendered page (looked for API "Sort_Order__c" and label "Sort Order"). Either that layout is not assigned to the running profile, or f
 - ❌ DocGen_Job__c exposes every one of its fields somewhere on the record page — 1 field(s) exist on the object but render nowhere: Sort_Order__c "Sort Order"
 - ✅ DocGen_Job__c fields edited outside the record page are accounted for — Data_Cache_CV__c (internal cache pointer written by the batch), Giant_Query_Config__c (internal config written by the giant-query path)
 - ✅ DocGen_Job__c related lists load without error — 6 related list container(s) rendered
@@ -1616,6 +1656,6 @@ A skipped check is not a passing one. Each of these is a gap in the evidence.
 
 ### template-integrity — Template integrity
 
-- ✅ every HTML template returns a body to the visual Designer — all 1 HTML templates return a non-empty body from getHtmlTemplateBody
-- ❌ each template agrees with its active version about its own type — 5 disagree. Type__c on the VERSION has Word as its picklist default, so any programmatic creation that omits it silently mistypes an HTML template — and the template derives its behaviour from the ver
+- ❌ every HTML template returns a body to the visual Designer — 3 of 5 return NOTHING — those open to an empty canvas however well they generate. The Designer reads a ContentVersion titled docgen_html_body_<templateId>, not the version's Content_Version_Id__c: Cha
+- ❌ each template agrees with its active version about its own type — 1 disagree. Type__c on the VERSION has Word as its picklist default, so any programmatic creation that omits it silently mistypes an HTML template — and the template derives its behaviour from the ver
 - ⊘ merge-tag pills stay inside their table cells — could not open a template in the Designer: no Designer tab

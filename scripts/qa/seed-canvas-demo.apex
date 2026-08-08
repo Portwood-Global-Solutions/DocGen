@@ -349,7 +349,7 @@ System.debug('SEED template=' + tpl.Id + ' version=' + saved.get('versionId'));
 
 // Prove it renders before handing it over. A seed that looks right in the editor and
 // throws on generation wastes the first ten minutes of anyone's session.
-Map<String, Object> pdf = DocGenController.generatePdf(tpl.Id, sampleId, false, null);
+Map<String, Object> pdf = DocGenController.generatePdf(tpl.Id, sampleId, false, null, null);
 String b64 = (String) pdf.get('base64');
 System.debug('SEED render bytes=' + (b64 == null ? -1 : EncodingUtil.base64Decode(b64).size()));
 System.debug('SEED OK — open "' + NAME + '" in the Portwood Designer');
