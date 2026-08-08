@@ -426,6 +426,16 @@ export async function prepareChartsClientSide({ templateId, recordId, ChartCtor,
         (t) => t.childObject && t.lookupField && t.fieldApi && (t.kind === 'bucket' || isStyleSupported(t.style))
     );
     if (!renderable) {
+        // Silence here cost real debugging time: the caller fell back to Apex and
+        // nothing anywhere said why. Name the tag that disqualified the deck.
+        const bad = tags.find(
+            (t) => !(t.childObject && t.lookupField && t.fieldApi && (t.kind === 'bucket' || isStyleSupported(t.style)))
+        );
+        console.warn(
+            'Portwood: client-side charts skipped — ' +
+                `tag ${bad ? bad.relName + '.' + bad.fieldApi + ' (' + bad.style + ')' : 'unknown'} ` +
+                'is unsupported or has no resolvable child relationship. Using the Apex chart path.'
+        );
         return null;
     }
 

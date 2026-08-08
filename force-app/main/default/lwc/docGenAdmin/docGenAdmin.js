@@ -64,6 +64,9 @@ import previewDraftPdfData from '@salesforce/apex/DocGenController.previewDraftP
 import generatePdfAsync from '@salesforce/apex/DocGenController.generatePdfAsync';
 import getPdfSampleGenerationStatus from '@salesforce/apex/DocGenController.getPdfSampleGenerationStatus';
 import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
+import { loadScript } from 'lightning/platformResourceLoader';
+import CHARTJS_RESOURCE from '@salesforce/resourceUrl/DocGenChartJs';
+import { prepareChartsClientSide } from 'c/docGenChartJs';
 import uploadChartImage from '@salesforce/apex/DocGenChartImageController.uploadChartImage';
 import deleteChartImages from '@salesforce/apex/DocGenChartImageController.deleteChartImages';
 import activateVersion from '@salesforce/apex/DocGenController.activateVersion';
@@ -15377,6 +15380,27 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
     }
 
     async _prepareChartsForAdmin(templateId, recordId) {
+        // Try the client-side path first, exactly as the runner does. Generate
+        // Sample is what an author judges a template by, so it has to behave
+        // like real generation — on the Apex path alone it cannot render a
+        // chart over a large child list or a non-groupable field, and the
+        // author would be shown an empty chart for a template that works
+        // perfectly for end users.
+        try {
+            const ChartCtor = await this._ensureChartJsForAdmin();
+            if (!ChartCtor) {
+                console.warn('Portwood admin: Chart.js did not expose window.Chart; using the Apex chart path.');
+            }
+            if (ChartCtor) {
+                const clientResult = await prepareChartsClientSide({ templateId, recordId, ChartCtor });
+                if (clientResult) {
+                    return clientResult;
+                }
+            }
+        } catch (e) {
+            console.warn('Portwood admin: client-side chart path failed; using Apex chart path', e);
+        }
+
         try {
             const requests = await prepareChartImages({ templateId, recordId });
             if (!Array.isArray(requests) || requests.length === 0) {
@@ -15407,6 +15431,14 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
             console.warn('Portwood admin: prepareChartImages failed; charts will text-fallback', e);
             return { map: {}, cvIds: [] };
         }
+    }
+
+    async _ensureChartJsForAdmin() {
+        if (window.Chart) {
+            return window.Chart;
+        }
+        await loadScript(this, CHARTJS_RESOURCE);
+        return window.Chart;
     }
 
     async _cleanupChartsForAdmin(cvIds) {
