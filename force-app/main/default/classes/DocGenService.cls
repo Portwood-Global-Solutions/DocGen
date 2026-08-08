@@ -9966,7 +9966,6 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         return mr;
     }
 
-
     /**
      * Removes <style> and <script> elements, contents and all.
      *

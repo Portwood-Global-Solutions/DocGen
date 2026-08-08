@@ -340,11 +340,7 @@ private class DocGenTemplateLinterTest {
             accountTemplate(null)
         );
         for (DocGenAiHtmlValidator.Finding f : findings) {
-            System.assertNotEquals(
-                'Markdown code fence',
-                f.rule,
-                'A trailing newline is not a code fence.'
-            );
+            System.assertNotEquals('Markdown code fence', f.rule, 'A trailing newline is not a code fence.');
         }
     }
 
@@ -405,9 +401,6 @@ private class DocGenTemplateLinterTest {
         Map<String, Object> res = DocGenController.saveHtmlTemplateBody(tpl.Id, 'hand.html', handAuthored);
         Test.stopTest();
 
-        System.assert(
-            (Integer) res.get('warningCount') > 0,
-            'Hand-authored HTML must still get the fidelity report.'
-        );
+        System.assert((Integer) res.get('warningCount') > 0, 'Hand-authored HTML must still get the fidelity report.');
     }
 }

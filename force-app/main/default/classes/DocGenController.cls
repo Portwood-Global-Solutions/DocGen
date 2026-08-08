@@ -1992,7 +1992,6 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         return String.isNotBlank(message) && message.contains('Variable does not exist: tmpVar');
     }
 
-
     /**
      * Shared filter implementation for getTemplatesForObject and getTemplatesForObjectAndRecord.
      */
@@ -2042,9 +2041,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 Record_Filter__c,
                 Base_Object_API__c
             FROM DocGen_Template__c
-            WHERE
-                Base_Object_API__c = :objectApiName
-                AND Is_Active__c != FALSE
+            WHERE Base_Object_API__c = :objectApiName AND Is_Active__c != FALSE
             WITH SYSTEM_MODE
             ORDER BY Sort_Order__c ASC NULLS LAST, Is_Default__c DESC, Name ASC
         ];
