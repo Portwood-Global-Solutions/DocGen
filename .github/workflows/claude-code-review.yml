@@ -12,11 +12,21 @@ on:
 
 jobs:
     claude-review:
-        # Optional: Filter by PR author
-        # if: |
-        #   github.event.pull_request.user.login == 'external-contributor' ||
-        #   github.event.pull_request.user.login == 'new-developer' ||
-        #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+        # Fork PRs cannot run this, and must not be blocked by it.
+        #
+        # GitHub withholds secrets and refuses `id-token: write` on `pull_request`
+        # runs from a fork, whatever the workflow declares — so the action failed at
+        # "Could not fetch an OIDC token", and the red check gated a merge it could
+        # never pass. PR #286 sat on that.
+        #
+        # Skipping is the fix. The alternative that would make it run is
+        # `pull_request_target`, which executes the contributor's code in the base
+        # repo's context with secrets and a write token — a well-known way to hand
+        # the repository to anyone who can open a pull request. Not worth automated
+        # review on external contributions.
+        #
+        # Fork PRs get a human review instead.
+        if: github.event.pull_request.head.repo.full_name == github.repository
 
         runs-on: ubuntu-latest
         permissions:
