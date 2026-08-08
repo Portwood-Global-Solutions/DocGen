@@ -1,5 +1,93 @@
 # Changelog
 
+## v3.55.0 — Element linking, named blocks, client-side charts
+
+Released 2026-08-08 · `04tVx0000010fXFIAY` · ancestor 3.54.0 · 1,957 tests, 78% coverage
+
+Canvas blocks can travel together, blocks can be named, and PowerPoint/Excel no longer
+refuse a large child set.
+
+### Added
+
+- **Element linking.** A block set to **Follows another element** lands below its anchor
+  however far that anchor grows at merge time, and follows it onto whatever page it ends
+  on. Links chain, so a summary → note → signature set moves as one, and **Keep on the
+  same page** maps to `page-break-inside: avoid`.
+
+    The mechanism is that an anchored set becomes a flow container and its members nest
+    **in flow**, each carrying its authored gap as a margin. An earlier design had members
+    stay absolutely positioned inside a positioned parent, which measured beautifully and
+    was wrong in the way that matters: an absolute follower holds its offset while the
+    anchor grows and gets overrun — the exact bug the feature exists to fix. Measured
+    against `Blob.toPdf`, not reasoned about; probes in `scripts/qa/flowspike.html`.
+
+- **Named blocks.** A name is what the properties panel, the on-canvas badge, the element
+  list and every other block's Follows picker call it. Without one a label is derived
+  from content, which works until two blocks start with the same words.
+
+- **Chart blocks on the Canvas**, with a live Chart.js preview while you design. The
+  block writes the same `{Chart:...}` tag you would author by hand, and will not emit one
+  the engine would reject.
+
+- **Export HTML** from the Canvas, alongside Import HTML.
+
+- **Client-side chart and document assembly for PowerPoint and Excel.** Both now build in
+  the browser the way Word always has: the runner pages child records down in chunks and
+  aggregates as it goes, so the 6 MB synchronous Apex heap stops being the ceiling.
+  Tested to 30,000 child records. Flow and batch have no browser and still use the
+  server-side rasterizer.
+
+### Fixed
+
+- **A `<style>` block inside `<body>` had its CSS eaten.** Every `{...}` pair is
+  merge-tag syntax, so each declaration resolved to nothing and left its selector printed
+  at the top of the document — `@page body h1 … .docgen-body-content .tab`. Customer
+  reported. Google Docs and Notion put `<style>` in the body as standard, and so does
+  re-uploading a previously generated document, which is why reported cases leak
+  Portwood's own `docgen-*` class names. Now stripped before the merge with the
+  stylesheet hoisted into `<head>`, so the CSS still applies.
+
+- **`.docx` / `.pptx` / `.xlsx` downloads failed under Lightning Web Security.** LWS
+  sanitizes `URL.createObjectURL` against a MIME allowlist that Office formats are not
+  on. Allowlisted types keep the Blob URL; everything else uses a `data:` URI.
+
+- **A save could silently re-point every element link.** `deserialize` mints fresh
+  sequential ids while the saved anchor held one from the previous session — different id
+  spaces, but both `box_<n>`, so a saved id usually matched a real but unrelated box. One
+  open-and-save turned a four-block chain into three groups. Ids are now written and
+  remapped on read.
+
+- **`esc()` did not escape the double quote**, and most of its callers write an attribute
+  value. A chart titled `Q1 "final" numbers` closed the attribute early and lost every
+  attribute after it — including `data-dg-anchor`, so a quoted chart title could break an
+  element link.
+
+- **A Flow validating signature tokens in bulk lost the whole batch.** Past roughly fifty
+  requests the transaction died on `Too many SOQL queries: 101`. It now validates as many
+  as the allowance affords and returns the rest marked "not attempted".
+
+- **Repeating table headers**, confirmed rather than changed: Flying Saucer repeats a
+  `<thead>` that declares `display: table-header-group`, which the Canvas emits. An
+  earlier note in the spike said otherwise; that probe used a bare `<thead>`.
+
+- A long verification URL ran off the edge of the signature Certificate of Completion.
+
+### Changed
+
+- **`DocGen_Template_Version__c.Type__c` no longer defaults to Word** — **on new installs
+  only.** A version created without an explicit type retyped its template through
+  `activateVersion`. Salesforce does not push a removed picklist default to an org that
+  already has the package: measured on orgs upgraded from 3.53 and 3.48, both still
+  report `Word`, while a fresh 3.55 install reports none. Existing orgs can clear it in
+  Setup → Object Manager → Portwood Template Version → Type → untick **Default** on Word.
+  Every Portwood path sets the type explicitly, so this only affects scripts and
+  integrations that omit it.
+
+### Known issues
+
+See `docs/known-issues.md`. Nothing there is a regression from this release; each entry
+records what was measured and, where a fix was attempted and backed out, why.
+
 ## v3.54.0 — Canvas designer (Beta)
 
 Released 2026-08-06 · `04tVx0000010Y4LIAU` · ancestor 3.53.0 · 1,905 tests, 78% coverage

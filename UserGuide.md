@@ -31,7 +31,7 @@ PowerPoint and Excel templates are also supported as **alpha-stage** formats —
 >   Setup → Object Manager → **Portwood Template Version** → **Type** → edit the **Word**
 >   value → untick **Default**. New installs already have it.
 
-[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Support](https://portwood.dev/support) · [Expert Services](https://portwood.dev/services)
+[Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx0000010fXFIAY) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx0000010fXFIAY) · [Support](https://portwood.dev/support) · [Expert Services](https://portwood.dev/services)
 
 ---
 
