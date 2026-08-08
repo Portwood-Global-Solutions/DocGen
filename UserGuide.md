@@ -4,6 +4,22 @@ Build polished Word and PDF documents from any Salesforce record. Author your te
 
 PowerPoint and Excel templates are also supported as **alpha-stage** formats — see [§2](#2-what-portwood-does) for what to expect.
 
+> **New in v3.55**
+>
+> - **Element linking on the Canvas** — a block can follow another and travel with it, so a
+>   summary, note or signature panel lands below a table however far it grows, and follows it
+>   onto whatever page it ends on. Chains, keep-together, cycle-safe. [§5.1.3](#513-canvas-templates-beta)
+> - **Named blocks** — give a block a name and it is what the panel, the on-canvas badge and
+>   every **Follows** picker call it. [§5.1.3](#513-canvas-templates-beta)
+> - **Charts and large datasets** — PowerPoint and Excel now assemble in the browser like Word
+>   always has, with charts rendered by Chart.js. The 6 MB Apex heap stops being the ceiling;
+>   tested to 30,000 child records. [§7.6.2.1](#7621-charts-on-large-datasets--client-side-rendering-v355)
+> - **Chart blocks on the Canvas**, with a live preview while you design. [§5.1.3](#513-canvas-templates-beta)
+> - **Export HTML** from the Canvas, alongside Import HTML. [§5.1.3](#513-canvas-templates-beta)
+> - **Fixed:** `.docx` / `.pptx` / `.xlsx` downloads and Canvas Export HTML failed in
+>   LWS-enabled orgs. [§14.6](#146-lightning-web-security-lws)
+> - **Fixed:** a long verify URL ran off the edge of the signature Certificate of Completion.
+
 [Install in Production](https://login.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Install in Sandbox](https://test.salesforce.com/packaging/installPackage.apexp?p0=04tVx000000nI5RIAU) · [Support](https://portwood.dev/support) · [Expert Services](https://portwood.dev/services)
 
 ---
@@ -14,7 +30,7 @@ PowerPoint and Excel templates are also supported as **alpha-stage** formats —
 2. [What Portwood does](#2-what-portwood-does)
 3. [Install & post-install setup](#3-install--post-install-setup)
 4. [Permission sets](#4-permission-sets)
-5. [Templates](#5-templates)
+5. [Templates](#5-templates) — including [Canvas templates (Beta)](#513-canvas-templates-beta)
 6. [Query builder](#6-query-builder) — including [Apex Data Provider (V4)](#66-apex-data-provider-v4--class-backed-templates)
 7. [Merge tag reference](#7-merge-tag-reference)
 8. [Document generation](#8-document-generation)
@@ -223,12 +239,19 @@ Update all three permission sets in the same change. Missed FLS grants silently 
 
 ### 5.1 Creating a template
 
-Open the Portwood app → **My Templates** → the **Create New** tab. The wizard offers four authoring paths:
+Open the Portwood app → **My Templates** → the **Create New** tab. The wizard offers two authoring paths:
 
-- **Start from a Design** (recommended) — pick a professional starter (Record Report, Invoice / Line Items, Business Letter, signature-ready Agreement, landscape Certificate / Award). Your object's real merge fields are injected automatically and the template renders on the first click. Starters that need a specific page setup bring it along — the Certificate creates a landscape Letter page with 0.5" margins without you touching anything.
-- **Generate with AI** — a six-step flow, top to bottom on one page: build your query in the full visual builder (fields, parent lookups, related lists with filters), pick your images, describe the document in your own words, copy the assembled prompt (it carries Portwood's full tag syntax and the PDF engine's CSS rules), paste it into Claude / ChatGPT / Copilot, then paste the returned HTML back. The prompt updates live as you build. The result opens in the designer.
-- **Start From Scratch** — a blank page in the visual designer.
-- **I Have an Existing File** — upload **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), fillable **PDF** (_testing_), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx` / `.xlsm`, _alpha_) containing `{FieldName}` merge tags.
+- **Bring an Existing Template** — upload **Word** (`.docx`), **HTML** (`.html` / `.htm` / `.zip`), fillable **PDF** (_testing_), **PowerPoint** (`.pptx`, _alpha_), or **Excel** (`.xlsx` / `.xlsm`, _alpha_) containing `{FieldName}` merge tags. Each keeps its own format — Word generates `.docx`, Excel `.xlsx`, PowerPoint `.pptx`. An HTML file can also be imported onto a canvas later, from the editor.
+- **Start from a Blank Canvas** (Beta) — an empty artboard. Drop text, tables, images, charts, shapes, barcodes and signature blocks exactly where you want them and they land there in the PDF, to the inch, while lists still flow onto as many pages as the data needs. See [§5.1.3](#513-canvas-templates-beta).
+
+> **Starters and the AI path were retired from the wizard (v3.54).** Every starter
+> was a layout someone still had to understand and then edit, and asking which of
+> five designs you want _before_ you have seen the editor is asking too early. A
+> blank canvas is a shorter path to the same place. Templates already created from
+> a starter, from **Start From Scratch**, or with **Generate with AI** still open
+> and edit normally — the wizard simply no longer sends anyone down those routes.
+> AI authoring remains available inside the HTML designer (see
+> [§5.7.11](#5711-generate-the-template-with-agentforce-v346)).
 
 Every path also asks for:
 
@@ -241,6 +264,7 @@ Every path also asks for:
 **Output formats by template type:**
 
 - Word (`.docx`) template → output PDF **or** DOCX (pick one when you save the template)
+- Canvas template → output PDF only (see [§5.1.3](#513-canvas-templates-beta))
 - HTML (`.html` / `.htm` / `.zip`) template → output PDF only (see [§5.7](#57-html-templates-google-docs-notion-any-html-source))
 - PDF (`.pdf`) fillable template → output PDF only (PDF-to-PDF / AcroForm filling is currently in testing)
 - PowerPoint (`.pptx`) template → output PPTX only (PowerPoint→PDF is not supported by the Salesforce platform)
@@ -329,6 +353,71 @@ Where you'll see it (v3.29+):
 - **Template record page** — on the Portwood Template layout, next to Name.
 - **Cloning** (§5.2.1) gives the copy its own unique API Name automatically; **Export/Import** (§5.2.2) carries the API Name across orgs and only drops it if a template in the target org already claims it.
 
+### 5.1.3 Canvas templates (Beta)
+
+A Canvas template is a **positioned** document: you place blocks on an artboard measured in inches and they print exactly there. The other template types describe a flowing document and let the engine work out the layout. Canvas is for the cases where that is not good enough — a certificate, a form that has to match a printed original, an invoice whose totals panel belongs in one specific corner.
+
+Choose **Start from a Blank Canvas** in the Create New wizard, or open any Canvas template from **My Templates → Designer (Beta)**.
+
+![A Canvas template in the designer — tool rail, properties panel, and the artboard with a linked block selected](docs/images/userguide/canvas-element-linking.png)
+
+**The tool rail (left):** Select, Text, Table, Image, Code (QR / barcode), Chart, Signature, Shape, Elements, Data, Page, Add page. Pick a tool, then click the page to place a block.
+
+**The properties panel** shows everything about the selected block: its name, content (a rich-text editor, or an HTML source view), fill, border, padding, a **Show only when** condition, layering, and position.
+
+**The toolbar** carries Template (settings), Preview (a real PDF from your sample record), Import HTML, Export HTML, the version picker, and Save.
+
+#### What you place is what prints
+
+A box at 2.4in × 3.1in on screen is at 2.4in × 3.1in in the PDF. The canvas holds the document as a scene graph rather than as editable HTML, so nothing is read back out of the browser's DOM and there is no drift between the editor and the output.
+
+Page size, orientation and margins are set on the **Page** tool and written into the document's own `@page` rule. A Canvas document owns its page — the template record's page fields do not override it.
+
+#### Tables that grow
+
+A Table block binds a child relationship and repeats one row per record, exactly like `{#Relationship}` in an HTML template — bind it from the **Data** tool rather than writing the tag by hand. Column headers go in a real `<thead>`, so they **repeat at the top of every page** the table spans.
+
+#### Charts
+
+The Chart block renders a live preview on the artboard using Chart.js and produces a real image in the PDF. Pick a relationship, a field to group by, and a style (bar, column, pie, donut, line, area, or the cross-tab styles). See [§7.6](#76-charts) for the full option set — the block writes the same `{Chart:...}` tag you would otherwise author by hand, and it will not emit a tag the engine would reject.
+
+#### Naming a block
+
+Every block has an optional **Name** at the top of the properties panel. It is worth setting once a page has more than a few blocks: the name is what the panel heading, the on-canvas badge, and every other block's **Follows** picker call it. Without one, Portwood derives a label from the content — a table becomes "Contacts table", a paragraph leads with its own first words — which works until two blocks start with the same text.
+
+#### Element linking — blocks that travel together
+
+The problem: a note placed under a table is fine on the artboard and wrong the moment the merge produces more rows than you drew. The table grows, the note stays where it was pinned, and the rows print straight through it.
+
+Select a block and set its **Position**:
+
+![The Position control — Stays put, Flows down the page, Follows another element, with an anchor picker and keep-together](docs/images/userguide/canvas-position-controls.png)
+
+- **Stays put** — lands exactly where you put it, every time. Correct for page furniture: a masthead, a logo, a footer. It is overrun if something above it grows, which is fine when nothing above it does.
+- **Flows down the page** — stacks below the previous flowing block and can spill onto the next page. This is where a line-item loop goes.
+- **Follows another element** — pick the block it should travel with. However far that block grows at merge time, this one lands below it instead of being overrun, and follows it onto whatever page it ends on.
+
+Links chain. A summary can follow the table, a note follow the summary, and a signature panel follow the note; the whole set moves as one. **Keep on the same page as what it follows** stops a block being split across a page break (it maps to `page-break-inside: avoid`, which the engine honours as long as the block actually fits on a page).
+
+A block can only follow something on the same page, and the picker will not offer a target that would create a loop — if A already follows B, B cannot be set to follow A. When the selection is part of a chain, a dashed tether is drawn on the artboard from each anchor to the block that follows it, so you can see the group at a glance. If the block a link points at is deleted, the panel says so rather than leaving it silently stationary.
+
+#### Import and export
+
+**Import HTML** converts an existing HTML document onto the canvas. Each top-level block of the body becomes its own editable block, in document order. Elements that already declare `position: absolute` with inch coordinates keep them and arrive placed; everything else arrives flowing, one below the last. The conversion is structural — nothing is measured in the browser and re-pinned, because the browser and the PDF engine do not agree on layout, and baking the browser's answer in would look right in the editor and drift in the output. The import reports anything it could not carry across.
+
+**Export HTML** downloads the canvas as a self-contained HTML file carrying all its authoring attributes, so it can be imported again — into another org, or as the starting point for a second template.
+
+#### Multiple pages
+
+**Add page** appends an artboard; **Duplicate page** copies one and everything on it, which is the quickest way to reuse a letterhead. Each artboard is a discrete page. A linked group lives within one artboard — a group cannot begin on one and continue on the next.
+
+#### Known limits (Beta)
+
+- **No running header or footer.** A Canvas block does not repeat on continuation pages. For content that must appear on every page, use the template's Header HTML / Footer HTML fields.
+- **A linked group taller than one page will still split.** Keep-together is a preference the engine cannot honour when the content exceeds the page box.
+- **Links do not cross artboards.**
+- Canvas templates output **PDF only**.
+
 ### 5.2 Template versions
 
 Each save creates a new `DocGen_Template_Version__c` record. Only the version marked **Active** (`Is_Active__c = true`) is used by the runner.
@@ -402,6 +491,13 @@ On older versions (≤3.28), template records default to Private sharing, so non
 HTML templates let you author in any tool that produces HTML — Google Docs is the flagship workflow — and render to PDF. Every merge tag that works in Word templates works identically: `{Name}`, loops, conditionals, aggregates, images, `{Today}`, `{Now}`, `{%Image:N}`, etc.
 
 **Why use them?** Word templates lock authors into Microsoft Word. HTML templates let content teams design where they already work (Google Docs, Notion, ChatGPT, Apple Pages, any rich-text editor that emits HTML). Same merge engine, much wider authoring surface.
+
+> **HTML or Canvas?** An HTML template describes a **flowing** document and lets the engine
+> lay it out — the right choice when the content drives the shape, and the only choice if you
+> author elsewhere and paste in. A Canvas template positions blocks to the inch, for when the
+> layout is the requirement. You are not locked in either way: **Import HTML** on the Canvas
+> designer converts an existing HTML document onto an artboard. See
+> [§5.1.3](#513-canvas-templates-beta).
 
 #### 5.7.1 Authoring in Google Docs
 
@@ -1871,8 +1967,35 @@ The chart engine emits PNG (universal) with one opt-in alternative (inline SVG f
 | Word          | DOCX             | PNG embedded in `word/media/`                 | LWC orchestrates: SVG → canvas → PNG → CV → client-side ZIP assembly fetches CV bytes         |
 | Word          | PDF              | PNG embedded in `word/media/`, then converted | Same DOCX assembly, then DocGenHtmlRenderer → `Blob.toPdf`                                    |
 | Word          | Sample PDF       | PNG embedded                                  | Same path                                                                                     |
-| PowerPoint    | PPTX             | PNG in `ppt/media/` via `<p:pic>`             | Server-side OOXML embed                                                                       |
+| PowerPoint    | PPTX             | PNG in `ppt/media/` via `<p:pic>`             | Server-side OOXML embed, or client-side Chart.js on the giant-query path (below)              |
+| Excel         | XLSX             | PNG embedded in the sheet                     | Same as PowerPoint                                                                            |
+| Canvas        | PDF              | `<img>` referencing CV URL                    | Chart block previews live via Chart.js; the tag renders like any other HTML chart             |
 | Flow / batch  | any of the above | PNG via pure-Apex rasterizer                  | `DocGenChartImageController.prepareChartImagesServerSide` — no browser canvas, no callouts    |
+
+#### 7.6.2.1 Charts on large datasets — client-side rendering (v3.55+)
+
+The pure-Apex rasterizer runs inside a synchronous transaction, and both the chart data and
+the rendered PNGs have to fit in a 6 MB Apex heap. On a record with thousands of child rows
+that is not a limit you can tune around — a PowerPoint or Excel template over a few thousand
+child records used to fail outright with _"too large for sync PowerPoint/Excel output"_.
+
+For PowerPoint and Excel, Portwood now takes the same route it has always taken for Word:
+**the browser does the work.** The runner pages the child records down in chunks, aggregates
+each page into buckets as it arrives, and renders the finished chart with **Chart.js** on a
+real `<canvas>` before embedding the PNG. Nothing large is ever held in Apex at once, so the
+heap ceiling stops being the constraint — verified against 30,000 child records.
+
+You do not opt in and you do not change your tags. Write `{Chart:...}` exactly as documented
+above; the runner picks the path. What you should know:
+
+- **It needs a browser.** Flow, batch and Apex entry points still use the server-side
+  rasterizer, which is why the heap guidance in [§14.8](#148-template--output-size-guidance)
+  still applies to unattended generation.
+- **Non-groupable fields are refused with a message.** A Long Text Area cannot be used in a
+  SOQL `GROUP BY`, and attempting it throws an uncatchable platform exception — so Portwood
+  checks the field first and tells you, rather than letting the transaction die. Group by a
+  Text, Picklist, Number, Date or Checkbox field instead.
+- **Charts still render on the Canvas artboard** while you design, using the same library.
 
 **Cleanup.** Each generated chart produces a transient `docgen_chart_*` ContentVersion. The runner cleans them up after the document downloads/saves. A daily orphan reaper (`DocGenChartCleanupSchedulable`) sweeps stragglers (failures or browser-closed-mid-flow).
 
@@ -3472,6 +3595,14 @@ The Salesforce framework caps individual server-to-browser responses at 4 MB. Po
 
 If your org has LWS turned on, Portwood still works. We route binary data through Apex rather than direct browser fetches so file URLs never get blocked.
 
+**Downloads (fixed in v3.55).** LWS sanitizes `URL.createObjectURL` against a MIME
+allowlist — PDF, images and plain text pass; Office formats, JSON and HTML do not. Every
+`.docx` / `.pptx` / `.xlsx` download from the runner, and Export HTML from the Canvas
+designer, failed in an LWS-enabled org with _"Cannot 'createObjectURL' using an unsecure
+[object Blob]"_. Allowlisted types now go through a Blob URL as before and everything else
+through a `data:` URI, which LWS does not touch. Nothing to configure; if you were on an
+earlier version and saw that error, upgrading is the fix.
+
 ### 14.7 Guest user constraints (signing page)
 
 The signing page runs as a guest user, which the platform restricts pretty heavily. The most visible consequence: **a verified Org-Wide Email Address is required** to send signing emails (Setup → Organization-Wide Email Addresses). Everything else (image rendering, audit logging, platform events) Portwood handles for you.
@@ -3494,6 +3625,17 @@ The signing page runs as a guest user, which the platform restricts pretty heavi
 **Why the 10 MB template cap?** The platform unzips and pre-caches every template at save time, and async heap is bounded at 12 MB. Templates over ~10 MB don't survive that step. Almost every 20 MB+ template is uncompressed images — in Word, right-click any image → **Compress Pictures → Email (96 ppi)** drops most templates to 1–2 MB with no visible quality loss.
 
 **Why the 2-step flow for > ~4 MB DOCX / XLSX?** The framework caps inbound browser-to-server payloads at roughly 4 MB. For larger files, Portwood downloads the file to your computer, then shows a drag-to-attach uploader that uses the platform's native (2 GB) uploader. One extra click, no Apex heap involved.
+
+**Large child-record counts (v3.55+).** A PowerPoint or Excel template over a few thousand
+child records used to refuse with _"too large for sync PowerPoint/Excel output"_ — the whole
+dataset had to fit in a 6 MB synchronous Apex heap. Those formats now use the same
+browser-side assembly Word has always used: the runner pages the records down in chunks and
+builds the file client-side, so the heap ceiling no longer applies. Tested to 30,000 child
+records. Charts on the same path render with Chart.js in the browser — see
+[§7.6.2.1](#7621-charts-on-large-datasets--client-side-rendering-v355).
+
+This applies to **interactive** generation. Flow, batch and Apex entry points have no
+browser, so they still run server-side and the heap guidance above holds for them.
 
 ### 14.9 Excel templates — alpha limitations
 
