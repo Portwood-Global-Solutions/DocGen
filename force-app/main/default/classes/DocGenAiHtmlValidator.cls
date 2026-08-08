@@ -59,6 +59,7 @@ public with sharing class DocGenAiHtmlValidator {
     }
 
     private String work;
+    private Boolean canvasMode = false;
     private final List<Finding> findings = new List<Finding>();
 
     // -----------------------------------------------------------------------
@@ -66,7 +67,21 @@ public with sharing class DocGenAiHtmlValidator {
     // -----------------------------------------------------------------------
 
     public static Result sanitize(String rawHtml) {
+        return sanitize(rawHtml, false);
+    }
+
+    /**
+     * @param canvasMode Output destined for the Canvas editor rather than a flowing
+     *                   HTML template. Every rule still applies except the one that
+     *                   strips `position: absolute` — a Canvas document is BUILT from
+     *                   absolutely positioned boxes at inch coordinates, and the engine
+     *                   honours them. Everything else here (flex, gradients, rgba,
+     *                   border-radius, foster-parented loop tags) is just as wrong on a
+     *                   canvas as anywhere else.
+     */
+    public static Result sanitize(String rawHtml, Boolean canvasMode) {
         DocGenAiHtmlValidator v = new DocGenAiHtmlValidator();
+        v.canvasMode = canvasMode == true;
         return v.run(rawHtml);
     }
 
@@ -564,6 +579,16 @@ public with sharing class DocGenAiHtmlValidator {
             );
         }
 
+        // Absolute positioning is a defect in a FLOWING template and the whole point of
+        // a Canvas one, where every pinned box is `position: absolute` with inch
+        // coordinates and the engine honours it. Stripping it unconditionally silently
+        // flattened every placed block a Canvas draft produced back into the flow —
+        // measured against a generated roster whose title, date, band and footer all
+        // lost their coordinates, leaving three stacked boxes instead of five placed
+        // ones. Nothing errored; the layout was simply gone.
+        if (this.canvasMode) {
+            return;
+        }
         Integer pos = countAndStrip('(?i)(?<![-\\w])position\\s*:\\s*(?:absolute|fixed|sticky)\\s*;?', '');
         if (pos > 0) {
             note(

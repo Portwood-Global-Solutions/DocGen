@@ -468,4 +468,235 @@ private class DocGenAiTemplateControllerTest {
         System.assertEquals(true, p.isAvailable());
         System.assertEquals('Stub', p.getName());
     }
+
+    // -----------------------------------------------------------------------
+    // Fragment generation — the Canvas editor's per-element rewrite.
+    // -----------------------------------------------------------------------
+
+    @isTest
+    static void fragmentGenerationSavesNothing() {
+        // The canvas holds its document in memory and owns its own save cycle. A
+        // ContentVersion written here would leave the template record and the open
+        // canvas describing two different documents.
+        DocGen_Template__c t = makeTemplate();
+        Integer cvBefore = [SELECT COUNT() FROM ContentVersion];
+        DocGenAiProviderFactory.setProvider(new FakeProvider('<strong>Total</strong> {SUM:Lines.Amount:currency}'));
+
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateFragment(
+            'rewrite this',
+            '<b>Total</b> {SUM:Lines.Amount:currency}'
+        );
+        Test.stopTest();
+
+        System.assert(res.html.contains('{SUM:Lines.Amount:currency}'), 'the merge tag must survive');
+        System.assertEquals(null, res.contentVersionId, 'a fragment must NOT save a ContentVersion');
+        System.assertEquals(cvBefore, [SELECT COUNT() FROM ContentVersion], 'nothing may be persisted');
+        System.assertEquals(true, res.wasEdit, 'a previous fragment means this was an edit');
+        System.assertEquals(
+            null,
+            [SELECT Draft_Body__c FROM DocGen_Template__c WHERE Id = :t.Id].Draft_Body__c,
+            'and the staging field is untouched — there is no template body involved'
+        );
+    }
+
+    @isTest
+    static void aFragmentNeedNotLookLikeADocument() {
+        // assertLooksLikeDocument accepts only <html/<!doctype/<body/<table/<div, which
+        // is right for a file and wrong for a block: a text element's content is
+        // legitimately an inline run, or bare text carrying a merge tag.
+        List<String> goodFragments = new List<String>{
+            '<strong>Prepared for</strong> {Account.Name}',
+            '<p style="color:#1e40af">Thanks for your business.</p>',
+            'Total due: {Amount:currency}',
+            '<span>x</span>'
+        };
+        Test.startTest();
+        for (String frag : goodFragments) {
+            DocGenAiProviderFactory.setProvider(new FakeProvider(frag));
+            DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateFragment('x', null);
+            System.assertNotEquals(null, res.html, 'accepted: ' + frag);
+            System.assert(res.html.length() > 0, 'accepted and non-empty: ' + frag);
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void aFragmentRefusalIsStillCaught() {
+        // The reason the guard exists at all: Einstein intermittently answers a good
+        // prompt with prose. That must not silently replace an element's content.
+        DocGenAiProviderFactory.setProvider(
+            new FakeProvider('I do not know. Please specify the exact change you want made.')
+        );
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenAiTemplateController.generateFragment('x', '<p>{Name}</p>');
+        } catch (Exception e) {
+            threw = true;
+            System.assert(
+                e.getMessage().containsIgnoreCase('has NOT been changed'),
+                'the message must say the block is untouched: ' + e.getMessage()
+            );
+        }
+        Test.stopTest();
+        System.assert(threw, 'prose must be refused');
+    }
+
+    @isTest
+    static void fragmentEditGuardFlagsALostMergeTag() {
+        // Same protection the whole-document edit path gets. A rewrite that quietly
+        // drops a binding looks perfectly fine on the canvas.
+        DocGenAiProviderFactory.setProvider(new FakeProvider('<p>Thanks for your business.</p>'));
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateFragment(
+            'make it friendlier',
+            '<p>Thanks, {Account.Name}. Total {Amount:currency}.</p>'
+        );
+        Test.stopTest();
+        Boolean flagged = false;
+        for (DocGenAiHtmlValidator.Finding f : res.findings) {
+            if (f.rule.containsIgnoreCase('lost')) {
+                flagged = true;
+            }
+        }
+        System.assert(flagged, 'dropping {Account.Name} and {Amount} must be reported: ' + res.summary);
+    }
+
+    @isTest
+    static void fragmentStillSanitizes() {
+        // The validator is string-level and assumes no document wrapper, so every rule
+        // applies to a fragment unchanged.
+        DocGenAiProviderFactory.setProvider(
+            new FakeProvider('<div style="display:flex; border-radius:6pt">{Name}</div>')
+        );
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateFragment('x', null);
+        Test.stopTest();
+        System.assert(!res.html.containsIgnoreCase('display:flex'), 'flex must be stripped: ' + res.html);
+        System.assert(res.html.contains('{Name}'), 'the merge tag must survive');
+    }
+
+    @isTest
+    static void fragmentRejectsABlankPrompt() {
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenAiTemplateController.generateFragment('   ', '<p>x</p>');
+        } catch (Exception e) {
+            threw = true;
+        }
+        Test.stopTest();
+        System.assert(threw, 'a blank prompt must not reach the model');
+    }
+
+    @isTest
+    static void anEmptyModelResponseIsRefusedForAFragment() {
+        DocGenAiProviderFactory.setProvider(new FakeProvider(''));
+        Boolean threw = false;
+        Test.startTest();
+        try {
+            DocGenAiTemplateController.generateFragment('x', '<p>{Name}</p>');
+        } catch (Exception e) {
+            threw = true;
+        }
+        Test.stopTest();
+        System.assert(threw, 'an empty response must not blank the element');
+    }
+
+    // -----------------------------------------------------------------------
+    // Canvas preview — placement must survive the validator.
+    // -----------------------------------------------------------------------
+
+    @isTest
+    static void canvasModeKeepsAbsolutePositioning() {
+        // A Canvas document IS a set of absolutely positioned boxes at inch
+        // coordinates, and the engine honours them. The generic rule strips
+        // position:absolute, which is right for a flowing template and silently
+        // flattened every placed block of a Canvas draft into the flow.
+        String placed =
+            '<!DOCTYPE html><html><head><style>@page{size:Letter portrait;}</style></head><body>' +
+            '<h1 style="position: absolute; left: 0.75in; top: 0.6in; width: 4.5in">{Name}</h1>' +
+            '<div style="position: absolute; left: 5.75in; top: 0.65in; width: 2in">{Today}</div>' +
+            '<table style="width: 7in"><tr><td>{LastName}</td></tr></table>' +
+            '</body></html>';
+        DocGenAiProviderFactory.setProvider(new FakeProvider(placed));
+
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult canvasRes = DocGenAiTemplateController.generateCanvasPreview('x');
+        DocGenAiTemplateController.GenerationResult htmlRes = DocGenAiTemplateController.generateBodyPreview('x');
+        Test.stopTest();
+
+        System.assertEquals(
+            2,
+            canvasRes.html.countMatches('position: absolute'),
+            'canvas mode must keep every placed block: ' + canvasRes.html
+        );
+        System.assert(canvasRes.html.contains('left: 0.75in'), 'and its coordinates');
+        System.assertEquals(
+            0,
+            htmlRes.html.countMatches('position: absolute'),
+            'while the flowing-template path still strips it'
+        );
+        for (DocGenAiHtmlValidator.Finding f : canvasRes.findings) {
+            System.assert(
+                !f.rule.containsIgnoreCase('position:'),
+                'and canvas mode must not warn about it either: ' + f.rule
+            );
+        }
+    }
+
+    @isTest
+    static void canvasModeStillAppliesEveryOtherRule() {
+        // Only the positioning rule is relaxed. Flex, gradients and the rest are just
+        // as wrong on a canvas as anywhere else.
+        String dirty =
+            '<!DOCTYPE html><html><head><style>@page{size:Letter portrait;}</style></head><body>' +
+            '<div style="position: absolute; left: 1in; top: 1in; display: flex; ' +
+            'background: linear-gradient(90deg,#000,#fff); border-radius: 6pt">{Name}</div>' +
+            '</body></html>';
+        DocGenAiProviderFactory.setProvider(new FakeProvider(dirty));
+
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateCanvasPreview('x');
+        Test.stopTest();
+
+        System.assert(res.html.contains('position: absolute'), 'placement is kept');
+        System.assert(!res.html.containsIgnoreCase('display: flex'), 'flex is not');
+        System.assert(!res.html.containsIgnoreCase('linear-gradient'), 'nor gradients');
+        System.assert(!res.html.containsIgnoreCase('border-radius'), 'nor rounded corners');
+    }
+
+    @isTest
+    static void canvasPreviewSavesNothing() {
+        DocGen_Template__c t = makeTemplate();
+        Integer cvBefore = [SELECT COUNT() FROM ContentVersion];
+        Test.startTest();
+        DocGenAiTemplateController.GenerationResult res = DocGenAiTemplateController.generateCanvasPreview(
+            'a roster for the Account object'
+        );
+        Test.stopTest();
+        System.assertNotEquals(null, res.html, 'HTML must come back');
+        System.assertEquals(null, res.contentVersionId, 'a canvas preview must NOT save a ContentVersion');
+        System.assertEquals(cvBefore, [SELECT COUNT() FROM ContentVersion], 'nothing may be persisted');
+    }
+
+    @isTest
+    static void canvasPreviewRefusesProseAndBlankPrompts() {
+        Integer caught = 0;
+        Test.startTest();
+        try {
+            DocGenAiTemplateController.generateCanvasPreview('   ');
+        } catch (Exception e) {
+            caught++;
+        }
+        DocGenAiProviderFactory.setProvider(new FakeProvider('I do not know what you want.'));
+        try {
+            DocGenAiTemplateController.generateCanvasPreview('x');
+        } catch (Exception e) {
+            caught++;
+        }
+        Test.stopTest();
+        System.assertEquals(2, caught, 'a blank prompt and a refusal must both be rejected');
+    }
 }

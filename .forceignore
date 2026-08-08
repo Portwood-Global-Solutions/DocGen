@@ -28,3 +28,4 @@ force-app/main/default/classes/DocGenDataProviderExample.cls-meta.xml
 #   - a package containing a GenAiPromptTemplate makes the WHOLE package require
 #     the Generative AI Prompt Templates feature, gating install for everyone
 # Both measured 2026-07-26. Keep them out of force-app.
+qa-org-only/**

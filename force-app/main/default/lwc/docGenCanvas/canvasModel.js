@@ -1603,6 +1603,17 @@ export function tablePreviewHtml(box) {
  * editing into the panel, and tables render correctly (measured — nested tables and
  * per-cell borders both work).
  */
+/**
+ * Tags whose TEXT is not content, so unwrapping them is wrong.
+ *
+ * The rule below is "unwrap, never delete", which is right for a stray <section> —
+ * the words inside it are what the author wrote. It is wrong for these: their text is
+ * CSS or script source, and unwrapping prints it on the page. A whole HTML document
+ * pasted into a box (or returned by a model that ignored a fragment instruction) put
+ * "@page { size: Letter portrait; ... }" on the artboard as visible body text.
+ */
+const DROP_SUBTREE_TAGS = new Set(['STYLE', 'SCRIPT', 'HEAD', 'TITLE', 'META', 'LINK', 'BASE', 'NOSCRIPT']);
+
 const SAFE_TAGS = new Set([
     // Anchors survive because the output honours them: Blob.toPdf emits a real /Link
     // annotation for an http(s) href and a /GoTo jump for an in-document #anchor.
@@ -1761,6 +1772,35 @@ function safeHref(raw) {
     return /^https?:\/\//i.test(v) ? v : null;
 }
 
+/**
+ * Reduce a whole HTML document to the markup inside its <body>.
+ *
+ * A no-op on something that is already a fragment. Needed because a model asked for
+ * one block's inner HTML will sometimes return a complete file anyway — measured
+ * against the stub, which returns a full invoice regardless of the prompt. Without
+ * this, sanitizeInline sees a document, and while it now drops <style> outright the
+ * useful content would still arrive wrapped in whatever the model chose.
+ *
+ * Regex rather than a parse: assigning a full document to template.innerHTML makes the
+ * parser discard <head> and unwrap <body> on its own, so by the time it could be
+ * queried the structure is already gone.
+ */
+export function toFragment(html) {
+    if (!html || typeof html !== 'string') {
+        return '';
+    }
+    const body = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html);
+    if (body) {
+        return body[1];
+    }
+    // No <body>, but possibly still a <head> or a bare <style> to shed. sanitizeInline
+    // drops those too; this only spares it the doctype and wrapper noise.
+    return html
+        .replace(/<!DOCTYPE[^>]*>/gi, '')
+        .replace(/<\/?html[^>]*>/gi, '')
+        .replace(/<head[\s\S]*?<\/head>/gi, '');
+}
+
 export function sanitizeInline(html) {
     const tpl = document.createElement('template');
     // Heal first, then parse: stripping tags out of the braces can leave an orphan
@@ -1773,6 +1813,11 @@ export function sanitizeInline(html) {
                 continue;
             }
             if (child.nodeType !== 1) {
+                child.remove();
+                continue;
+            }
+            if (DROP_SUBTREE_TAGS.has(child.tagName)) {
+                // Deleted outright, contents and all. See DROP_SUBTREE_TAGS.
                 child.remove();
                 continue;
             }
@@ -2792,9 +2837,13 @@ export function htmlToCanvas(html, measure) {
             continue;
         }
         board.boxes.push(box);
-        if (box.mode === 'flow') {
-            cursorIn = round3(box.y + box.h);
-        }
+        // A flowing block continues from where the last one ended — and a PLACED block
+        // counts too. Only flow boxes used to advance the cursor, so a document that
+        // pinned a title and then let a table flow put the table at y=0, printed on top
+        // of the title. Taking the max means flowing content lands below everything
+        // placed so far, which is the whole point of flowing it. For a pure-flow
+        // document box.y already equals the cursor, so this changes nothing there.
+        cursorIn = round3(Math.max(cursorIn, box.y + box.h));
     }
     flushRun();
 

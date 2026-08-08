@@ -659,6 +659,57 @@ export function buildAiPrompt(shape, options) {
     // same data shape as above; only the task and the output contract differ.
     // Kept in this one builder so the create and edit paths cannot drift apart,
     // which is also why "Copy AI Prompt" and the in-org button share it.
+    // FRAGMENT EDIT — one positioned block of a Canvas document, not a file.
+    //
+    // The canvas owns page setup, the artboard CSS and every box's geometry, and none
+    // of that is shown to the model. Sending the whole serialized canvas instead would
+    // mean betting the layout on a model returning `data-dg-x/y/w/h/id/anchor`
+    // byte-for-byte — and an anchor id it rewrote would silently re-point an element
+    // link. Scoping the edit to the block's inner HTML keeps geometry and links on the
+    // client where they cannot be damaged.
+    if (opts.fragment && opts.currentBody != null) {
+        lines.push('YOUR TASK — EDIT ONE BLOCK INSIDE AN EXISTING DOCUMENT:');
+        lines.push(
+            'What follows is the content of a single positioned block on a page, NOT a whole file. The page setup, margins, fonts and everything around this block are owned by the editor and are deliberately not shown to you. Do not try to reconstruct them.'
+        );
+        lines.push('');
+        lines.push('CURRENT BLOCK CONTENT (between the >>> markers, which are NOT part of it):');
+        lines.push('>>>BEGIN CURRENT BLOCK');
+        lines.push(opts.currentBody.trim() || '(the block is empty)');
+        lines.push('>>>END CURRENT BLOCK');
+        lines.push('');
+        lines.push('WHAT TO CHANGE:');
+        lines.push(
+            opts.docDescription && opts.docDescription.trim()
+                ? opts.docDescription.trim()
+                : '<<DESCRIBE THE CHANGE YOU WANT.>>'
+        );
+        lines.push('');
+        lines.push('OUTPUT CONTRACT — this REPLACES any instruction above about returning a whole file:');
+        lines.push(
+            '1. Return ONLY the inner HTML of this one block. No <!DOCTYPE>, no <html>, <head>, <body>, no <style> block, no @page rule, no commentary, no markdown fences. Just the markup that goes inside the block.'
+        );
+        lines.push(
+            '2. Style with inline style="" attributes. A <style> block is stripped, so any rule you put in one is silently lost.'
+        );
+        lines.push(
+            '3. Apply EVERY change asked for, not just the first — one sentence often contains several. Re-read your list before returning and confirm each is present.'
+        );
+        lines.push('4. Change ONLY what was asked. Everything else comes back byte-for-byte as it went in.');
+        lines.push(
+            '5. NEVER drop, rename or reword a merge tag. Anything in {curly braces} is a live data binding, and losing one silently blanks that value in every generated document.'
+        );
+        lines.push(
+            '6. Do not set a width, height, position, top or left on the outermost content — the block is already sized and placed on the page, and doing so fights the editor.'
+        );
+        lines.push('7. Obey every rendering constraint listed above. This still has to survive Flying Saucer.');
+        lines.push('');
+        lines.push(
+            'QUESTIONS? The full Portwood UserGuide covers every merge tag, format suffix, and PDF rendering rule — look it up if anything here is unclear: https://github.com/Portwood-Global-Solutions/Portwood/blob/main/UserGuide.md'
+        );
+        return lines.join('\n');
+    }
+
     if (opts.mode === 'edit' && opts.currentBody && opts.currentBody.trim()) {
         lines.push('YOUR TASK — EDIT AN EXISTING TEMPLATE, DO NOT WRITE A NEW ONE:');
         lines.push(
@@ -719,6 +770,65 @@ export function buildAiPrompt(shape, options) {
         );
     }
     lines.push('');
+    // Canvas import re-describes each TOP-LEVEL block as its own box (htmlToCanvas is
+    // structural, not geometric). A document wrapped in one container div is therefore
+    // perfectly valid HTML that imports as a single un-editable box, so the shape of
+    // the output matters here in a way it does not for an HTML template.
+    if (opts.canvas) {
+        const pw = opts.pageWidthIn || 8.5;
+        const ph = opts.pageHeightIn || 11;
+        lines.push('HOW THIS OUTPUT IS USED — it changes the markup you should write:');
+        lines.push(
+            'This document is imported onto a visual canvas — an artboard measured in INCHES, where each TOP-LEVEL element of <body> becomes its own separately editable, individually positioned block. The usable page is ' +
+                pw +
+                'in wide by ' +
+                ph +
+                'in tall, with the origin at its top-left corner.'
+        );
+        lines.push(
+            'So put every heading, panel, table and paragraph at the TOP LEVEL of <body>, one after another. Do NOT wrap the document in a single container <div> or one outer layout <table> — that imports as a single block the author cannot take apart, which is the most common way this goes wrong.'
+        );
+        lines.push('');
+        lines.push('EACH TOP-LEVEL BLOCK IS EITHER PLACED OR FLOWING. Choose per block:');
+        lines.push(
+            '- PLACED — give it style="position: absolute; left: 1.25in; top: 0.75in; width: 3in". It lands at exactly those coordinates on the page, to the inch. Use inches (in) for left/top/width, never px, % or em, or it cannot be read back. An optional height: works the same way.'
+        );
+        lines.push(
+            '- FLOWING — give it no position at all. Flowing blocks stack down the page in the order you write them, each below the last, and grow to fit their content.'
+        );
+        lines.push('');
+        lines.push('WHICH TO USE — this is the judgement that makes a good canvas document:');
+        lines.push(
+            '- PLACE anything whose position is the design: a masthead or title band, a logo, a right-aligned date or document number, an address block, a signature panel, a footer, anything sitting in a specific corner, and anything meant to sit BESIDE something else rather than under it. Side-by-side layout is the thing flowing blocks cannot do, so reach for placement whenever you would otherwise have used a two-column layout table.'
+        );
+        lines.push(
+            '- LET IT FLOW when the block grows with the data: any {#Relationship} table, a long rich-text field, a list. Its height is unknown until the merge runs, so a fixed top for whatever follows it would be overrun.'
+        );
+        lines.push(
+            '- Never place a block so it overlaps another — they will print on top of each other. Keep every left+width within ' +
+                pw +
+                'in and every top within ' +
+                ph +
+                'in.'
+        );
+        lines.push(
+            '- Place a block only where you can state a reason. Coordinates you cannot justify are worse than flowing, because the author has to undo them.'
+        );
+        lines.push('');
+        lines.push(
+            'You may mix the two freely, and writing blocks in reading order is what makes that work: a flowing block starts below everything placed above it, so put the placed page furniture first.'
+        );
+        lines.push('');
+        lines.push(
+            'PLACEMENT EXAMPLE — a placed title with a placed date beside it (which flow alone cannot do), then a flowing table that grows with the data:'
+        );
+        lines.push(
+            '<h1 style="position: absolute; left: 0.75in; top: 0.6in; width: 4.5in">{Name}</h1>' +
+                '<div style="position: absolute; left: 5.75in; top: 0.65in; width: 2in; text-align: right">{Today:MMMM d, yyyy}</div>' +
+                '<table style="width: 7in"> ... one {#Relationship} row per record ... </table>'
+        );
+        lines.push('');
+    }
     lines.push('OUTPUT REQUIREMENTS:');
     lines.push(
         '1. Return ONE complete self-contained HTML file (<!DOCTYPE html> ... </html>) with all CSS inline in a single <style> block. No commentary, no markdown fences.'

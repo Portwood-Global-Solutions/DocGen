@@ -221,6 +221,147 @@ public with sharing class DocGenAiTemplateController {
     }
 
     /**
+     * Generate a whole Canvas document. Saves nothing.
+     *
+     * Same shape as generateBodyPreview, and separate from it for exactly one reason:
+     * the validator strips `position: absolute`, which is right for a flowing HTML
+     * template and destroys a Canvas one. A Canvas document IS a set of absolutely
+     * positioned boxes at inch coordinates, so the draft arrived with every placed
+     * block flattened into the flow — no error, just the layout gone.
+     *
+     * Writes nothing for the same reason generateFragment does not: the canvas holds
+     * its document in memory and owns its own save cycle.
+     */
+    @AuraEnabled
+    public static GenerationResult generateCanvasPreview(String prompt) {
+        if (String.isBlank(prompt)) {
+            throw new AuraHandledException('Describe the document you want before generating.');
+        }
+        try {
+            DocGenAiProvider provider = DocGenAiProviderFactory.get();
+            String raw = provider.generateHtml(prompt);
+            if (String.isBlank(raw)) {
+                throw new AiGenerationException(
+                    'The model returned an empty response. Try again, or add more detail to your description.'
+                );
+            }
+            assertLooksLikeDocument(raw, null);
+            DocGenAiHtmlValidator.Result checked = DocGenAiHtmlValidator.sanitize(raw, true);
+
+            GenerationResult out = new GenerationResult();
+            out.html = checked.html;
+            out.summary = checked.summary;
+            out.findings = checked.findings;
+            out.repairedCount = checked.repairedCount;
+            out.removedCount = checked.removedCount;
+            out.warningCount = checked.warningCount;
+            out.providerName = provider.getName();
+            out.rawLength = raw.length();
+            out.wasEdit = false;
+            return out;
+        } catch (AuraHandledException e) {
+            throw e;
+        } catch (Exception e) {
+            AuraHandledException wrapped = new AuraHandledException(e.getMessage());
+            wrapped.setMessage(e.getMessage());
+            throw wrapped;
+        }
+    }
+
+    /**
+     * Generate a replacement for ONE block of a Canvas document. Saves nothing.
+     *
+     * The Canvas editor holds its document in memory and owns its own save cycle, so
+     * this must not write a body the way generateTemplateBody does — that would leave
+     * the template record and the open canvas describing two different documents.
+     *
+     * Scoped to a block rather than the whole canvas on purpose. Round-tripping a
+     * serialized canvas through a model means trusting it to return every
+     * data-dg-x/y/w/h/id/anchor attribute byte-for-byte, and an anchor id it rewrote
+     * would silently re-point an element link at a different box. Here the geometry
+     * never leaves the client, so a bad generation can cost you the block's content and
+     * nothing else — and Ctrl+Z brings that back.
+     *
+     * @param prompt           Assembled by buildAiPrompt with fragment: true.
+     * @param previousFragment The block's current inner HTML, for the edit guard.
+     */
+    @AuraEnabled
+    public static GenerationResult generateFragment(String prompt, String previousFragment) {
+        if (String.isBlank(prompt)) {
+            throw new AuraHandledException('Describe the change you want before generating.');
+        }
+        try {
+            DocGenAiProvider provider = DocGenAiProviderFactory.get();
+            String raw = provider.generateHtml(prompt);
+            if (String.isBlank(raw)) {
+                throw new AiGenerationException(
+                    'The model returned an empty response. Try again, or add more detail to your description.'
+                );
+            }
+            assertLooksLikeFragment(raw);
+            DocGenAiHtmlValidator.Result checked = DocGenAiHtmlValidator.sanitize(raw);
+
+            // The validator is string-level and makes no assumption about a document
+            // wrapper, so it applies to a fragment unchanged.
+            Boolean wasEdit = String.isNotBlank(previousFragment);
+            List<DocGenAiHtmlValidator.Finding> editFindings = wasEdit
+                ? DocGenAiEditGuard.compare(DocGenAiHtmlValidator.sanitize(previousFragment).html, checked.html)
+                : new List<DocGenAiHtmlValidator.Finding>();
+            for (DocGenAiHtmlValidator.Finding f : editFindings) {
+                checked.findings.add(f);
+                checked.warningCount += f.occurrences;
+            }
+
+            GenerationResult out = new GenerationResult();
+            out.html = checked.html;
+            out.summary = wasEdit ? summariseEdit(checked, editFindings) : checked.summary;
+            out.findings = checked.findings;
+            out.repairedCount = checked.repairedCount;
+            out.removedCount = checked.removedCount;
+            out.warningCount = checked.warningCount;
+            out.providerName = provider.getName();
+            out.rawLength = raw.length();
+            out.wasEdit = wasEdit;
+            return out;
+        } catch (AuraHandledException e) {
+            throw e;
+        } catch (Exception e) {
+            AuraHandledException wrapped = new AuraHandledException(e.getMessage());
+            wrapped.setMessage(e.getMessage());
+            throw wrapped;
+        }
+    }
+
+    /**
+     * The same refusal guard as assertLooksLikeDocument, loosened for a fragment.
+     *
+     * That one accepts only <html/<!doctype/<body/<table/<div, which is right for a
+     * whole file and wrong here: a text block's content is legitimately
+     * `<strong>Total</strong> {SUM:Lines.Amount:currency}`, or even bare text with a
+     * merge tag and no element at all. Requiring a block-level tag would reject good
+     * output; requiring any tag would still reject the plain-text case.
+     *
+     * So the test is markup OR a merge tag. A refusal — "I don't know. Please specify
+     * the exact change you want." — has neither, which is the case this exists to
+     * catch. Einstein produces those intermittently from a perfectly good prompt
+     * (measured 2026-07-26), so it is not a hypothetical.
+     */
+    private static void assertLooksLikeFragment(String raw) {
+        String probe = raw == null ? '' : raw.trim();
+        Boolean hasTag = Pattern.compile('(?s)<[a-zA-Z][^>]*>').matcher(probe).find();
+        Boolean hasMergeTag = Pattern.compile('(?s)\\{[^{}]+\\}').matcher(probe).find();
+        if (hasTag || hasMergeTag) {
+            return;
+        }
+        String quoted = probe.length() > 200 ? probe.substring(0, 200) + '…' : probe;
+        throw new AiGenerationException(
+            'Agentforce did not return anything usable, so the block has NOT been changed. It replied: "' +
+                quoted +
+                '". This happens intermittently even with a good instruction — try again, and if it repeats, make the instruction more specific.'
+        );
+    }
+
+    /**
      * Refuse to persist anything that is not a document.
      *
      * Einstein INTERMITTENTLY answers a perfectly good prompt with a refusal —

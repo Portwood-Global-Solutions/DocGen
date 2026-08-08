@@ -1003,3 +1003,49 @@ textarea.dg-cbox-text {
     font-size: 0.75rem;
     line-height: 1.35;
 }
+
+/* ---- Agentforce panel -------------------------------------------------- */
+
+.dg-ai-body {
+    padding: 8px 10px 10px;
+    font-size: 0.78rem;
+}
+
+.dg-ai-mode {
+    margin-bottom: 6px;
+}
+
+.dg-ai-note {
+    margin: 6px 0 0;
+    color: var(--slds-g-color-on-surface-3, #6b7280);
+    line-height: 1.35;
+}
+
+.dg-ai-actions {
+    margin-top: 10px;
+}
+
+.dg-ai-summary {
+    margin: 8px 0 0;
+    font-weight: var(--slds-g-font-weight-7, 700);
+}
+
+.dg-ai-badge {
+    display: inline-block;
+    margin-right: 5px;
+    padding: 0 5px;
+    border-radius: 9px;
+    font-size: 0.68rem;
+    background: var(--slds-g-color-surface-container-3, #e5e7eb);
+    color: var(--slds-g-color-on-surface-2, #374151);
+}
+
+.dg-ai-badge_warn {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.dg-ai-badge_ok {
+    background: #dcfce7;
+    color: #166534;
+}
