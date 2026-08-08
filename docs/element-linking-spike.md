@@ -29,6 +29,7 @@ survives content that grows at merge time:
 | 6 | `page-break-inside: avoid` on a group that FITS a page | **Honoured.** Moved whole to the next page rather than straddling |
 | 7 | Same group without `avoid` (control) | Split across pages — confirms 6 is the property, not chance |
 | 4 | `<thead>` on a table split across pages | **Does not repeat.** Header appears once, on the first page of the table |
+| 8 | Same box emitted pinned vs. flow, identical authored coords | **Renders in the identical place** — x=144.0/y=291.5 both ways, and unchanged with a pinned neighbour on the same artboard |
 
 Probe 3 (`avoid` on a group taller than a page) split, which is correct — the
 spec makes `avoid` a preference that cannot be satisfied when the content
@@ -58,6 +59,29 @@ authored dimensions.
 
 That also disposes of the `flowMarginTop` problem — nothing has to compute a gap
 from a height that no longer exists.
+
+## Converting a set to flow does not move it
+
+Worth stating plainly because it sounds like it should: switching a linked set
+from pinned to flow is positionally a **no-op** at design time. A box authored at
+x=1in, y=3in renders at x=144.0, y=291.5 whether it is emitted `position:
+absolute; left/top` or `margin: 3in 0 0 1in`, and adding a pinned neighbour to
+the artboard does not perturb it.
+
+The obvious risk here was margin collapsing — a flow box's `margin-top` pushing
+the artboard down instead of the box. The artboard's own `position: relative`
+prevents that. Measured, not assumed.
+
+This removes a constraint that would otherwise have shaped the UI: no confirm
+dialog, no per-artboard opt-in, no "your layout may shift" warning. Linking can
+be a quiet, reversible act.
+
+What DOES change is narrower than it first appears:
+
+- the set moves at merge time when content above it grows — the feature
+- stacking can differ, because a flowing group is in normal flow while pinned
+  boxes are absolute and out of it. Position is unaffected; which one paints on
+  top may not be.
 
 ## Proposed model
 
