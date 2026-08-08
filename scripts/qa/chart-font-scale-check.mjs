@@ -91,5 +91,28 @@ if (!m.buildChartConfigForTest) {
     ok(tickOf({ fontSize: 13.7 }) === 14, 'a fraction rounds to a whole pixel');
 }
 
+// --- every tag modifier reaches the PNG render --------------------------------
+// The bug this pins: prepareChartsClientSide used to hand renderChartPng a fresh
+// object naming five keys — style, title, width, height, scale. fontSize= was not
+// among them, so the artboard preview honoured the label size and the rendered PNG
+// silently ignored it. Reported from a real org: "shows on canvas but once rendered
+// seems to go back to hardcoded".
+//
+// Asserted against the SOURCE rather than by rendering, because the render needs a
+// browser canvas. A named-key rebuild at this call site is the failure mode, so that
+// is what this looks for.
+{
+    const call = /renderChartPng\(ChartCtor,\s*buckets,\s*\{([\s\S]*?)\}\s*\)/.exec(src);
+    ok(!!call, 'the prepareChartsClientSide -> renderChartPng call is findable');
+    if (call) {
+        const args = call[1];
+        ok(/\.\.\.opts/.test(args), 'it spreads the tag options rather than naming a subset');
+        ok(
+            !/width:\s*opts\.width/.test(args),
+            'no hand-listed key set — that is what dropped fontSize on the way to the PNG'
+        );
+    }
+}
+
 console.log(fail ? `\n${fail} FAILED` : '\nchart fonts OK');
 process.exit(fail ? 1 : 0);

@@ -558,12 +558,14 @@ export async function prepareChartsClientSide({ templateId, recordId, ChartCtor,
             }
 
             try {
+                // Spread the tag's own modifiers rather than naming five of them.
+                // Listing them by hand is how fontSize= reached the artboard preview and
+                // not the rendered PNG: the preview passes the chart config straight
+                // through, this call rebuilt a subset, and a modifier added later was
+                // silently dropped on the way to the only output that matters.
                 const png = renderChartPng(ChartCtor, buckets, {
-                    style: tag.style,
-                    title: opts.title,
-                    width: opts.width,
-                    height: opts.height,
-                    scale: opts.scale
+                    ...opts,
+                    style: tag.style
                 });
                 // eslint-disable-next-line no-await-in-loop
                 const cvId = await uploadChartImage({
