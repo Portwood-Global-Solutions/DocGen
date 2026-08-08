@@ -1378,7 +1378,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
      * images by URL, then assembles the final DOCX client-side (zero heap for ZIP).
      * @param templateId The DocGen_Template__c record ID
      * @param recordId The source record ID to merge data from
-     * @return Map with keys: allXmlParts, imageBase64Map, imageCvIdMap, title, templateType
+     * @return Map with keys: allXmlParts, imageBase64Map, imageCvIdMap, title, templateType, isMacroEnabled
      */
     public static Map<String, Object> generateDocumentParts(Id templateId, Id recordId) {
         // Use PDF output format to skip image blob loading during merge.
@@ -1418,6 +1418,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             if (path.startsWith(mr.mediaPath)) {
                 continue; // handled below in the media base64 loop
             }
+            // Known-binary parts (xl/vbaProject.bin, printerSettings*.bin) go straight
+            // to base64 — the detect-by-trying split below is probabilistic, and a
+            // binary whose bytes happen to decode as valid UTF-8 would survive
+            // .toString() and ship re-encoded (corrupt).
+            if (path.endsWithIgnoreCase('.bin')) {
+                imageBase64Map.put(path, EncodingUtil.base64Encode(entryBlob));
+                continue;
+            }
             try {
                 allXmlParts.put(path, entryBlob.toString());
             } catch (StringException stre) {
@@ -1456,13 +1464,19 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
             }
         }
 
+        // Macro-enabled Excel (.xlsm) is detected at generation time from data already
+        // in memory — no template schema change. The client derives the download
+        // extension (.xlsm) and MIME from this flag.
+        Boolean isMacroEnabled = isMacroEnabledWorkbook(mr);
+
         return new Map<String, Object>{
             'allXmlParts' => allXmlParts,
             'imageBase64Map' => imageBase64Map,
             'imageCvIdMap' => imageCvIdMap,
             'imageUrlMap' => imageUrlMap,
             'title' => mr.docTitle,
-            'templateType' => mr.templateType
+            'templateType' => mr.templateType,
+            'isMacroEnabled' => isMacroEnabled
         };
     }
 
@@ -3026,7 +3040,14 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
 
         // Native DOCX/PPTX path
         Blob resultBlob = assembleZip(mr);
-        return saveFile(resultBlob, mr.docTitle, attachmentRecordId, mr.outputFormat, mr.templateType);
+        return saveFile(
+            resultBlob,
+            mr.docTitle,
+            attachmentRecordId,
+            mr.outputFormat,
+            mr.templateType,
+            isMacroEnabledWorkbook(mr)
+        );
     }
 
     /**
@@ -8808,19 +8829,47 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     }
 
     /**
+     * True when the merged workbook is macro-enabled (.xlsm). Detected from data
+     * already in memory — the macroEnabled workbook content type is the primary
+     * signal, the vbaProject.bin part the belt-and-braces backup — so templates
+     * uploaded before this feature existed are recognized without a schema change.
+     */
+    private static Boolean isMacroEnabledWorkbook(MergeResult mr) {
+        if (mr == null) {
+            return false;
+        }
+        if (
+            mr.contentTypesXml != null &&
+            mr.contentTypesXml.contains('application/vnd.ms-excel.sheet.macroEnabled.main+xml')
+        ) {
+            return true;
+        }
+        return mr.passthroughEntries != null && mr.passthroughEntries.containsKey('xl/vbaProject.bin');
+    }
+
+    /**
      * Names the saved file after the TEMPLATE type, not the merge path. Excel was
      * missing from this map, so a server-side XLSX generation (Flow action, save-
      * to-record queueable, bulk) wrote a valid workbook under a .docx name and
      * every reader rejected it. The runner never showed this because the LWC
      * assembles Office files client-side and picks its own extension.
+     * Macro-enabled workbooks must save as .xlsm — Excel refuses to load a VBA
+     * project from a file named .xlsx.
      */
-    private static Id saveFile(Blob fileBlob, String title, Id recordId, String format, String type) {
+    private static Id saveFile(
+        Blob fileBlob,
+        String title,
+        Id recordId,
+        String format,
+        String type,
+        Boolean isMacroEnabled
+    ) {
         String baseName = title != null ? title : 'Generated_Document';
         String ext = '.docx';
         if (type == 'PowerPoint') {
             ext = '.pptx';
         } else if (type == 'Excel') {
-            ext = '.xlsx';
+            ext = isMacroEnabled == true ? '.xlsm' : '.xlsx';
         }
         return saveContentVersion(fileBlob, baseName, baseName + ext, recordId);
     }
@@ -9651,7 +9700,7 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
         }
 
         Blob resultBlob = assembleZip(mr);
-        return saveFile(resultBlob, mr.docTitle, recordId, outputFormat, templateType);
+        return saveFile(resultBlob, mr.docTitle, recordId, outputFormat, templateType, isMacroEnabledWorkbook(mr));
     }
 
     /**

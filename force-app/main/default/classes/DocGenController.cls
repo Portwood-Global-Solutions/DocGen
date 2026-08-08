@@ -565,7 +565,7 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
      * by URL, then assembles the final DOCX — no server-side ZIP, zero heap for large docs.
      * @param templateId The Portwood template record ID
      * @param recordId The source record ID
-     * @return Map containing allXmlParts, imageBase64Map, imageCvIdMap, title, and templateType
+     * @return Map containing allXmlParts, imageBase64Map, imageCvIdMap, title, templateType, and isMacroEnabled
      */
     @AuraEnabled
     public static Map<String, Object> generateDocumentParts(
