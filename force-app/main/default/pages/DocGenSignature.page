@@ -1440,6 +1440,15 @@
                             true,
                             capturedIp,
                             userAgent,
+                            // formFieldJson. This page has no signer form-field UI —
+                            // that lives only on DocGenSignaturePdf.page — so it always
+                            // sends an empty map. It is NOT optional: #161 added the
+                            // sixth parameter to the controller and updated the PDF
+                            // page's call sites but not these two, so Visualforce
+                            // Remoting rejected the call with "expected 6 parameters,
+                            // got 5" and guided signing hung forever on "Saving your
+                            // signature...". The signature was never persisted.
+                            '{}',
                             function (result, event) {
                                 if (!event.status) {
                                     showError('Save failed: ' + (event.message || 'Unknown error'));
@@ -1573,6 +1582,8 @@
                                 consentGiven,
                                 capturedIp,
                                 userAgent,
+                                // formFieldJson — see the note on the other call site.
+                                '{}',
                                 function (result, event) {
                                     if (!event.status) {
                                         showError('Save failed: ' + (event.message || 'Unknown error'));
