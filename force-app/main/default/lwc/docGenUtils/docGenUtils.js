@@ -10,21 +10,65 @@
  * @param {string} fileName   - The download filename (including extension)
  * @param {string} mimeType   - The MIME type (e.g. 'application/pdf')
  */
-export function downloadBase64(base64Data, fileName, mimeType) {
-    const binaryString = atob(base64Data);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+/**
+ * MIME types Lightning Web Security will accept through URL.createObjectURL.
+ *
+ * LWS sanitizes createObjectURL against an allowlist — PDF, images and plain
+ * text pass, everything else is rejected with
+ *
+ *   Lightning Web Security: Cannot 'createObjectURL' using an unsecure [object Blob]
+ *
+ * Office formats (.docx/.pptx/.xlsx), JSON and HTML are all off it. This is the
+ * single source of truth; docGenButton reads the same list so the two cannot
+ * drift apart.
+ */
+export function isBlobSafeMime(mimeType) {
+    if (!mimeType) {
+        return false;
     }
-    const blob = new Blob([bytes], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    return mimeType === 'application/pdf' || mimeType.startsWith('image/') || mimeType === 'text/plain';
+}
+
+/**
+ * Downloads base64 content as a file.
+ *
+ * Two routes, because one is not enough in an LWS-enabled org:
+ *
+ *   - allowlisted MIME -> Blob + createObjectURL. Preferred: no size ceiling,
+ *     and the browser streams it.
+ *   - anything else -> a data: URI, which never calls createObjectURL and so
+ *     cannot be refused. This is what makes .docx/.pptx/.xlsx downloads work
+ *     with LWS on; previously they threw and the user got nothing.
+ *
+ * The createObjectURL branch is also wrapped, so if the allowlist changes under
+ * us in a future release the download degrades to the data: URI instead of
+ * failing outright.
+ */
+export function downloadBase64(base64Data, fileName, mimeType) {
+    const anchor = document.createElement('a');
+    anchor.download = fileName;
+
+    let objectUrl = null;
+    if (isBlobSafeMime(mimeType)) {
+        try {
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            objectUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+        } catch (e) {
+            objectUrl = null; // fall through to the data: URI
+        }
+    }
+
+    anchor.href = objectUrl || 'data:' + (mimeType || 'application/octet-stream') + ';base64,' + base64Data;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+    }
 }
 
 /**

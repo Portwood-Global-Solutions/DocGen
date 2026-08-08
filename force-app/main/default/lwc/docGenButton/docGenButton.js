@@ -1,6 +1,7 @@
 import { LightningElement, api } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { CloseActionScreenEvent } from 'lightning/actions';
+import { isBlobSafeMime as isBlobSafeMimeUtil } from 'c/docGenUtils';
 import getButtons from '@salesforce/apex/DocGenButtonController.getButtons';
 import generate from '@salesforce/apex/DocGenButtonController.generate';
 
@@ -142,11 +143,10 @@ export default class DocGenButton extends LightningElement {
         }
     }
 
+    // Delegates to c/docGenUtils so this component and downloadBase64 cannot
+    // disagree about what LWS will accept.
     isBlobSafeMime(mimeType) {
-        if (!mimeType) {
-            return false;
-        }
-        return mimeType === 'application/pdf' || mimeType.startsWith('image/') || mimeType === 'text/plain';
+        return isBlobSafeMimeUtil(mimeType);
     }
 
     base64ToBlob(base64, mimeType) {

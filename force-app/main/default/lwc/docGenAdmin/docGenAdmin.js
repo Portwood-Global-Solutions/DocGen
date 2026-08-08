@@ -5032,10 +5032,10 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         try {
             this.showToast('Exporting', 'Preparing ' + row.Name + '...', 'info');
             const jsonStr = await exportTemplate({ templateId: row.Id });
-            const blob = new Blob([jsonStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
+            // application/json is not on the LWS createObjectURL allowlist, so a
+            // Blob URL is refused outright in an LWS-enabled org. A data: URI is.
             const a = document.createElement('a');
-            a.href = url;
+            a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(jsonStr);
             a.download = (row.Name || 'template').replace(/[^a-zA-Z0-9_-]/g, '_') + '.docgen.json';
             document.body.appendChild(a);
             a.click();
