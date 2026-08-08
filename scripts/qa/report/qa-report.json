@@ -1,138 +1,761 @@
 {
   "meta": {
     "org": "designer-ns",
-    "startedAt": "2026-08-08T10:27:53.858Z",
-    "durationMs": 652201,
-    "args": "--org designer-ns --suite apex-e2e,record-pages,template-integrity,ui-admin"
+    "startedAt": "2026-08-08T10:50:24.314Z",
+    "durationMs": 494227,
+    "args": "--org designer-ns --suite ui-admin,template-integrity,ui-designer"
   },
   "tally": {
-    "passed": 308,
-    "failed": 5,
-    "skipped": 9,
-    "evaluated": 313,
-    "total": 322,
-    "rate": 98.4,
+    "passed": 169,
+    "failed": 0,
+    "skipped": 7,
+    "evaluated": 169,
+    "total": 176,
+    "rate": 100,
     "bySeverity": {
-      "blocker": 5,
+      "blocker": 0,
       "major": 0,
       "minor": 0
     }
   },
   "suites": [
     {
-      "suite": "apex-e2e",
-      "area": "Apex end-to-end",
+      "suite": "ui-designer",
+      "area": "Designer UI",
       "checks": [
         {
-          "name": "Permissions: e2e-01-permissions.apex",
+          "name": "designer opens (toolbar + canvas present)",
           "ok": true,
-          "detail": "49 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "Template CRUD: e2e-02-template-crud.apex",
-          "ok": true,
-          "detail": "10 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "PDF generation: e2e-03-generate-pdf.apex",
-          "ok": true,
-          "detail": "14 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "Page setup: e2e-03b-page-setup.apex",
-          "ok": true,
-          "detail": "3 assertions",
+          "detail": "{\"bar\":true,\"pv\":true}",
           "severity": "major",
           "skipped": false
         },
         {
-          "name": "DOCX generation: e2e-04-generate-docx.apex",
+          "name": "toolbar: B",
           "ok": true,
-          "detail": "15 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "Bulk generation: e2e-05-generate-bulk.apex",
-          "ok": true,
-          "detail": "18 assertions",
+          "detail": "",
           "severity": "major",
           "skipped": false
         },
         {
-          "name": "Signatures: e2e-06-signatures.apex",
+          "name": "toolbar: I",
           "ok": true,
-          "detail": "25 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "Signature lifecycle: e2e-06b-signature-lifecycle.apex",
-          "ok": true,
-          "detail": "8 assertions",
+          "detail": "",
           "severity": "major",
           "skipped": false
         },
         {
-          "name": "Signature redemption: e2e-06c-signing.apex",
+          "name": "toolbar: U",
           "ok": true,
-          "detail": "13 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "PIN gate + decline: e2e-06d-pin-and-decline.apex",
-          "ok": true,
-          "detail": "12 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "Merge-tag syntax: e2e-07-syntax1.apex",
-          "ok": true,
-          "detail": "35 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "Merge-tag syntax: e2e-07-syntax2.apex",
-          "ok": true,
-          "detail": "31 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "Merge-tag syntax: e2e-07-syntax3.apex",
-          "ok": true,
-          "detail": "18 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "Merge-tag syntax: e2e-07-syntax4.apex",
-          "ok": true,
-          "detail": "20 assertions",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "Images: e2e-09-images.apex",
-          "ok": true,
-          "detail": "8 assertions",
+          "detail": "",
           "severity": "major",
           "skipped": false
         },
         {
-          "name": "Cleanup: e2e-08-cleanup.apex",
+          "name": "toolbar: S",
           "ok": true,
-          "detail": "13 assertions",
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "toolbar: x²",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "toolbar: x₂",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "toolbar: • List",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "toolbar: 1. List",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "toolbar: Left",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "toolbar: Center",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "toolbar: Right",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "toolbar: Clear",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "surface parity: bold works in header",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "surface parity: bold works in footer",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "zoom: body scales",
+          "ok": true,
+          "detail": "{\"pv\":816,\"hdr\":816} -> {\"pv\":1224,\"hdr\":1224}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "zoom: header scales with the sheet",
+          "ok": true,
+          "detail": "header must scale with the page",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table tools hidden outside a table",
+          "ok": true,
+          "detail": "24 table buttons visible",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table tools appear inside a table",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table tools work when shown (+ Row)",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table seams: render, no ghost targets, insert a column",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "block handle: appears and reorders blocks",
+          "ok": true,
+          "detail": "AAA,BBB -> BBB,AAA",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "insert-table grid: 4x3 picker inserts and fits the page",
+          "ok": true,
+          "detail": "cols=4 rows=4 overhang=false",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table never extends past the canvas after adding columns",
+          "ok": true,
+          "detail": "table 1008px vs content 1080px",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "cell selection highlight does not hang",
+          "ok": true,
+          "detail": "0 cells still marked selected",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "bubble: appears on text selection",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "bubble: position fixed (uncippable)",
+          "ok": true,
+          "detail": "must be fixed, got true",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "bubble: on screen with real size",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "bubble: no clipping ancestor",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "bubble: centre is hit-testable",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "bubble: does not cover the selection",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "bubble: bold actually formats",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "popover textColor: opens, unclipped, hit-testable, formats",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "popover highlight: opens, unclipped, hit-testable, formats",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "popover font: opens, unclipped, hit-testable, formats",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "header/footer are part of the sheet (width, alignment, flush)",
+          "ok": true,
+          "detail": "w 1224/1224 left 108/108 gaps 0,0",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table +/- shows a ghost of what it will add/remove",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "zoom: Fit width fills the column",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "focus mode hides the setup chrome",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "only one region highlighted after moving block->block->cell->cell",
+          "ok": true,
+          "detail": "1 regions painted",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "backtick opens the insert menu",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "no invisible chrome intercepts clicks",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "canvas click points reach the page",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "undo: table row insert restores the document exactly",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "undo: table row delete restores the document exactly",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "undo: block move restores block order",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "undo: redo re-applies the undone edit",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "undo: one step covers the header band too",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "undo: toolbar button enables once there is history",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "regions: Source view shows the header as a marked region",
+          "ok": true,
+          "detail": "header region + content must appear in the one source document",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "regions: Source view shows the body as a marked region",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "regions: Source view shows the footer as a marked region",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "regions: round-trip preserves the header",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "regions: round-trip preserves the body",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "regions: round-trip preserves the footer",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "regions: header does not leak into the body canvas",
+          "ok": true,
+          "detail": "chrome in the body would print twice",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "regions: no data-dg-region marker reaches the renderer",
+          "ok": true,
+          "detail": "same discipline as .dg-drop-marker / data-dg-paint",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "regions: a legacy template with no markers still loads and keeps its header",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "model: chrome is read from the live surfaces, not the last synced field",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "header tools appear in the toolbar when the caret is in a band",
+          "ok": true,
+          "detail": "page counters must be contextual, not in a separate panel",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "insert lands in the header band, not the bottom of the body",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "header tools hide again when the caret returns to the body",
+          "ok": true,
+          "detail": "page counters are meaningless in the body",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table seams survive the pointer leaving the table",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "header renders asset tags as images",
+          "ok": false,
+          "detail": "skip: no assets in this org",
           "severity": "minor",
+          "skipped": true
+        },
+        {
+          "name": "a tall header at zoom does not overlap the page",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "resizing a header image does not duplicate it",
+          "ok": false,
+          "detail": "skip: no assets",
+          "severity": "minor",
+          "skipped": true
+        },
+        {
+          "name": "Enter inserts a line break, staying in the paragraph",
+          "ok": true,
+          "detail": "{\"blocks\":1,\"brInP\":true}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Shift+Enter starts a new paragraph",
+          "ok": true,
+          "detail": "{\"blocks\":2,\"brInP\":true}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Enter in a list makes the next item, not a line break",
+          "ok": true,
+          "detail": "{\"items\":2,\"brs\":1}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "backtick opens the insert menu in the running header",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "right-click opens the context menu in the header",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table tools appear for a table in the header",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table tools operate on the header table",
+          "ok": true,
+          "detail": "1 -> 2",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table handles track the pointer over a header table",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Tab moves to the next cell",
+          "ok": true,
+          "detail": "landed in {\"cell\":\"a2\",\"rows\":2}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Shift+Tab moves back a cell",
+          "ok": true,
+          "detail": "landed in {\"cell\":\"a1\",\"rows\":2}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Tab in the last cell adds a row and lands in it",
+          "ok": true,
+          "detail": "rows 2 -> 3 (from cell b2)",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "toolbar creates no fixed-positioning containing block",
+          "ok": true,
+          "detail": "backdrop=none filter=none transform=none",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "every insert-table grid cell is clickable",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "table handles are visible and clickable over a header table",
+          "ok": true,
+          "detail": "8/8 interactive",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "the fill swatch applies a fill",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "fill applies to every cell in a multi-cell selection",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "the fill STAYS through hover, typing and caret moves",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "the fill survives into the serialized body",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "no editor chrome leaks into the serialized body",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Designer tab offers templates to open when none is loaded",
+          "ok": true,
+          "detail": "{\"list\":true,\"count\":7,\"first\":\"Verify — Designer (pill-dense)AccountDesign →\"}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "template list stays bounded regardless of org size",
+          "ok": true,
+          "detail": "7 rendered · 7 templates",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "template search filters the list",
+          "ok": true,
+          "detail": "ok",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "clearing the search restores the list",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "clicking a template on the Designer tab opens it for editing",
+          "ok": true,
+          "detail": "{\"pv\":true,\"bar\":true}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip drag: a draggable tag chip is present",
+          "ok": true,
+          "detail": "{Name}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip drag: a ghost follows the cursor mid-drag",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip drag: an insertion caret tracks the pointer",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip drag: a landing box outlines the receiving block",
+          "ok": true,
+          "detail": "{\"ghost\":true,\"caret\":true,\"zoneShown\":true,\"zoneHasArea\":true,\"zoneStripsAsChrome\":true}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip drag: the landing box is strippable as editor chrome",
+          "ok": true,
+          "detail": "must carry dg-drop-marker or it leaks into the saved template",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip drag: the snippet lands in the page",
+          "ok": true,
+          "detail": "{\"landed\":true,\"ghostLeft\":false,\"markerLeft\":false,\"zoneLeft\":false}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip drag: the ghost is cleaned up",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip drag: no drop marker is left behind",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip drag: no landing box is left behind",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "chip click (no drag) still inserts",
+          "ok": true,
+          "detail": "{\"landed\":true,\"ghostLeft\":false,\"markerLeft\":false,\"zoneLeft\":false}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "insert: caret lands after the tag, not before it",
+          "ok": true,
+          "detail": "{\"tagAt\":1283,\"typedAt\":1288,\"text\":\".dg-pv { background: #fff; max-width: 850px; margin: 0 auto; padding: 48px 56px;\"}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "insert: two inserts keep their order",
+          "ok": true,
+          "detail": "{\"first\":\"{Name}\",\"second\":\"{Industry}\",\"a\":1283,\"b\":1289}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "\"/\" reaches the canvas instead of global search",
+          "ok": true,
+          "detail": "{\"text\":\".dg-pv { background: #fff; max-width: 85\",\"focusInSearch\":false}",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "\"/\" does not leave focus in global search",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "no console errors during interaction",
+          "ok": true,
+          "detail": "",
+          "severity": "major",
           "skipped": false
         }
       ],
@@ -251,7 +874,7 @@
         {
           "name": "wizard Back returns to step 1 and keeps what was typed",
           "ok": true,
-          "detail": "onStep1=true name=\"QAUI-k8e3j7-File\" (expected \"QAUI-k8e3j7-File\")",
+          "detail": "onStep1=true name=\"QAUI-k981yn-File\" (expected \"QAUI-k981yn-File\")",
           "severity": "major",
           "skipped": false
         },
@@ -272,7 +895,7 @@
         {
           "name": "the wizard creates a template record end to end",
           "ok": true,
-          "detail": "a0BRK00000gtDmJ2AU, base object Account",
+          "detail": "a0BRK00000gu1qr2AA, base object Account",
           "severity": "blocker",
           "skipped": false
         },
@@ -285,22 +908,22 @@
         },
         {
           "name": "the canvas path creates the template record",
-          "ok": false,
-          "detail": "no record was created by \"Create & Open Canvas\"",
+          "ok": true,
+          "detail": "a0BRK00000gtvSF2AY, Canvas/PDF",
           "severity": "blocker",
           "skipped": false
         },
         {
           "name": "and it is typed Canvas, which is what decides which editor opens",
-          "ok": false,
-          "detail": "no record",
+          "ok": true,
+          "detail": "Type__c=Canvas",
           "severity": "blocker",
           "skipped": false
         },
         {
           "name": "the canvas path lands on the artboard",
-          "ok": false,
-          "detail": "the artboard (.dg-board) never appeared",
+          "ok": true,
+          "detail": "",
           "severity": "blocker",
           "skipped": false
         },
@@ -314,21 +937,21 @@
         {
           "name": "the template list renders rows",
           "ok": true,
-          "detail": "13 rows; count label \"13 templates\"",
+          "detail": "10 rows; count label \"10 templates\"",
           "severity": "blocker",
           "skipped": false
         },
         {
           "name": "search narrows the list to matching rows only",
           "ok": true,
-          "detail": "13 -> 1 rows for \"k8e3j7\"; every remaining row matches = true",
+          "detail": "10 -> 2 rows for \"k981yn\"; every remaining row matches = true",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "the row-count label reports the filtered subset",
           "ok": true,
-          "detail": "label reads \"1 of 13 templates\"",
+          "detail": "label reads \"2 of 10 templates\"",
           "severity": "minor",
           "skipped": false
         },
@@ -342,21 +965,21 @@
         {
           "name": "clearing the search restores the full list",
           "ok": true,
-          "detail": "13 rows (expected 13)",
+          "detail": "10 rows (expected 10)",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "clicking a column header re-orders the rows both ways",
           "ok": true,
-          "detail": "clicked=true; first row \"QAUI-k8e3j7-File Word PDF Ac\" -> asc \"QA Fixtures Anchor Demo Canv\" -> desc \"Verify — Designer (pill-dens\"",
+          "detail": "clicked=true; first row \"QAUI-k981yn-Starter Canvas P\" -> asc \"QA Fixtures Anchor Demo Canv\" -> desc \"Verify — Designer (pill-dens\"",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "Refresh reloads the list without emptying it",
           "ok": true,
-          "detail": "hit-test=ok; 13 rows after refresh (expected 13)",
+          "detail": "hit-test=ok; 10 rows after refresh (expected 10)",
           "severity": "major",
           "skipped": false
         },
@@ -376,36 +999,36 @@
         },
         {
           "name": "row action View opens the template on its Copy-Paste Tags tab",
-          "ok": false,
-          "detail": "could not drive the row menu: row \"QAUI-k8e3j7-Starter\": no row",
+          "ok": true,
+          "detail": "modalOpen=true, selected tabs: Your Templates, Copy-Paste Tags",
           "severity": "major",
-          "skipped": true
+          "skipped": false
         },
         {
           "name": "row action Export downloads a valid .docgen.json bundle",
-          "ok": false,
-          "detail": "no download event fired: row \"QAUI-k8e3j7-Starter\": no row",
+          "ok": true,
+          "detail": "QAUI-k981yn-Starter.docgen.json — export version 1, template \"QAUI-k981yn-Starter\"",
           "severity": "major",
-          "skipped": true
+          "skipped": false
         },
         {
           "name": "Import Template restores an exported bundle as a new template",
-          "ok": false,
-          "detail": "nothing was exported to import",
+          "ok": true,
+          "detail": "\"QAUI-k981yn-Imported\" exists after import",
           "severity": "major",
-          "skipped": true
+          "skipped": false
         },
         {
           "name": "row action Clone creates a copy and opens it for editing",
           "ok": true,
-          "detail": "created \"QAUI-k8e3j7-File (Copy)\" (a0BRK00000gu17h2AA); the edit modal opened = true",
+          "detail": "created \"QAUI-k981yn-File (Copy)\" (a0BRK00000gu1vh2AA); the edit modal opened = true",
           "severity": "major",
           "skipped": false
         },
         {
           "name": "row action Delete removes the template",
           "ok": true,
-          "detail": "\"QAUI-k8e3j7-File (Copy)\" is gone from the org",
+          "detail": "\"QAUI-k981yn-File (Copy)\" is gone from the org",
           "severity": "major",
           "skipped": false
         },
@@ -417,37 +1040,142 @@
           "skipped": false
         },
         {
-          "name": "row action Design opens that template in the designer",
-          "ok": false,
-          "detail": "could not drive the row menu: row \"QAUI-k8e3j7-Starter\": no row",
+          "name": "row action Design opens that template in an editor",
+          "ok": true,
+          "detail": "opened the canvas artboard",
           "severity": "major",
-          "skipped": true
+          "skipped": false
         },
         {
           "name": "row action Edit opens the edit modal",
-          "ok": false,
-          "detail": "the modal never opened, so nothing inside it could be tested",
+          "ok": true,
+          "detail": "",
           "severity": "blocker",
           "skipped": false
         },
         {
-          "name": "the edit modal tabs render their panels",
-          "ok": false,
-          "detail": "the edit modal never opened",
+          "name": "the modal Save button is reachable (nothing covers the footer)",
+          "ok": true,
+          "detail": "",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "edit modal tab \"Settings\" renders its panel",
+          "ok": true,
+          "detail": "selected=Settings, controls=30, expected content present=true, text=1599 chars",
           "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "edit modal tab \"Header / Footer\" renders its panel",
+          "ok": false,
+          "detail": "not offered for an HTML/PDF template — this tab is type-gated and needs a template of the gating type",
+          "severity": "minor",
           "skipped": true
         },
         {
-          "name": "Save as New Version persists the edited fields",
-          "ok": false,
-          "detail": "the edit modal never opened",
+          "name": "edit modal tab \"Watermark\" renders its panel",
+          "ok": true,
+          "detail": "selected=Watermark / Background, controls=2, expected content present=true, text=569 chars",
           "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "edit modal tab \"Query Configuration\" renders its panel",
+          "ok": true,
+          "detail": "selected=Query Configuration, controls=7, expected content present=true, text=1265 chars",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "edit modal tab \"Signer Inputs\" renders its panel",
+          "ok": true,
+          "detail": "selected=Signer Inputs, controls=3, expected content present=true, text=485 chars",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "edit modal tab \"Copy-Paste Tags\" renders its panel",
+          "ok": true,
+          "detail": "selected=Copy-Paste Tags, controls=80, expected content present=true, text=1230 chars",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "edit modal tab \"Fillable Fields\" renders its panel",
+          "ok": false,
+          "detail": "not offered for an HTML/PDF template — this tab is type-gated and needs a template of the gating type",
+          "severity": "minor",
           "skipped": true
+        },
+        {
+          "name": "edit modal tab \"Document & History\" renders its panel",
+          "ok": true,
+          "detail": "selected=Document & History, controls=2, expected content present=true, text=561 chars",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "a tag chip copies its merge tag to the clipboard",
+          "ok": true,
+          "detail": "clicked \"{Name}\"; the clipboard now holds \"{Name}\"",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Signer Inputs: \"Add Field\" adds a field row",
+          "ok": true,
+          "detail": "signer field rows 0 -> 1",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Signer Inputs: a field row is editable",
+          "ok": true,
+          "detail": "label was \"New Field\"",
+          "severity": "minor",
+          "skipped": false
+        },
+        {
+          "name": "Signer Inputs: removing a field takes it off the list",
+          "ok": true,
+          "detail": "signer field rows 1 -> 0",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "edit modal inputs accept real typing",
+          "ok": true,
+          "detail": "description=\"edited by ui-admin k981yn\" category=\"QAk981yn\"",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "the Active toggle flips when clicked",
+          "ok": true,
+          "detail": "checked true -> false",
+          "severity": "major",
+          "skipped": false
+        },
+        {
+          "name": "Save as New Version persists the edited fields",
+          "ok": true,
+          "detail": "stored description=\"edited by ui-admin k981yn\", category=\"QAk981yn\" (expected \"edited by ui-admin k981yn\" / \"QAk981yn\")",
+          "severity": "blocker",
+          "skipped": false
+        },
+        {
+          "name": "Save as New Version really creates a new version record",
+          "ok": true,
+          "detail": "template versions 0 -> 1",
+          "severity": "major",
+          "skipped": false
         },
         {
           "name": "closing the modal with unsaved edits warns or preserves them",
           "ok": false,
-          "detail": "the edit modal never opened",
+          "detail": "could not re-open the modal: row \"QAUI-k981yn-Starter\": the menu never offered a visible \"Edit\" item",
           "severity": "major",
           "skipped": true
         },
@@ -510,1765 +1238,7 @@
         {
           "name": "the suite cleans up the templates it created",
           "ok": true,
-          "detail": "1 QAUI- templates deleted",
-          "severity": "minor",
-          "skipped": false
-        }
-      ],
-      "skipped": false,
-      "reason": ""
-    },
-    {
-      "suite": "record-pages",
-      "area": "Record pages",
-      "checks": [
-        {
-          "name": "DocGen_Template__c record page renders",
-          "ok": true,
-          "detail": "57 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Template Name\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.API_Name__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Type__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Output_Format__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Is_Active__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Is_Default__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Category__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Base_Object_API__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Document_Title_Format__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Test_Record_Id__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Sort_Order__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Lock_Output_Format__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Specific_Record_Ids__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Required_Permission_Sets__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Signer_Verification__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Prefill_Signer_Email__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Page_Size__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Page_Orientation__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Page_Margins__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Custom_Margins__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Default_Email_Message__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Record_Filter__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Description__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Query_Config__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c.Draft_Body__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "all reachable; 3 field(s) intentionally edited elsewhere",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c fields edited outside the record page are accounted for",
-          "ok": true,
-          "detail": "Footer_Html__c (edited in the Designer footer band), Form_Fields_Config__c (edited on the Signer Inputs tab), Header_Html__c (edited in the Designer header band)",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c related lists load without error",
-          "ok": true,
-          "detail": "7 related list container(s) rendered",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c shows its \"Versions\" related list",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c shows its \"Files\" related list",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c related lists are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c record page renders",
-          "ok": true,
-          "detail": "36 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Version Name\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Template__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Is_Active__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Type__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Category__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Base_Object_API__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Content_Version_Id__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Pre_Decomposition_Status__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Description__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Query_Config__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Output_Format__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Document_Title_Format__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Page_Size__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Page_Orientation__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Page_Margins__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c.Custom_Margins__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "all reachable; 3 field(s) intentionally edited elsewhere",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c fields edited outside the record page are accounted for",
-          "ok": true,
-          "detail": "Footer_Html__c (edited in the Designer footer band), Header_Html__c (edited in the Designer header band), Watermark_Image_CV_Id__c (set when a watermark is uploaded)",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c related lists load without error",
-          "ok": true,
-          "detail": "6 related list container(s) rendered",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c shows its \"Files\" related list",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c related lists are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Template_Version__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c record page renders",
-          "ok": true,
-          "detail": "30 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Job Number\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Template__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Status__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Label__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Total_Records__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Success_Count__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Error_Count__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Merge_Only__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Query_Condition__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Error_Log__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Merged_PDF_CV__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Parent_Record_Id__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c.Sort_Order__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "all reachable; 2 field(s) intentionally edited elsewhere",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c fields edited outside the record page are accounted for",
-          "ok": true,
-          "detail": "Data_Cache_CV__c (internal cache pointer written by the batch), Giant_Query_Config__c (internal config written by the giant-query path)",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c related lists load without error",
-          "ok": true,
-          "detail": "6 related list container(s) rendered",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c shows its \"Files\" related list",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c related lists are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Job__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c record page renders",
-          "ok": true,
-          "detail": "15 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Query Label\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c.DocGen_Template__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c.Description__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c.Query_Condition__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c related lists load without error",
-          "ok": true,
-          "detail": "6 related list container(s) rendered",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c shows its \"Files\" related list",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c related lists are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Saved_Query__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c record page renders",
-          "ok": true,
-          "detail": "32 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Error Number\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Severity__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Context__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Operation__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Exception_Type__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Message__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Stack_Trace__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Additional_Info__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Record_Id__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Template_Id__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Job_Id__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.User_Id__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.Flow_Interview_Guid__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Error_Log__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c record page renders",
-          "ok": true,
-          "detail": "15 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Asset Name\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c.Asset_Key__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c.Asset_Type__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c.Category__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c.Is_Active__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Asset__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c record page renders",
-          "ok": true,
-          "detail": "32 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Email Template Name\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Type__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Subject__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Is_Active__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Description__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Layout_Mode__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Body_Html__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Body_Plain__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Logo_Url__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Logo_Url_Extended__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Logo_Asset_Key__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Logo_Height__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Brand_Color__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.Footer_Text__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Email_Template__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c record page renders",
-          "ok": true,
-          "detail": "34 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Request Number\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Status__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Template__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Template_Ids__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Document_Title_Format__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Related_Record_Id__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Source_Document_Id__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Signing_Order__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Expires_At__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Email_Status__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Prefill_Signer_Email__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Require_Email_Verification__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Signer_Name__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.Signer_Email__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "all reachable; 4 field(s) intentionally edited elsewhere",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c fields edited outside the record page are accounted for",
-          "ok": true,
-          "detail": "Frozen_Document__c (snapshot blob written by the signing engine), Render_Data_Snapshot__c (snapshot blob written by the signing engine), Signature_Data__c (written by the signing engine), Snapshot_Taken_At__c (stamped by the signing engine)",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c related lists load without error",
-          "ok": true,
-          "detail": "8 related list container(s) rendered",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c shows its \"Signers\" related list",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c shows its \"Audits\" related list",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c shows its \"Files\" related list",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c related lists are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Request__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c record page renders",
-          "ok": true,
-          "detail": "38 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Signer Number\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Signature_Request__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Signer_Name__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Signer_Email__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Status__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Role_Name__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Sort_Order__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Contact__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Signature_Data__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Consent_Captured__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Decline_Reason__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.PIN_Verified_At__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.PIN_Attempts__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.PIN_Expires_At__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Reminders_Sent__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.Reminder_Sent_At__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "all reachable; 1 field(s) intentionally edited elsewhere",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c fields edited outside the record page are accounted for",
-          "ok": true,
-          "detail": "Field_Data_Json__c (written by the signing engine)",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c related lists load without error",
-          "ok": true,
-          "detail": "6 related list container(s) rendered",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c shows its \"Files\" related list",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c related lists are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "",
-          "severity": "minor",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signer__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c record page renders",
-          "ok": true,
-          "detail": "31 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Placement Number\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Signer__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Signature_Request__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Placement_Type__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Sequence_Order__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Status__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Signed_Value__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Signed_At__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Document_Index__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Section_Context__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Tag_Text__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c.Render_Inline__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Placement__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c record page renders",
-          "ok": true,
-          "detail": "34 field slots rendered",
-          "severity": "blocker",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c detail fields are genuinely visible (hit test)",
-          "ok": true,
-          "detail": "first field \"Audit Number\" is hittable",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Name renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Signature_Request__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Signer__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Contact__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Signer_Name__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Signer_Email__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Signed_Date__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Consent_Captured__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Verification_Method__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.PIN_Verified_At__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Document_Hash_SHA256__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.IP_Address__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.User_Agent__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.Error_Message__c renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.CreatedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c.LastModifiedById renders on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c exposes every one of its fields somewhere on the record page",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c page components report no error state",
-          "ok": true,
-          "detail": "no custom component is placed on this record page",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "DocGen_Signature_Audit__c record page logs no console errors",
-          "ok": true,
-          "detail": "",
-          "severity": "major",
-          "skipped": false
-        },
-        {
-          "name": "every seeded QA record is deleted again",
-          "ok": true,
-          "detail": "11 record(s) removed",
+          "detail": "3 QAUI- templates deleted",
           "severity": "minor",
           "skipped": false
         }
@@ -2282,8 +1252,8 @@
       "checks": [
         {
           "name": "every HTML template returns a body to the visual Designer",
-          "ok": false,
-          "detail": "3 of 6 return NOTHING — those open to an empty canvas however well they generate. The Designer reads a ContentVersion titled docgen_html_body_<templateId>, not the version's Content_Version_Id__c: Chart Scale Demo (client-side) &#124; Flow Spike &#124; Flow Spike 3",
+          "ok": true,
+          "detail": "all 2 HTML templates return a non-empty body from getHtmlTemplateBody",
           "severity": "blocker",
           "skipped": false
         },

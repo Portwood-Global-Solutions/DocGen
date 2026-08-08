@@ -1437,17 +1437,22 @@ export async function run({ org, headed }) {
             await clickByText(page, '[role="tab"]', 'Your Templates');
             await wait(3000);
             await rowAction(NAME_STARTER, 'Design');
+            // NAME_STARTER is a Canvas template now, and Canvas opens the ARTBOARD, not
+            // the flow designer — different components, different markup. Accept either,
+            // so this keeps working whichever type the fixture is.
             const up = await until(
                 page,
-                `return __dgFind('.dg-pv') && __dgFind('.dg-format-bar') ? { ok: 1 } : null;`,
+                `const flow = __dgFind('.dg-pv') && __dgFind('.dg-format-bar');
+                 const canvas = __dgFind('.dg-board') && __dgFind('.dg-rail');
+                 return flow ? { ok: 1, which: 'flow designer' } : canvas ? { ok: 1, which: 'canvas artboard' } : null;`,
                 60000,
                 2000
             );
             add(
                 check(
-                    'row action Design opens that template in the designer',
+                    'row action Design opens that template in an editor',
                     !!up,
-                    up ? '' : 'the designer canvas never appeared',
+                    up ? `opened the ${up.which}` : 'neither the flow designer nor the canvas artboard appeared',
                     SEVERITY.MAJOR
                 )
             );
