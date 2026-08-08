@@ -657,15 +657,47 @@ export const DEFAULT_CHART = {
  * the chart is rendered at — no aspect-ratio drift between the artboard and the
  * finished document.
  */
+/** Cross-tab styles cannot render from a single dimension. */
+export const CROSS_TAB_CHART_STYLES = ['pivot', 'clustered', 'stacked'];
+
+/**
+ * What still has to be filled in before this chart can render, or null when it
+ * is ready.
+ *
+ * One validator, used by both the serializer and the designer, so the artboard
+ * can never disagree with what gets written to the template. The rules mirror
+ * DocGenChartTagExpander exactly — it throws for a cross-tab style missing
+ * groupBy, and again for one missing colSort, and those throws surface as red
+ * error blocks in the finished document. Catching them here turns a generation
+ * failure into a hint next to the box.
+ */
+export function chartConfigIssue(box) {
+    const c = { ...DEFAULT_CHART, ...((box && box.chart) || {}) };
+    if (!String(c.relationship || '').trim() || !String(c.field || '').trim()) {
+        return 'Pick a related list and a field to group by.';
+    }
+    const style = String(c.style || 'bar').trim() || 'bar';
+    if (CROSS_TAB_CHART_STYLES.indexOf(style) !== -1) {
+        if (!String(c.groupBy || '').trim()) {
+            return `A ${style} chart also needs a field to split the columns by.`;
+        }
+        if (!String(c.colSort || '').trim()) {
+            return `A ${style} chart needs the column order listed, e.g. New,Existing.`;
+        }
+    }
+    return null;
+}
+
 function chartToHtml(box) {
     const c = { ...DEFAULT_CHART, ...(box.chart || {}) };
-    const relationship = String(c.relationship || '').trim();
-    const field = String(c.field || '').trim();
-    if (!relationship || !field) {
-        // Unconfigured element: render nothing rather than emit a malformed tag
-        // that would surface as a red error block in the generated document.
+    // Emit nothing at all rather than a tag the engine is guaranteed to reject.
+    // A half-configured chart should read as "not finished yet" on the canvas,
+    // not as a red error block in front of the customer.
+    if (chartConfigIssue(box)) {
         return '';
     }
+    const relationship = String(c.relationship || '').trim();
+    const field = String(c.field || '').trim();
 
     const style = String(c.style || 'bar').trim() || 'bar';
     const opts = [];

@@ -991,3 +991,15 @@ textarea.dg-cbox-text {
     background: repeating-linear-gradient(45deg, #f7f9fc, #f7f9fc 8px, #eef2f7 8px, #eef2f7 16px);
     border: 1px dashed #b3c0d1;
 }
+
+/* A chart that will not render yet. Amber rather than red: nothing is broken,
+   the author just has not finished the element. */
+.dg-panel-warn {
+    margin: 0.5rem 0 0 0;
+    padding: 0.4rem 0.55rem;
+    border-left: 3px solid #d9822b;
+    background: #fdf3e7;
+    color: #6b4415;
+    font-size: 0.75rem;
+    line-height: 1.35;
+}

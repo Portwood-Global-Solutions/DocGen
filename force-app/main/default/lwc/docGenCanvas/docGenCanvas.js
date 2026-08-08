@@ -49,6 +49,7 @@ import {
     codeBoxSize,
     CODE_TYPES,
     CHART_STYLES,
+    chartConfigIssue,
     newSignatureBox,
     newChartBox,
     signatureBoxSize,
@@ -2498,6 +2499,11 @@ export default class DocGenCanvas extends LightningElement {
      * those inputs or an author will fill them in and wonder why nothing
      * changed.
      */
+    /** Surfaced in the inspector so the reason a chart is blank is visible. */
+    get selChartIssue() {
+        return this.selectedIsChart ? chartConfigIssue(this.selectedBox) : null;
+    }
+
     get selChartIsCrossTab() {
         return ['stacked', 'clustered', 'pivot'].indexOf(this.selChart.style || 'bar') !== -1;
     }
@@ -2657,13 +2663,13 @@ export default class DocGenCanvas extends LightningElement {
             // A <canvas> placeholder only. Chart.js paints into it after the DOM
             // settles (paintChartPreviews) — drawing here would be wiped by the
             // very next innerHTML comparison in the painter loop.
-            const c = model.chart || {};
-            if (!c.relationship || !c.field) {
-                return (
-                    '<div class="dg-chart-empty">' +
-                    '<strong>Chart</strong><br/>Pick a related list and a field to group by.' +
-                    '</div>'
-                );
+            // Same validator the serializer uses, so what the board says is
+            // missing is exactly what stops the tag being written.
+            const issue = chartConfigIssue(model);
+            if (issue) {
+                // `issue` is a controlled string — the only interpolation is a
+                // style name from the fixed CHART_STYLES list.
+                return '<div class="dg-chart-empty"><strong>Chart</strong><br/>' + issue + '</div>';
             }
             return '<canvas class="dg-chart-canvas" data-chart-for="' + model.id + '"></canvas>';
         }

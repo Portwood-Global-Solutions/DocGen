@@ -875,7 +875,7 @@
                     </p>
 
                     <template lwc:if={selChartIsCrossTab}>
-                        <label class="dg-panel-label">Split columns by</label>
+                        <label class="dg-panel-label">Split columns by (required)</label>
                         <input
                             class="dg-panel-input"
                             type="text"
@@ -884,7 +884,7 @@
                             data-key="groupBy"
                             onchange={handleChartChange}
                         />
-                        <label class="dg-panel-label">Column order</label>
+                        <label class="dg-panel-label">Column order (required)</label>
                         <input
                             class="dg-panel-input"
                             type="text"
@@ -894,9 +894,13 @@
                             onchange={handleChartChange}
                         />
                         <p class="dg-panel-note">
-                            Cross-tab styles group server-side, so the grouped field must be groupable — a long text
-                            area will not work.
+                            Both are required: the column order is what generates the headers. Cross-tab styles also
+                            group server-side, so both fields must be groupable — a long text area will not work.
                         </p>
+                    </template>
+
+                    <template lwc:if={selChartIssue}>
+                        <p class="dg-panel-warn">{selChartIssue}</p>
                     </template>
 
                     <p class="dg-panel-note">

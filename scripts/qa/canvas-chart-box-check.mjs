@@ -60,5 +60,33 @@ empty.artboards[0].boxes.push(m.newChartBox(1, 1, 4, 2));
 const emptyHtml = m.serialize(empty, m.pageGeometry('Letter', 'Portrait'));
 ok(!emptyHtml.includes('{Chart:'), 'unconfigured chart emits no tag');
 
+// Cross-tab styles: the expander THROWS for a missing groupBy, and again for a
+// missing colSort, and those throws land as red error blocks in the finished
+// document. The canvas must refuse to emit such a tag at all.
+const xtab = m.blankDocument();
+const xb = m.newChartBox(1, 1, 5, 3);
+xb.chart.relationship = 'Contacts';
+xb.chart.field = 'Description';
+xb.chart.style = 'pivot';
+xtab.artboards[0].boxes.push(xb);
+ok(
+    m.serialize(xtab, m.pageGeometry('Letter', 'Portrait')).indexOf('{Chart:') === -1,
+    'a pivot without groupBy emits no tag'
+);
+ok(/split the columns by/.test(m.chartConfigIssue(xb) || ''), 'and says a split field is missing');
+
+xb.chart.groupBy = 'Department';
+ok(
+    m.serialize(xtab, m.pageGeometry('Letter', 'Portrait')).indexOf('{Chart:') === -1,
+    'a pivot with groupBy but no colSort still emits no tag'
+);
+ok(/column order/.test(m.chartConfigIssue(xb) || ''), 'and says the column order is missing');
+
+xb.chart.colSort = 'Engineering,Sales';
+const xhtml = m.serialize(xtab, m.pageGeometry('Letter', 'Portrait'));
+ok(xhtml.includes('groupBy=Department'), 'a complete cross-tab emits groupBy');
+ok(xhtml.includes('colSort=Engineering,Sales'), 'a complete cross-tab emits colSort');
+ok(m.chartConfigIssue(xb) === null, 'and reports no outstanding issue');
+
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');
 process.exit(failures ? 1 : 0);
