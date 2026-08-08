@@ -3164,7 +3164,10 @@ export default class DocGenCanvas extends LightningElement {
             if (res && res.versionId) {
                 this.activeVersionId = res.versionId;
             }
-            this.dispatchEvent(new CustomEvent('saved', { detail: { html } }));
+            // #272 — the linter's warnings ride the save response; hand them to
+            // the host so its fidelity report can show them. Extra detail keys
+            // are additive — existing 'saved' listeners only read detail.html.
+            this.dispatchEvent(new CustomEvent('saved', { detail: { html, warnings: (res && res.warnings) || [] } }));
         } catch (e) {
             // Surfaced as a banner, not a status line: a save that silently did not
             // happen is the single worst thing this editor can do.

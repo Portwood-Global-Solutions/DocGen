@@ -3446,10 +3446,49 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
             LIMIT 1
         ];
 
+        // Fidelity report (issue #272): lint the body that was just saved and hand
+        // the findings back with the save result. Warnings only — the save has
+        // already succeeded, and a lint failure must never change that.
+        List<DocGenAiHtmlValidator.Finding> warnings = new List<DocGenAiHtmlValidator.Finding>();
+        try {
+            DocGenFlsGuard.assertAccessible(
+                DocGen_Template__c.sObjectType,
+                new Set<String>{
+                    'Base_Object_API__c',
+                    'Query_Config__c',
+                    'Page_Size__c',
+                    'Page_Orientation__c',
+                    'Page_Margins__c',
+                    'Custom_Margins__c'
+                }
+            );
+            /* code-analyzer-suppress ApexFlsViolation */
+            List<DocGen_Template__c> lintTpls = [
+                SELECT
+                    Base_Object_API__c,
+                    Query_Config__c,
+                    Page_Size__c,
+                    Page_Orientation__c,
+                    Page_Margins__c,
+                    Custom_Margins__c
+                FROM DocGen_Template__c
+                WHERE Id = :templateId
+                WITH SYSTEM_MODE
+                LIMIT 1
+            ];
+            if (!lintTpls.isEmpty()) {
+                warnings = DocGenTemplateLinter.lint(htmlContent, lintTpls[0]);
+            }
+        } catch (Exception lintErr) {
+            String noop = lintErr.getMessage(); // NOPMD — lint is advisory; it must never fail a save
+        }
+
         return new Map<String, Object>{
             'contentVersionId' => cv.Id,
             'contentDocumentId' => reload.ContentDocumentId,
-            'fileName' => fileName
+            'fileName' => fileName,
+            'warnings' => warnings,
+            'warningCount' => warnings.size()
         };
     }
 

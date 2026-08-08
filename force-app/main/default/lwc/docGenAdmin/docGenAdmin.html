@@ -1704,6 +1704,7 @@
                             sample-record-id={editTemplateTestRecordId}
                             onedittemplate={handleEditTemplateFromDesigner}
                             onqueryupdated={handleCanvasQueryUpdated}
+                            onsaved={handleCanvasSaved}
                             onback={handleCanvasBack}
                         ></c-doc-gen-canvas>
                     </template>
@@ -2295,6 +2296,7 @@
                                         template-id={editTemplateId}
                                         page-size={editTemplatePageSize}
                                         orientation={editTemplatePageOrientation}
+                                        onsaved={handleCanvasSaved}
                                         onback={handleCanvasBack}
                                     ></c-doc-gen-canvas>
                                 </template>
@@ -5271,6 +5273,37 @@
                                                     variant="inverse"
                                                 ></lightning-icon>
                                                 <strong>Ready to Save:</strong> {uploadedFileName}
+                                            </div>
+                                        </template>
+
+                                        <!-- #272 fidelity report. Warnings, never blockers: the body
+                                             was already stored when these were produced, so the heading
+                                             says what will happen, not what failed. -->
+                                        <template if:true={hasLintFindings}>
+                                            <div class="slds-box slds-var-m-top_medium">
+                                                <h3 class="slds-text-heading_small slds-var-m-bottom_x-small">
+                                                    Template warnings — this will still render
+                                                </h3>
+                                                <p
+                                                    class="slds-text-body_small slds-text-color_weak slds-var-m-bottom_small"
+                                                >
+                                                    Nothing was blocked and your file was saved as-is. The PDF engine is
+                                                    CSS 2.1, so at render time it handles the items below differently
+                                                    than a browser would — here's what changes.
+                                                </p>
+                                                <template for:each={lintFindings} for:item="f">
+                                                    <div key={f.key} class="slds-var-m-bottom_x-small">
+                                                        <lightning-badge label={f.badge} class={f.badgeClass}>
+                                                        </lightning-badge>
+                                                        <strong class="slds-var-m-left_x-small">{f.rule}</strong>
+                                                        <span class="slds-text-body_small slds-text-color_weak">
+                                                            &times;{f.occurrences}</span
+                                                        >
+                                                        <p class="slds-text-body_small slds-var-m-left_medium">
+                                                            {f.detail}
+                                                        </p>
+                                                    </div>
+                                                </template>
                                             </div>
                                         </template>
 
