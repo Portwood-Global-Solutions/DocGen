@@ -380,19 +380,26 @@ export default class DocGenCanvas extends LightningElement {
         return k.charAt(0).toUpperCase() + k.slice(1);
     }
 
-    /** A label you can recognise the box by, not its id. */
+    /**
+     * A label you can recognise the box by, not its id.
+     *
+     * Delegates to boxLabel so this list, the properties heading, the on-canvas badge
+     * and the Follows picker all say the same thing. This used to be a second
+     * implementation of the same idea, and it had already drifted: it did not know
+     * about author-given names, so naming a block renamed it everywhere EXCEPT the one
+     * list whose whole job is telling you which block is which.
+     *
+     * The two things it did better are kept below — an image and a signature are worth
+     * identifying by what they point at, which matters more in a list of every element
+     * than it does in an anchor picker.
+     */
     layerLabel(b) {
-        if (b.kind === 'table') {
-            const rel = (b.table || {}).relationship;
-            return rel ? rel + ' table' : 'Table';
+        if (b.name && b.name.trim()) {
+            return boxLabel(b);
         }
         if (b.kind === 'image') {
             const img = b.image || {};
             return img.assetKey || img.tag || 'No image chosen';
-        }
-        if (b.kind === 'shape') {
-            const t = (b.shape || {}).type || 'rect';
-            return t === 'rect' ? 'Rectangle' : t === 'hline' ? 'Horizontal line' : 'Vertical line';
         }
         if (b.kind === 'code') {
             const c = b.code || {};
@@ -402,10 +409,10 @@ export default class DocGenCanvas extends LightningElement {
             const sig = b.signature || {};
             return (sig.type || 'Full') + ' · ' + (sig.role || 'Signer');
         }
-        // Strip the markup so the label is the words the author typed, not their tags.
-        const raw = (b.html != null ? b.html : b.text || '').replace(/<[^>]*>/g, ' ');
-        const text = raw.replace(/\s+/g, ' ').trim();
-        return text ? (text.length > 34 ? text.slice(0, 34) + '…' : text) : 'Empty text box';
+        const derived = boxLabel(b);
+        // boxLabel names an empty text box by its kind, which reads oddly in a list of
+        // every element — here "Empty text box" is the more useful answer.
+        return derived === 'Text' ? 'Empty text box' : derived;
     }
 
     handleLayerClick(event) {

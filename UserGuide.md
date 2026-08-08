@@ -383,7 +383,9 @@ The Chart block renders a live preview on the artboard using Chart.js and produc
 
 #### Naming a block
 
-Every block has an optional **Name** at the top of the properties panel. It is worth setting once a page has more than a few blocks: the name is what the panel heading, the on-canvas badge, and every other block's **Follows** picker call it. Without one, Portwood derives a label from the content — a table becomes "Contacts table", a paragraph leads with its own first words — which works until two blocks start with the same text.
+Every block has an optional **Name** at the top of the properties panel. It is worth setting once a page has more than a few blocks: the name is what the panel heading, the on-canvas badge, the **Elements** list and every other block's **Follows** picker call it. Without one, Portwood derives a label from the content — a table becomes "Contacts table", a paragraph leads with its own first words — which works until two blocks start with the same text.
+
+The **Elements** tool in the rail lists every block on the document, front to back, and selects one on click. It is how you reach a block that is sitting underneath another — a full-bleed background makes everything below it unclickable on the artboard, and the list is the way back.
 
 #### Element linking — blocks that travel together
 
