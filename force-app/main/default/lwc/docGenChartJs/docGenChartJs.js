@@ -187,62 +187,46 @@ function valueLabelPlugin(style, buckets, fontPx) {
     };
 }
 
-/**
- * The canvas width these font sizes were chosen against.
- *
- * Everything below is expressed as a size at this width and then scaled, so a chart
- * rendered wider gets proportionally larger text rather than the same text spread
- * thinner. See fontScaleFor.
- */
-const FONT_BASELINE_WIDTH = 540;
-
-/** Tick, legend and value-label size at the baseline width. */
+/** Tick, legend and value-label size, in canvas pixels. */
 const BASE_TICK_PX = 12;
 
-/** Title size at the baseline width. */
+/** Title size, in canvas pixels. */
 const BASE_TITLE_PX = 16;
-
-/**
- * How much to multiply the base font sizes by for this canvas.
- *
- * Chart.js sizes text in canvas pixels, and the image is then scaled to whatever the
- * placeholder is — a PowerPoint shape, a PDF box. So absolute pixel sizes do not
- * survive the trip: the same 12px label is legible in a chart placed at 7 inches and
- * unreadable at 3, and — the part that catches people out — raising `width=` makes the
- * text SMALLER, because more pixels are being squeezed into the same physical space.
- *
- * Scaling with the canvas makes the text a fixed FRACTION of the chart, so `width=`
- * controls resolution and nothing else. Apparent size is then decided by the
- * placeholder alone, which is the one thing the author can see.
- *
- * Clamped either side: below about 0.6 the labels stop being legible at any size, and
- * above 3 a very wide chart turns into headlines.
- */
-function fontScaleFor(logicalWidth) {
-    const w = Number(logicalWidth) || FONT_BASELINE_WIDTH;
-    return Math.min(Math.max(w / FONT_BASELINE_WIDTH, 0.6), 3);
-}
 
 /**
  * The tick, legend and value-label size for these options.
  *
+ * ABSOLUTE, deliberately, and it took a wrong turn to be sure of it.
+ *
+ * The first attempt scaled these with `width=`, reasoning that Chart.js sizes text in
+ * canvas pixels and PowerPoint then stretches the PNG to whatever its shape is — so a
+ * fixed pixel size does not survive that trip, and raising `width=` to sharpen a chart
+ * actually shrinks its labels.
+ *
+ * All true for PowerPoint. False for the Canvas designer, where chartToHtml emits
+ * `width=inToCssPx(box.w)` — the tag's width IS the block's physical width, and the
+ * image is placed at exactly that size. There, 12px has always meant a steady ~9pt at
+ * any box size, and scaling it would have made a 3-inch chart render ~5pt labels.
+ *
+ * One rule cannot be right for both, because `width=` means different things on each
+ * path. So the default stays absolute — no regression to the case that was already
+ * correct — and `fontSize=` is the explicit knob for the case that is not. The Canvas
+ * chart properties expose it directly; a hand-written tag can set it too.
+ *
  * A function rather than a value stashed on the config: `common` is spread into
  * `options`, so anything hung on it lands at `config.options.*` and a reader looking
- * for `config.*` finds undefined. Both the chart and the value-label plugin ask here,
+ * for `config.*` finds undefined. The chart and the value-label plugin both ask here,
  * so they cannot disagree.
- *
- * `fontSize=` is the author's override, stated at the baseline width and scaled like
- * the default so it means the same thing whatever `width=` is set to.
  */
 function resolveTickPx(opts) {
     const requested = Number((opts || {}).fontSize);
-    return Math.round((requested > 0 ? requested : BASE_TICK_PX) * fontScaleFor((opts || {}).width));
+    return requested > 0 ? Math.round(requested) : BASE_TICK_PX;
 }
 
 /** Title size — proportional to the ticks, so one override moves both. */
 function resolveTitlePx(opts) {
     const requested = Number((opts || {}).fontSize);
-    return Math.round((requested > 0 ? requested * 1.34 : BASE_TITLE_PX) * fontScaleFor((opts || {}).width));
+    return requested > 0 ? Math.round(requested * 1.34) : BASE_TITLE_PX;
 }
 
 function buildConfig(style, buckets, opts) {

@@ -88,5 +88,46 @@ ok(xhtml.includes('groupBy=Department'), 'a complete cross-tab emits groupBy');
 ok(xhtml.includes('colSort=Engineering,Sales'), 'a complete cross-tab emits colSort');
 ok(m.chartConfigIssue(xb) === null, 'and reports no outstanding issue');
 
+
+// --- label size: model -> tag -> reload ---------------------------------------
+// The Canvas author never writes a {Chart:...} tag by hand, so a fontSize= the engine
+// honours is unreachable unless the chart block emits it. This is that path.
+{
+    const g = m.pageGeometry('Letter', 'Portrait');
+    const d = m.blankDocument();
+    const b = m.newChartBox(1, 1, 4, 2.5);
+    b.chart = { ...b.chart, relationship: 'Contacts', field: 'Department', style: 'bar', fontSize: '18' };
+    d.artboards[0].boxes.push(b);
+
+    const out = m.serialize(d, g);
+    ok(out.includes('fontSize=18'), 'the label size reaches the {Chart:...} tag');
+    ok(out.includes('data-dg-chart-fontsize="18"'), 'and is stored for the round trip');
+
+    const back = m.deserialize(out).artboards[0].boxes.find((x) => x.kind === 'chart');
+    ok(back && back.chart.fontSize === '18', 'and survives a reload');
+}
+
+// --- left alone when the author has not set one -------------------------------
+{
+    const g = m.pageGeometry('Letter', 'Portrait');
+    const d = m.blankDocument();
+    const b = m.newChartBox(1, 1, 4, 2.5);
+    b.chart = { ...b.chart, relationship: 'Contacts', field: 'Department', style: 'bar' };
+    d.artboards[0].boxes.push(b);
+    ok(!m.serialize(d, g).includes('fontSize='), 'no size set emits no modifier, so the engine default applies');
+}
+
+// --- a nonsense size is not emitted -------------------------------------------
+{
+    for (const bad of ['', '0', '-4', 'abc']) {
+        const g = m.pageGeometry('Letter', 'Portrait');
+        const d = m.blankDocument();
+        const b = m.newChartBox(1, 1, 4, 2.5);
+        b.chart = { ...b.chart, relationship: 'Contacts', field: 'Department', style: 'bar', fontSize: bad };
+        d.artboards[0].boxes.push(b);
+        ok(!m.serialize(d, g).includes('fontSize='), `"${bad}" is ignored rather than emitted`);
+    }
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');
 process.exit(failures ? 1 : 0);

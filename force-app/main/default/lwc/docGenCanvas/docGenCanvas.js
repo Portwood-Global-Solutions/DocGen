@@ -2371,7 +2371,11 @@ export default class DocGenCanvas extends LightningElement {
                     model.id,
                     renderChartToCanvas(ChartCtor, canvas, buckets, {
                         style: c.style || 'bar',
-                        title: c.title || ''
+                        title: c.title || '',
+                        // The preview has to honour the label size too, or the artboard
+                        // shows one thing and the PDF prints another — which is the
+                        // whole premise of this editor.
+                        fontSize: c.fontSize
                     })
                 );
             } catch (e) {

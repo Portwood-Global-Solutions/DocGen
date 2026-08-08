@@ -656,7 +656,10 @@ export const DEFAULT_CHART = {
     colors: '',
     split: '',
     groupBy: '',
-    colSort: ''
+    colSort: '',
+    // Blank means the engine's default (12px). Set it when the chart lands in a frame
+    // small enough that the default labels are hard to read — see chartToHtml.
+    fontSize: ''
 };
 
 /**
@@ -721,6 +724,12 @@ function chartToHtml(box) {
     }
     opts.push('width=' + inToCssPx(box.w));
     opts.push('height=' + inToCssPx(box.h));
+    // Label size, when the author has set one. Left out entirely otherwise, so the
+    // tag stays as short as it was and the engine's default applies.
+    const fs = parseInt(c.fontSize, 10);
+    if (fs > 0) {
+        opts.push('fontSize=' + fs);
+    }
     for (const key of ['groupBy', 'colSort', 'colors', 'split']) {
         const val = String(c[key] || '').trim();
         if (val) {
@@ -840,6 +849,8 @@ function chartAttrs(box) {
         esc(c.groupBy) +
         '" data-dg-chart-colsort="' +
         esc(c.colSort) +
+        '" data-dg-chart-fontsize="' +
+        esc(c.fontSize) +
         '"'
     );
 }
@@ -853,7 +864,8 @@ function readChart(el) {
         colors: el.getAttribute('data-dg-chart-colors') || '',
         split: el.getAttribute('data-dg-chart-split') || '',
         groupBy: el.getAttribute('data-dg-chart-groupby') || '',
-        colSort: el.getAttribute('data-dg-chart-colsort') || ''
+        colSort: el.getAttribute('data-dg-chart-colsort') || '',
+        fontSize: el.getAttribute('data-dg-chart-fontsize') || ''
     };
 }
 

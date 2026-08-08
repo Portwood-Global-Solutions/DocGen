@@ -1967,15 +1967,20 @@ Modifiers come after the style, joined with `&`. **Order doesn't matter.** Value
 
 Here `Survey_Question__c.Survey_Responses__r` is the child relationship from Question (not from the outer Survey). One chart per question, no `where=` needed.
 
-> **If chart labels come out too small, `width=` is not the knob.** Label sizes are a
-> fixed fraction of the chart, so raising `width=` sharpens the image without changing
-> how big the text looks — it is the size of the frame the chart lands in that decides
-> that. A chart placed in a 3-inch box has small labels however many pixels it is
-> rendered at. Either give it more room, or raise `fontSize=`.
+> **If chart labels come out too small, raise `fontSize=`.** Label sizes are in canvas
+> pixels, so how big they look in the finished document depends on how far the image is
+> scaled to fit its frame.
 >
-> Before v3.56 label sizes were fixed in pixels, which made this actively backwards:
-> raising `width=` made the text _smaller_, because more pixels were squeezed into the
-> same physical space.
+> On a **Canvas** template that is straightforward: the chart block renders at its own
+> size, so the 12px default prints at about 9pt whatever size the block is. Set **Label
+> size** in the chart properties to change it.
+>
+> On a **PowerPoint or Word** template the image is stretched to fit the shape you drew,
+> and `width=` does not change that — a chart squeezed into a 3-inch shape has small
+> labels however many pixels it was rendered at. Raising `width=` sharpens the picture
+> while making the text smaller relative to the frame, which is the opposite of what
+> most people expect. `fontSize=` is the knob: adjust it until it reads well at the size
+> the shape actually is.
 
 **Error handling.** Malformed tags render an inline error block in HTML output (red border, monospace tag dump) and a `[Chart error: …]` text placeholder in Word — you see the problem at first preview rather than chasing a silent miss. Errors include the original tag verbatim so you can diff it against a working sample.
 
