@@ -176,21 +176,30 @@ public with sharing class DocGenChartBucketResolver {
                     //  (c) Pre-loaded relationship — in-memory bucket math.
                     //      Fast, no SOQL spend, supports split=.
                     //  (d) Anything else — SOQL fallback. Supports split=.
-                    List<Map<String, Object>> buckets;
+                    //  (0) Client-supplied — the runner LWC already swept these
+                    //      rows page-by-page to build the chart image and handed
+                    //      back the counts. Preferred whenever present: it is the
+                    //      only option that survives a child set too large for
+                    //      heap AND a field SOQL cannot GROUP BY, and it
+                    //      guarantees the table agrees with the chart beside it.
+                    List<Map<String, Object>> buckets = suppliedBuckets(relName, fieldApi, mods);
+
                     Boolean forceSoql = String.isNotBlank(groupByField) || String.isNotBlank(whereClause);
-                    List<Object> records = forceSoql ? null : resolveRecords(data, relName);
-                    if (records != null && !records.isEmpty()) {
-                        buckets = computeBucketsWithSplit(records, fieldApi, splitDelim);
-                    } else {
-                        buckets = tryFallbackSoqlAggregateAdvanced(
-                            data,
-                            relName,
-                            fieldApi,
-                            groupByField,
-                            whereClause,
-                            splitDelim,
-                            colOrder
-                        );
+                    if (buckets == null) {
+                        List<Object> records = forceSoql ? null : resolveRecords(data, relName);
+                        if (records != null && !records.isEmpty()) {
+                            buckets = computeBucketsWithSplit(records, fieldApi, splitDelim);
+                        } else {
+                            buckets = tryFallbackSoqlAggregateAdvanced(
+                                data,
+                                relName,
+                                fieldApi,
+                                groupByField,
+                                whereClause,
+                                splitDelim,
+                                colOrder
+                            );
+                        }
                     }
 
                     // Apply optional palette override from the `colors=` modifier
@@ -535,6 +544,132 @@ public with sharing class DocGenChartBucketResolver {
             }
         }
         return null;
+    }
+
+    /**
+     * Stable key for a {#ChartBucket:...} tag, shared by the two sides of the
+     * client-side handoff: `getChartTagsForTemplate` hands this to the LWC, the
+     * LWC echoes it back as the key of `chartBucketMap`, and `preprocessInline`
+     * recomputes it here to find the match. Reuses the chart-tag hash with a
+     * fixed style token so a `{Chart:rel:field:bar}` and a
+     * `{#ChartBucket:rel:field}` over the same data never collide.
+     */
+    public static String bucketSignature(String relName, String fieldApi, Map<String, String> mods) {
+        return DocGenChartImageController.tagSignature(relName, fieldApi, CHARTBUCKET_STYLE_TOKEN, mods);
+    }
+
+    private static final String CHARTBUCKET_STYLE_TOKEN = 'chartbucket';
+
+    /**
+     * Returns the client-supplied buckets for this tag, or null to fall through
+     * to normal resolution.
+     *
+     * Deliberately forgiving: a malformed payload logs and returns null rather
+     * than throwing, so a bad client build degrades to the server path instead
+     * of failing the whole document.
+     */
+    private static List<Map<String, Object>> suppliedBuckets(
+        String relName,
+        String fieldApi,
+        Map<String, String> mods
+    ) {
+        Map<String, String> supplied = DocGenService.getChartBucketMap();
+        if (supplied == null || supplied.isEmpty()) {
+            return null;
+        }
+        // NB: do not name this `json` — Apex identifiers are case-insensitive, so
+        // a local `json` shadows the JSON class and breaks the call below.
+        String payload = supplied.get(bucketSignature(relName, fieldApi, mods));
+        if (String.isBlank(payload)) {
+            return null;
+        }
+        try {
+            List<Object> raw = (List<Object>) JSON.deserializeUntyped(payload);
+            List<Map<String, Object>> out = new List<Map<String, Object>>();
+            for (Object o : raw) {
+                if (o instanceof Map<String, Object>) {
+                    out.add((Map<String, Object>) o);
+                }
+            }
+            return out.isEmpty() ? null : out;
+        } catch (Exception e) {
+            System.debug(
+                LoggingLevel.WARN,
+                'Portwood: unusable client bucket payload for ' + relName + '.' + fieldApi + ' — ' + e.getMessage()
+            );
+            return null;
+        }
+    }
+
+    /**
+     * One parsed top-level {#ChartBucket:...} tag.
+     */
+    public class BucketTagRef {
+        @AuraEnabled
+        public String relName;
+        @AuraEnabled
+        public String fieldApi;
+        @AuraEnabled
+        public String signature;
+        @AuraEnabled
+        public Map<String, String> mods;
+    }
+
+    /**
+     * Lists the top-level {#ChartBucket:...} tags in `xml` so the client knows
+     * which aggregations to compute.
+     *
+     * Only depth-0 tags are returned, matching `preprocessInline`: a bucket loop
+     * nested inside another relationship loop is resolved per-iteration against
+     * that iteration's record, which the client cannot precompute.
+     */
+    public static List<BucketTagRef> findTopLevelBucketTags(String xml) {
+        List<BucketTagRef> out = new List<BucketTagRef>();
+        if (String.isBlank(xml)) {
+            return out;
+        }
+        Integer cursor = 0;
+        while (true) {
+            Integer start = xml.indexOf(OPEN_TAG_PREFIX, cursor);
+            if (start == -1) {
+                break;
+            }
+            Integer tagClose = xml.indexOf('}', start);
+            if (tagClose == -1) {
+                break;
+            }
+            // Skip the body wholesale so a bucket tag accidentally nested inside
+            // another bucket body is not reported twice.
+            Integer closerPos = findBalancedChartClose(xml, tagClose + 1);
+            cursor = (closerPos == -1) ? tagClose + 1 : closerPos + CLOSE_TAG.length();
+
+            String tagInner = xml.substring(start + 2, tagClose); // strip "{#"
+            Integer firstColon = tagInner.indexOf(':');
+            Integer secondColon = (firstColon == -1) ? -1 : tagInner.indexOf(':', firstColon + 1);
+            Integer thirdColon = (secondColon == -1) ? -1 : tagInner.indexOf(':', secondColon + 1);
+            if (firstColon == -1 || secondColon == -1) {
+                continue;
+            }
+            String relName = tagInner.substring(firstColon + 1, secondColon).trim();
+            String fieldApi;
+            String modifiers = null;
+            if (thirdColon == -1) {
+                fieldApi = tagInner.substring(secondColon + 1).trim();
+            } else {
+                fieldApi = tagInner.substring(secondColon + 1, thirdColon).trim();
+                modifiers = tagInner.substring(thirdColon + 1).trim();
+            }
+            if (String.isBlank(relName) || String.isBlank(fieldApi)) {
+                continue;
+            }
+            BucketTagRef ref = new BucketTagRef();
+            ref.relName = relName;
+            ref.fieldApi = fieldApi;
+            ref.mods = parseTagModifiers(modifiers);
+            ref.signature = bucketSignature(relName, fieldApi, ref.mods);
+            out.add(ref);
+        }
+        return out;
     }
 
     private static List<Object> resolveRecords(Map<String, Object> data, String relName) {

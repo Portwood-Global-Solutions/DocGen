@@ -5607,7 +5607,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             templateId: this.editTemplateId,
                             recordId: this.editTemplateTestRecordId,
                             saveToRecord: false,
-                            chartCvMap: chartContext.map
+                            chartCvMap: chartContext.map,
+                            chartBucketMap: chartContext.bucketMap || null
                         });
                     } finally {
                         await this._cleanupChartsForAdmin(chartContext.cvIds);
@@ -5928,7 +5929,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
                             templateId: this.editTemplateId,
                             recordId: this.editTemplateTestRecordId,
                             saveToRecord: false,
-                            chartCvMap: chartContext.map
+                            chartCvMap: chartContext.map,
+                            chartBucketMap: chartContext.bucketMap || null
                         });
                     } finally {
                         await this._cleanupChartsForAdmin(chartContext.cvIds);
@@ -6138,7 +6140,8 @@ export default class DocGenAdmin extends NavigationMixin(LightningElement) {
         const parts = await generateDocumentParts({
             templateId,
             recordId,
-            chartCvMap: chartContext.map
+            chartCvMap: chartContext.map,
+            chartBucketMap: chartContext.bucketMap || null
         });
         if (!parts || !parts.allXmlParts) {
             throw new Error('Document generation returned empty result.');

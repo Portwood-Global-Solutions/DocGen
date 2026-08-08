@@ -24,8 +24,18 @@ import getChildRecordsByIds from '@salesforce/apex/DocGenController.getChildReco
 import { NavigationMixin } from 'lightning/navigation';
 import { downloadBase64 as downloadBase64Util } from 'c/docGenUtils';
 import prepareChartImages from '@salesforce/apex/DocGenChartImageController.prepareChartImages';
+import getChartTagsForTemplate from '@salesforce/apex/DocGenChartImageController.getChartTagsForTemplate';
 import uploadChartImage from '@salesforce/apex/DocGenChartImageController.uploadChartImage';
 import deleteChartImages from '@salesforce/apex/DocGenChartImageController.deleteChartImages';
+import { loadScript } from 'lightning/platformResourceLoader';
+import CHARTJS_RESOURCE from '@salesforce/resourceUrl/DocGenChartJs';
+import {
+    newBucketAccumulator,
+    accumulatePage,
+    finalizeBuckets,
+    renderChartPng,
+    isStyleSupported
+} from './docGenChartJsRenderer';
 import { buildDocx } from './docGenZipWriter';
 import { mergePdfs } from './docGenPdfMerger';
 import { extractFirstImageFromPdfBase64 } from './docGenPdfImageExtractor';
@@ -985,7 +995,8 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
                             templateId: this.selectedTemplateId,
                             recordId: this.recordId,
                             saveToRecord: false,
-                            chartCvMap: chartContext.map
+                            chartCvMap: chartContext.map,
+                            chartBucketMap: chartContext.bucketMap || null
                         });
                     } finally {
                         await this._cleanupCharts(chartContext.cvIds);
@@ -1112,7 +1123,176 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         });
     }
 
+    /**
+     * Loads Chart.js from the static resource once per component lifetime.
+     * Static resource, not a CDN — the zero-callout constraint still holds.
+     */
+    async _ensureChartJs() {
+        if (window.Chart) {
+            return window.Chart;
+        }
+        await loadScript(this, CHARTJS_RESOURCE);
+        return window.Chart;
+    }
+
+    /**
+     * Chart.js path — buckets the child rows in the browser instead of Apex.
+     *
+     * Returns {map, cvIds} on success, or null to hand back to the Apex
+     * rasterizer. Bailing (rather than half-rendering) keeps the two paths from
+     * interleaving: a deck with one unsupported cross-tab chart renders entirely
+     * server-side rather than as a mix of styles.
+     *
+     * The win over `prepareChartImages` is that Apex never sees the rows, so the
+     * scout's `rows * 2000` heap estimate never trips and non-groupable fields
+     * (long textareas) still chart. Rows are folded page-by-page and dropped, so
+     * peak memory is O(distinct values) regardless of row count.
+     */
+    async _prepareChartsClientSide() {
+        let tags;
+        try {
+            tags = await getChartTagsForTemplate({ templateId: this.selectedTemplateId });
+        } catch (e) {
+            console.warn('Portwood: getChartTagsForTemplate failed; using Apex chart path', e);
+            return null;
+        }
+        if (!Array.isArray(tags) || tags.length === 0) {
+            return { map: {}, cvIds: [] };
+        }
+
+        // Every tag must be servable here, or we hand the whole deck back.
+        // 'bucket' tags only need counts, so the style restriction is a
+        // chart-only concern — a {#ChartBucket} table has no style at all.
+        const renderable = tags.every(
+            (t) => t.childObject && t.lookupField && t.fieldApi && (t.kind === 'bucket' || isStyleSupported(t.style))
+        );
+        if (!renderable) {
+            return null;
+        }
+
+        let ChartCtor;
+        try {
+            ChartCtor = await this._ensureChartJs();
+        } catch (e) {
+            console.warn('Portwood: Chart.js failed to load; using Apex chart path', e);
+            return null;
+        }
+        if (!ChartCtor) {
+            return null;
+        }
+
+        // Group by relationship so N charts over the same child cost ONE paging
+        // pass. Our commuter deck has 8 charts on one relationship — this is the
+        // difference between 8 sweeps of 3,553 rows and a single sweep.
+        const byRel = new Map();
+        for (const tag of tags) {
+            const key = `${tag.childObject}|${tag.lookupField}`;
+            if (!byRel.has(key)) {
+                byRel.set(key, {
+                    childObject: tag.childObject,
+                    lookupField: tag.lookupField,
+                    tags: []
+                });
+            }
+            byRel.get(key).tags.push(tag);
+        }
+
+        const map = {};
+        const cvIds = [];
+        const bucketMap = {};
+
+        for (const group of byRel.values()) {
+            const fields = Array.from(new Set(['Id', ...group.tags.map((t) => t.fieldApi)])).join(', ');
+            const accs = group.tags.map(() => newBucketAccumulator());
+
+            let cursor = null;
+            let hasMore = true;
+            let swept = 0;
+            while (hasMore) {
+                // eslint-disable-next-line no-await-in-loop
+                const page = await getChildRecordPage({
+                    childObject: group.childObject,
+                    lookupField: group.lookupField,
+                    parentId: this.recordId,
+                    lastCursorId: cursor,
+                    fields,
+                    pageSize: 500
+                });
+                const records = (page && page.records) || [];
+                group.tags.forEach((tag, i) => {
+                    accumulatePage(accs[i], records, tag.fieldApi, tag.options && tag.options.split);
+                });
+                swept += records.length;
+                cursor = page ? page.lastId : null;
+                hasMore = Boolean(page && page.hasMore && records.length);
+                this.loadingMessage = `Aggregating ${swept.toLocaleString()} rows...`;
+            }
+
+            for (let i = 0; i < group.tags.length; i++) {
+                const tag = group.tags[i];
+                const opts = tag.options || {};
+                const palette = opts.colors
+                    ? opts.colors
+                          .split(',')
+                          .map((c) => c.trim())
+                          .filter(Boolean)
+                    : null;
+                const buckets = finalizeBuckets(accs[i], palette);
+                if (!buckets.length) {
+                    continue;
+                }
+
+                // A {#ChartBucket:...} table wants the counts, not a picture.
+                // Same accumulator either way, so the table and the chart beside
+                // it can never disagree.
+                if (tag.kind === 'bucket') {
+                    bucketMap[tag.signature] = JSON.stringify(buckets);
+                    continue;
+                }
+
+                try {
+                    const png = renderChartPng(ChartCtor, buckets, {
+                        style: tag.style,
+                        title: opts.title,
+                        width: opts.width,
+                        height: opts.height,
+                        scale: opts.scale
+                    });
+                    // eslint-disable-next-line no-await-in-loop
+                    const cvId = await uploadChartImage({
+                        recordId: this.recordId,
+                        signature: tag.signature,
+                        base64Png: png.base64
+                    });
+                    if (cvId) {
+                        map[tag.signature] = `${cvId}|${png.width}x${png.height}`;
+                        cvIds.push(cvId);
+                    }
+                } catch (chartErr) {
+                    const errMsg =
+                        (chartErr && (chartErr.body ? chartErr.body.message : chartErr.message)) || String(chartErr);
+                    console.warn(`Portwood: Chart.js render failed for ${tag.signature} — ${errMsg}`, chartErr);
+                }
+            }
+        }
+
+        return { map, cvIds, bucketMap };
+    }
+
     async _prepareCharts() {
+        // Chart.js first; it is the only path that survives large child sets and
+        // non-groupable fields. Falls through to the Apex rasterizer when the
+        // template uses a cross-tab style, when the resource fails to load, or
+        // in any headless caller (Flow / batch), which never reaches this LWC.
+        try {
+            const clientResult = await this._prepareChartsClientSide();
+            if (clientResult) {
+                return clientResult;
+            }
+        } catch (e) {
+            console.warn('Portwood: client-side chart path failed; using Apex chart path', e);
+        }
+
         try {
             const requests = await prepareChartImages({
                 templateId: this.selectedTemplateId,
@@ -1394,7 +1574,8 @@ export default class DocGenRunner extends NavigationMixin(LightningElement) {
         const parts = await generateDocumentParts({
             templateId: this.selectedTemplateId,
             recordId: this.recordId,
-            chartCvMap: chartContext.map
+            chartCvMap: chartContext.map,
+            chartBucketMap: chartContext.bucketMap || null
         });
         if (!parts || !parts.allXmlParts) {
             throw new Error('Document generation returned empty result.');

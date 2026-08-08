@@ -78,7 +78,7 @@ private class DocGenControllerTests {
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.processAndReturnDocument(tpl.Id, acc.Id, null);
+                DocGenController.processAndReturnDocument(tpl.Id, acc.Id, null, null);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -1068,7 +1068,7 @@ private class DocGenControllerTests {
             insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.processAndReturnDocument(tpl.Id, acc.Id, null);
+            Map<String, Object> result = DocGenController.processAndReturnDocument(tpl.Id, acc.Id, null, null);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');
@@ -1093,7 +1093,7 @@ private class DocGenControllerTests {
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.generatePdf(tpl.Id, acc.Id, false, null);
+                DocGenController.generatePdf(tpl.Id, acc.Id, false, null, null);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -1151,7 +1151,7 @@ private class DocGenControllerTests {
             insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generatePdf(tpl.Id, acc.Id, false, null);
+            Map<String, Object> result = DocGenController.generatePdf(tpl.Id, acc.Id, false, null, null);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');
@@ -1210,7 +1210,7 @@ private class DocGenControllerTests {
             insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generatePdf(tpl.Id, acc.Id, true, null);
+            Map<String, Object> result = DocGenController.generatePdf(tpl.Id, acc.Id, true, null, null);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Result should not be null');
@@ -1915,7 +1915,7 @@ private class DocGenControllerTests {
             Test.startTest();
             Boolean caughtException = false;
             try {
-                DocGenController.generateDocumentParts(fakeTemplateId, acc.Id, null);
+                DocGenController.generateDocumentParts(fakeTemplateId, acc.Id, null, null);
             } catch (AuraHandledException e) {
                 caughtException = true;
             }
@@ -1971,7 +1971,7 @@ private class DocGenControllerTests {
             insert new ContentDocumentLink(LinkedEntityId = tpl.Id, ContentDocumentId = conDocId, ShareType = 'V');
 
             Test.startTest();
-            Map<String, Object> result = DocGenController.generateDocumentParts(tpl.Id, acc.Id, null);
+            Map<String, Object> result = DocGenController.generateDocumentParts(tpl.Id, acc.Id, null, null);
             Test.stopTest();
 
             System.assertNotEquals(null, result, 'Should return non-null result');
@@ -5746,7 +5746,7 @@ private class DocGenControllerTests {
     static void testGenerateDocumentParts_invalidTemplate() {
         Account acc = [SELECT Id FROM Account LIMIT 1];
         try {
-            DocGenController.generateDocumentParts(null, acc.Id, null);
+            DocGenController.generateDocumentParts(null, acc.Id, null, null);
         } catch (Exception e) {
             // Expected — exercises error handling path
         }

@@ -27,6 +27,7 @@
  */
 public with sharing class DocGenChartImageController {
     private static final String CHART_OPEN_PREFIX = '{Chart:';
+    private static final String BUCKET_OPEN_PREFIX = '{#ChartBucket:';
     private static final String CV_TITLE_PREFIX = 'docgen_chart_';
 
     // Styles both DocGenSvgChartSerializer AND DocGenChartRasterizer can emit.
@@ -755,6 +756,137 @@ public with sharing class DocGenChartImageController {
         public Integer width;
         @AuraEnabled
         public Integer height;
+    }
+
+    /**
+     * Chart tag metadata for the client-side (Chart.js) rendering path.
+     *
+     * Unlike `prepareChartImages`, this deliberately does NOT call
+     * `DocGenDataRetriever.getRecordData` — that is the whole point. Resolving
+     * buckets in Apex requires either the child rows in heap (which blows the
+     * 6 MB sync limit past ~1,800 rows) or a SOQL `GROUP BY` (impossible when
+     * the grouped field is a long textarea). The browser instead pages the
+     * child rows via `DocGenController.getChildRecordPage`, buckets them in JS,
+     * and rasterizes with Chart.js — constant Apex heap at any row count.
+     *
+     * Returns everything the client needs to do that: the same `signature` the
+     * merge pipeline keys `chartCvMap` on, plus the child object / lookup field
+     * to page against.
+     */
+    public class ChartTagInfo {
+        @AuraEnabled
+        public String signature;
+        @AuraEnabled
+        public String relName;
+        @AuraEnabled
+        public String fieldApi;
+        @AuraEnabled
+        public String style;
+        @AuraEnabled
+        public String childObject;
+        @AuraEnabled
+        public String lookupField;
+        @AuraEnabled
+        public Map<String, String> options;
+        // 'chart'  — needs a rendered PNG, returned via chartCvMap.
+        // 'bucket' — a {#ChartBucket:...} table; needs the counts only, returned
+        //            via chartBucketMap. Both are aggregated in the same sweep.
+        @AuraEnabled
+        public String kind;
+    }
+
+    /**
+     * Lists every top-level {Chart:...} tag in the template's active body,
+     * annotated with the child object + lookup field to page against.
+     *
+     * Cheap by design: one template row, one active-body load, zero record
+     * data. Safe to call before deciding which rendering path to take.
+     */
+    @AuraEnabled
+    public static List<ChartTagInfo> getChartTagsForTemplate(Id templateId) {
+        List<ChartTagInfo> out = new List<ChartTagInfo>();
+        if (templateId == null) {
+            return out;
+        }
+
+        DocGenFlsGuard.assertAccessible(
+            DocGen_Template__c.sObjectType,
+            new Set<String>{ 'Type__c', 'Base_Object_API__c' }
+        );
+        /* code-analyzer-suppress ApexFlsViolation */
+        List<DocGen_Template__c> templates = [
+            SELECT Id, Type__c, Base_Object_API__c
+            FROM DocGen_Template__c
+            WHERE Id = :templateId
+            WITH SYSTEM_MODE
+            LIMIT 1
+        ];
+        if (templates.isEmpty()) {
+            throw DocGenService.ahe('Template not found or access denied.');
+        }
+        DocGen_Template__c template = templates[0];
+
+        String body = loadActiveBody(template.Type__c, templateId);
+        if (String.isBlank(body)) {
+            return out;
+        }
+        Boolean hasChart = body.contains(CHART_OPEN_PREFIX);
+        Boolean hasBucket = body.contains(BUCKET_OPEN_PREFIX);
+        if (!hasChart && !hasBucket) {
+            return out;
+        }
+
+        // Resolve the base object's child relationships once so each tag can be
+        // mapped to the object + lookup the client pages against.
+        Map<String, Schema.ChildRelationship> relMap = new Map<String, Schema.ChildRelationship>();
+        Schema.SObjectType parentType = Schema.getGlobalDescribe().get(template.Base_Object_API__c);
+        if (parentType != null) {
+            for (Schema.ChildRelationship cr : parentType.getDescribe().getChildRelationships()) {
+                if (cr.getRelationshipName() != null) {
+                    relMap.put(cr.getRelationshipName().toLowerCase(), cr);
+                }
+            }
+        }
+
+        if (hasChart) {
+            for (ParsedChartTag tag : findTopLevelChartTags(body)) {
+                ChartTagInfo info = new ChartTagInfo();
+                info.kind = 'chart';
+                info.signature = tagSignature(tag.relName, tag.fieldApi, tag.style, tag.options);
+                info.relName = tag.relName;
+                info.fieldApi = tag.fieldApi;
+                info.style = String.isBlank(tag.style) ? 'bar' : tag.style;
+                info.options = tag.options == null ? new Map<String, String>() : tag.options;
+                applyRelationship(info, relMap);
+                out.add(info);
+            }
+        }
+
+        // {#ChartBucket:...} tables need the same counts but no image. Reported
+        // so one paging sweep can satisfy both, and so a table next to a chart
+        // renders from identical numbers.
+        if (hasBucket) {
+            for (DocGenChartBucketResolver.BucketTagRef ref : DocGenChartBucketResolver.findTopLevelBucketTags(body)) {
+                ChartTagInfo info = new ChartTagInfo();
+                info.kind = 'bucket';
+                info.signature = ref.signature;
+                info.relName = ref.relName;
+                info.fieldApi = ref.fieldApi;
+                info.style = 'bucket';
+                info.options = ref.mods == null ? new Map<String, String>() : ref.mods;
+                applyRelationship(info, relMap);
+                out.add(info);
+            }
+        }
+        return out;
+    }
+
+    private static void applyRelationship(ChartTagInfo info, Map<String, Schema.ChildRelationship> relMap) {
+        Schema.ChildRelationship cr = relMap.get(info.relName == null ? '' : info.relName.toLowerCase());
+        if (cr != null) {
+            info.childObject = String.valueOf(cr.getChildSObject());
+            info.lookupField = String.valueOf(cr.getField());
+        }
     }
 
     private class ParsedChartTag {

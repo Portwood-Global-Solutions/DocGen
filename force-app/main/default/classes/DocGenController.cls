@@ -482,14 +482,18 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     public static Map<String, Object> processAndReturnDocument(
         Id templateId,
         Id recordId,
-        Map<String, String> chartCvMap
+        Map<String, String> chartCvMap,
+        Map<String, String> chartBucketMap
     ) {
         // chartCvMap (#117): signature → CV Id map for charts the LWC pre-
         // rasterized to PNG. Null for non-chart templates and legacy callers.
+        // chartBucketMap: signature → JSON buckets for {#ChartBucket:...} tables
+        // the LWC aggregated in the same sweep. Null when the server should
+        // resolve them itself.
         // Set BEFORE invoking the merge so DocGenChartTagExpander.expand can
         // find each chart's CV; clear on the way out so per-request state
         // doesn't leak across transactions.
-        DocGenService.beginChartContext(chartCvMap);
+        DocGenService.beginChartContext(chartCvMap, chartBucketMap);
         try {
             return processAndReturnDocumentWithImages(templateId, recordId, null);
         } finally {
@@ -567,11 +571,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
     public static Map<String, Object> generateDocumentParts(
         Id templateId,
         Id recordId,
-        Map<String, String> chartCvMap
+        Map<String, String> chartCvMap,
+        Map<String, String> chartBucketMap
     ) {
         // chartCvMap (#117): signature → CV Id map for charts the LWC pre-
         // rasterized to PNG. Null for non-chart templates and legacy callers.
-        DocGenService.beginChartContext(chartCvMap);
+        // chartBucketMap: pre-aggregated {#ChartBucket:...} rows from the same
+        // client-side sweep. Null to resolve server-side as before.
+        DocGenService.beginChartContext(chartCvMap, chartBucketMap);
         try {
             return DocGenService.generateDocumentParts(templateId, recordId);
         } catch (Exception e) {
@@ -4474,12 +4481,14 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
         Id templateId,
         Id recordId,
         Boolean saveToRecord,
-        Map<String, String> chartCvMap
+        Map<String, String> chartCvMap,
+        Map<String, String> chartBucketMap
     ) {
         // chartCvMap (#117): signature → CV Id map for charts the LWC pre-
         // rasterized to PNG. Null for non-chart templates and legacy callers
         // that haven't been updated.
-        DocGenService.beginChartContext(chartCvMap);
+        // chartBucketMap: pre-aggregated {#ChartBucket:...} rows, same sweep.
+        DocGenService.beginChartContext(chartCvMap, chartBucketMap);
         try {
             if (saveToRecord) {
                 Id contentDocId = DocGenService.generateDocument(templateId, recordId);

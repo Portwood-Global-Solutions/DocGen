@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<StaticResource xmlns="http://soap.sforce.com/2006/04/metadata">
+    <cacheControl>Public</cacheControl>
+    <contentType>application/javascript</contentType>
+    <description>Chart.js 4.5.1 (UMD, minified) — client-side chart rasterization to PNG for Word/PowerPoint output. Exposes the Chart global. Build-time asset, no callout. MIT — see THIRD-PARTY-NOTICES.md.</description>
+</StaticResource>

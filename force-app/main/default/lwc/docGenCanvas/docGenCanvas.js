@@ -1501,7 +1501,8 @@ export default class DocGenCanvas extends LightningElement {
                 templateId: this.templateId,
                 recordId: this.effectiveSampleRecordId,
                 saveToRecord: false,
-                chartCvMap: null
+                chartCvMap: null,
+                chartBucketMap: null
             });
             if (!res || !res.base64) {
                 this.statusText = 'Preview did not return a document';

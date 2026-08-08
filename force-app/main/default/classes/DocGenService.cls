@@ -106,17 +106,52 @@ global with sharing class DocGenService { // NOPMD AvoidGlobalModifier — globa
     @TestVisible
     private static Map<String, String> currentChartCvMap;
 
+    // Client-supplied {#ChartBucket:...} data: signature → JSON array of bucket
+    // maps. Set alongside currentChartCvMap; see beginChartContext(map, map).
+    @TestVisible
+    private static Map<String, String> currentChartBucketMap;
+
     /**
      * Controller-facing setter for the chart CV map. Called by DocGenController
      * generate entry points before invoking the merge; paired with `endChartContext`
      * in a `finally` so per-request state doesn't leak across transactions.
      */
     public static void beginChartContext(Map<String, String> chartCvMap) {
+        beginChartContext(chartCvMap, null);
+    }
+
+    /**
+     * Overload carrying pre-aggregated {#ChartBucket:...} rows alongside the
+     * chart images.
+     *
+     * `chartBucketMap` is signature → JSON array of bucket maps, computed by the
+     * runner LWC in the same paging sweep that feeds Chart.js. It exists because
+     * the image map alone only rescues the CHARTS at scale: a `{#ChartBucket}`
+     * table still asks the resolver for rows, which means either the whole child
+     * set in heap or a SOQL GROUP BY the field may not support. Supplying the
+     * buckets lets the table render from the counts the browser already has, so
+     * a chart and the table beside it stay consistent and neither needs the rows
+     * server-side.
+     *
+     * Null/absent entries fall through to the normal resolution path, so
+     * headless callers and small templates are unaffected.
+     */
+    public static void beginChartContext(Map<String, String> chartCvMap, Map<String, String> chartBucketMap) {
         currentChartCvMap = chartCvMap;
+        currentChartBucketMap = chartBucketMap;
     }
 
     public static void endChartContext() {
         currentChartCvMap = null;
+        currentChartBucketMap = null;
+    }
+
+    /**
+     * Read by DocGenChartBucketResolver.preprocessInline. Null when no client
+     * supplied buckets for this transaction.
+     */
+    public static Map<String, String> getChartBucketMap() {
+        return currentChartBucketMap;
     }
 
     // Static cache for pre-decomposed XML parts — same template, queried once, reused across batch

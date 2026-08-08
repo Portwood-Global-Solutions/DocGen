@@ -608,6 +608,63 @@ export const CODE_TYPES = [
 export const DEFAULT_CODE = { field: '', type: 'qr', size: 200, height: 80 };
 
 /**
+ * Chart element defaults.
+ *
+ * `relationship` + `field` are the child list and the field to bucket by — the
+ * same two coordinates the {Chart:...} tag has always taken. Everything else is
+ * presentation and maps 1:1 onto the tag's modifier string.
+ */
+export const DEFAULT_CHART = {
+    relationship: '',
+    field: '',
+    style: 'bar',
+    title: '',
+    colors: '',
+    split: '',
+    groupBy: '',
+    colSort: ''
+};
+
+/**
+ * Serializes a chart box to a {Chart:...} tag.
+ *
+ * The canvas emits HTML, and the merge engine already resolves {Chart:...} in
+ * HTML — so a chart box needs no new rendering path on the server at all. It
+ * writes the same tag a hand-authored template would, and inherits the whole
+ * pipeline (client-side Chart.js rasterization, the Apex fallback, PNG-via-CV
+ * embedding) for free.
+ *
+ * Width/height come from the box the author drew, so what they laid out is what
+ * the chart is rendered at — no aspect-ratio drift between the artboard and the
+ * finished document.
+ */
+function chartToHtml(box) {
+    const c = { ...DEFAULT_CHART, ...(box.chart || {}) };
+    const relationship = String(c.relationship || '').trim();
+    const field = String(c.field || '').trim();
+    if (!relationship || !field) {
+        // Unconfigured element: render nothing rather than emit a malformed tag
+        // that would surface as a red error block in the generated document.
+        return '';
+    }
+
+    const style = String(c.style || 'bar').trim() || 'bar';
+    const opts = [];
+    if (String(c.title || '').trim()) {
+        opts.push('title=' + String(c.title).trim());
+    }
+    opts.push('width=' + inToCssPx(box.w));
+    opts.push('height=' + inToCssPx(box.h));
+    for (const key of ['groupBy', 'colSort', 'colors', 'split']) {
+        const val = String(c[key] || '').trim();
+        if (val) {
+            opts.push(key + '=' + val);
+        }
+    }
+    return '{Chart:' + relationship + ':' + field + ':' + style + ':' + opts.join('&') + '}';
+}
+
+/**
  * The box size a code will occupy, in inches.
  *
  * QR is square and sized in CSS px. A 1D barcode is sized WxH in px, which the renderer
@@ -691,6 +748,50 @@ function readCode(el) {
 }
 
 /**
+ * Chart config as data attributes.
+ *
+ * The {Chart:...} tag alone is not a sufficient record of the author's intent —
+ * reloading would mean re-parsing a modifier string, and width/height in the tag
+ * are derived from the box rather than chosen. Storing the config explicitly
+ * makes the round trip exact, exactly as codeAttrs does for barcodes.
+ */
+function chartAttrs(box) {
+    const c = { ...DEFAULT_CHART, ...(box.chart || {}) };
+    return (
+        ' data-dg-chart-rel="' +
+        esc(c.relationship) +
+        '" data-dg-chart-field="' +
+        esc(c.field) +
+        '" data-dg-chart-style="' +
+        esc(c.style) +
+        '" data-dg-chart-title="' +
+        esc(c.title) +
+        '" data-dg-chart-colors="' +
+        esc(c.colors) +
+        '" data-dg-chart-split="' +
+        esc(c.split) +
+        '" data-dg-chart-groupby="' +
+        esc(c.groupBy) +
+        '" data-dg-chart-colsort="' +
+        esc(c.colSort) +
+        '"'
+    );
+}
+
+function readChart(el) {
+    return {
+        relationship: el.getAttribute('data-dg-chart-rel') || '',
+        field: el.getAttribute('data-dg-chart-field') || '',
+        style: el.getAttribute('data-dg-chart-style') || DEFAULT_CHART.style,
+        title: el.getAttribute('data-dg-chart-title') || '',
+        colors: el.getAttribute('data-dg-chart-colors') || '',
+        split: el.getAttribute('data-dg-chart-split') || '',
+        groupBy: el.getAttribute('data-dg-chart-groupby') || '',
+        colSort: el.getAttribute('data-dg-chart-colsort') || ''
+    };
+}
+
+/**
  * Signature placement types the signing service recognises
  * (DocGenSignatureSenderController.parseSignaturePlacements). Anything else is
  * normalised to Full there, so offering more here would be offering choices that
@@ -715,6 +816,28 @@ export function signatureBoxSize(sig) {
         return { w: 1.6, h: 0.4 };
     }
     return { w: 2.6, h: 0.6 };
+}
+
+/**
+ * A chart box starts at 4.5 x 2.8in — wide enough for category labels at a
+ * readable size, and a shape the bar/column renderers fill without dead space.
+ * The author resizes it and the tag's width/height follow, so the artboard
+ * rectangle and the rendered chart always share an aspect ratio.
+ */
+export function newChartBox(xIn, yIn, wIn, hIn) {
+    return {
+        id: nextId('box'),
+        kind: 'chart',
+        mode: 'pinned',
+        z: DEFAULT_Z,
+        condition: '',
+        style: { ...DEFAULT_STYLE, padding: 0 },
+        chart: { ...DEFAULT_CHART },
+        x: round3(xIn),
+        y: round3(yIn),
+        w: round3(wIn || 4.5),
+        h: round3(hIn || 2.8)
+    };
 }
 
 export function newSignatureBox(xIn, yIn) {
@@ -1748,6 +1871,9 @@ function authoringAttrs(box) {
     if (box.kind === 'signature') {
         return baseAuthoringAttrs(box) + signatureAttrs(box);
     }
+    if (box.kind === 'chart') {
+        return baseAuthoringAttrs(box) + chartAttrs(box);
+    }
     return baseAuthoringAttrs(box);
 }
 
@@ -1838,6 +1964,8 @@ function boxToHtml(box, cursor) {
         inner = codeToHtml(box);
     } else if (box.kind === 'signature') {
         inner = signatureToHtml(box);
+    } else if (box.kind === 'chart') {
+        inner = chartToHtml(box);
     } else {
         inner = textToHtml(box);
     }
@@ -2196,6 +2324,12 @@ export function deserialize(html) {
                 } else if (el.hasAttribute('data-dg-code-type')) {
                     box.kind = 'code';
                     box.code = readCode(el);
+                } else if (el.hasAttribute('data-dg-chart-rel')) {
+                    box.kind = 'chart';
+                    box.chart = readChart(el);
+                    // The {Chart:...} tag is regenerated from the config on save;
+                    // keeping the old tag text would let the two drift apart.
+                    box.html = '';
                 } else if (shapeEl) {
                     // The marker sits on the INNER div, not on the wrapper — testing
                     // the wrapper meant a shape read back as an empty text box and lost

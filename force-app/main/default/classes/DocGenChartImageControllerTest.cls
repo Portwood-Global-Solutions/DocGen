@@ -713,4 +713,194 @@ private class DocGenChartImageControllerTest {
         System.assertNotEquals(null, reqs, 'Should return empty list, not null.');
         System.assertEquals(0, reqs.size(), 'HTML templates should return empty list.');
     }
+
+    // -------------------------------------------------------------------------
+    // getChartTagsForTemplate — metadata for the client-side (Chart.js) path.
+    // -------------------------------------------------------------------------
+
+    private static DocGen_Template__c pptTemplateWithSlide(String slideXml) {
+        DocGen_Template__c tpl = new DocGen_Template__c(
+            Name = 'Chart Tags Tpl',
+            Base_Object_API__c = 'Account',
+            Type__c = 'PowerPoint',
+            Query_Config__c = 'Name'
+        );
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+        DocGen_Template_Version__c ver = new DocGen_Template_Version__c(Template__c = tpl.Id, Is_Active__c = true);
+        Database.insert(ver, AccessLevel.SYSTEM_MODE);
+        insert new ContentVersion(
+            Title = 'docgen_tmpl_xml_' + ver.Id + '_ppt__slides__slide1.xml',
+            PathOnClient = 'slide1.xml',
+            VersionData = Blob.valueOf(slideXml)
+        );
+        return tpl;
+    }
+
+    private static String slideWithTag(String tag) {
+        return '<?xml version="1.0" encoding="UTF-8"?>' +
+            '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"' +
+            ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+            '<p:cSld><p:spTree><a:p><a:r><a:t>' +
+            tag +
+            '</a:t></a:r></a:p></p:spTree></p:cSld></p:sld>';
+    }
+
+    @IsTest
+    static void getChartTagsForTemplate_resolvesChildObjectAndLookup() {
+        // The client needs childObject + lookupField to page rows itself. Contacts
+        // is a real Account child relationship, so this proves the schema walk.
+        DocGen_Template__c tpl = pptTemplateWithSlide(slideWithTag('{Chart:Contacts:Title:bar:title=Roles}'));
+
+        Test.startTest();
+        List<DocGenChartImageController.ChartTagInfo> tags = DocGenChartImageController.getChartTagsForTemplate(tpl.Id);
+        Test.stopTest();
+
+        System.assertEquals(1, tags.size(), 'One chart tag should be found.');
+        DocGenChartImageController.ChartTagInfo t = tags[0];
+        System.assertEquals('Contacts', t.relName);
+        System.assertEquals('Title', t.fieldApi);
+        System.assertEquals('bar', t.style);
+        System.assertEquals('Contact', t.childObject, 'Relationship must resolve to its child object.');
+        System.assertEquals('AccountId', t.lookupField, 'Relationship must resolve to its lookup field.');
+        System.assertEquals(16, t.signature.length(), 'Signature is 16 hex chars.');
+    }
+
+    @IsTest
+    static void getChartTagsForTemplate_signatureMatchesMergeSideHash() {
+        // The whole handoff depends on this: the client uploads the PNG under
+        // this signature, and DocGenChartTagExpander looks it up by recomputing
+        // the hash at merge time. If they ever diverge, charts silently fall back
+        // to "[Chart: ...]" text placeholders.
+        DocGen_Template__c tpl = pptTemplateWithSlide(slideWithTag('{Chart:Contacts:Title:bar:title=Roles}'));
+
+        List<DocGenChartImageController.ChartTagInfo> tags = DocGenChartImageController.getChartTagsForTemplate(tpl.Id);
+
+        String expected = DocGenChartImageController.tagSignature(
+            'Contacts',
+            'Title',
+            'bar',
+            new Map<String, String>{ 'title' => 'Roles' }
+        );
+        System.assertEquals(expected, tags[0].signature, 'Client signature must match the merge-side hash.');
+    }
+
+    @IsTest
+    static void getChartTagsForTemplate_noChartTags_returnsEmpty() {
+        DocGen_Template__c tpl = pptTemplateWithSlide(slideWithTag('No charts on this slide'));
+
+        List<DocGenChartImageController.ChartTagInfo> tags = DocGenChartImageController.getChartTagsForTemplate(tpl.Id);
+
+        System.assertNotEquals(null, tags, 'Should return empty list, not null.');
+        System.assertEquals(0, tags.size(), 'A slide with no chart tags yields no entries.');
+    }
+
+    @IsTest
+    static void getChartTagsForTemplate_unknownRelationship_leavesPagingFieldsNull() {
+        // An author typo must not throw — the client checks for childObject and
+        // falls back to the Apex renderer when it is missing.
+        DocGen_Template__c tpl = pptTemplateWithSlide(slideWithTag('{Chart:Not_A_Rel__r:X__c:bar}'));
+
+        List<DocGenChartImageController.ChartTagInfo> tags = DocGenChartImageController.getChartTagsForTemplate(tpl.Id);
+
+        System.assertEquals(1, tags.size(), 'Tag is still reported.');
+        System.assertEquals(null, tags[0].childObject, 'Unresolvable relationship leaves childObject null.');
+        System.assertEquals(null, tags[0].lookupField, 'Unresolvable relationship leaves lookupField null.');
+    }
+
+    @IsTest
+    static void getChartTagsForTemplate_nullTemplateId_returnsEmpty() {
+        List<DocGenChartImageController.ChartTagInfo> tags = DocGenChartImageController.getChartTagsForTemplate(null);
+        System.assertNotEquals(null, tags);
+        System.assertEquals(0, tags.size());
+    }
+
+    @IsTest
+    static void getChartTagsForTemplate_reportsChartBucketTablesToo() {
+        // A {#ChartBucket:...} table needs the same counts as a chart but no
+        // image. Reporting both kinds lets the client satisfy them in one sweep.
+        DocGen_Template__c tpl = pptTemplateWithSlide(
+            slideWithTag(
+                '{Chart:Contacts:Title:bar:title=Roles}' + '{#ChartBucket:Contacts:Department}{key_label}{/ChartBucket}'
+            )
+        );
+
+        List<DocGenChartImageController.ChartTagInfo> tags = DocGenChartImageController.getChartTagsForTemplate(tpl.Id);
+
+        Map<String, DocGenChartImageController.ChartTagInfo> byKind = new Map<String, DocGenChartImageController.ChartTagInfo>();
+        for (DocGenChartImageController.ChartTagInfo t : tags) {
+            byKind.put(t.kind, t);
+        }
+        System.assertEquals(2, tags.size(), 'Both the chart and the bucket table should be reported.');
+        System.assert(byKind.containsKey('chart'), 'Chart tag missing.');
+        System.assert(byKind.containsKey('bucket'), 'ChartBucket tag missing.');
+        System.assertEquals('Department', byKind.get('bucket').fieldApi);
+        System.assertEquals('Contact', byKind.get('bucket').childObject, 'Bucket tags need paging metadata too.');
+        System.assertNotEquals(
+            byKind.get('chart').signature,
+            byKind.get('bucket').signature,
+            'A chart and a bucket table must not share a signature.'
+        );
+    }
+
+    @IsTest
+    static void suppliedBuckets_areUsedInsteadOfResolving() {
+        // The point of the handoff: when the client supplies counts, the resolver
+        // must render them verbatim rather than going back to the data map or
+        // SOQL. `data` here holds NO records for the relationship, so anything
+        // rendered can only have come from the supplied payload.
+        String xml = '{#ChartBucket:Contacts:Department}[{key_label}={count}]{/ChartBucket}';
+
+        Map<String, String> mods = DocGenChartBucketResolver.parseTagModifiers(null);
+        String sig = DocGenChartBucketResolver.bucketSignature('Contacts', 'Department', mods);
+
+        String suppliedJson = JSON.serialize(
+            new List<Map<String, Object>>{
+                new Map<String, Object>{ 'key_label' => 'Engineering', 'count' => 42, 'percent' => 70.0 },
+                new Map<String, Object>{ 'key_label' => 'Sales', 'count' => 18, 'percent' => 30.0 }
+            }
+        );
+
+        Map<String, Object> data = new Map<String, Object>();
+        DocGenService.beginChartContext(null, new Map<String, String>{ sig => suppliedJson });
+        String out;
+        try {
+            out = DocGenChartBucketResolver.preprocessInline(xml, data);
+        } finally {
+            DocGenService.endChartContext();
+        }
+
+        System.assert(out != null, 'Preprocess should return markup.');
+        // The resolver rewrites the bucket loop into a synthetic _cb_N section
+        // seeded on `data`; assert the supplied rows landed there.
+        Boolean foundSupplied = false;
+        for (String k : data.keySet()) {
+            if (!k.startsWith('_cb_')) {
+                continue;
+            }
+            List<Object> rows = (List<Object>) data.get(k);
+            if (rows != null && rows.size() == 2) {
+                Map<String, Object> first = (Map<String, Object>) rows[0];
+                System.assertEquals('Engineering', first.get('key_label'), 'Supplied order must be preserved.');
+                System.assertEquals(42, Integer.valueOf(String.valueOf(first.get('count'))));
+                foundSupplied = true;
+            }
+        }
+        System.assert(foundSupplied, 'Client-supplied buckets should have seeded the synthetic section.');
+    }
+
+    @IsTest
+    static void suppliedBuckets_malformedPayload_fallsBackInsteadOfThrowing() {
+        // A bad client build must degrade to server resolution, not fail the doc.
+        String xml = '{#ChartBucket:Contacts:Department}{key_label}{/ChartBucket}';
+        Map<String, String> mods = DocGenChartBucketResolver.parseTagModifiers(null);
+        String sig = DocGenChartBucketResolver.bucketSignature('Contacts', 'Department', mods);
+
+        DocGenService.beginChartContext(null, new Map<String, String>{ sig => 'not-json{{{' });
+        try {
+            String out = DocGenChartBucketResolver.preprocessInline(xml, new Map<String, Object>());
+            System.assertNotEquals(null, out, 'Malformed payload must not throw.');
+        } finally {
+            DocGenService.endChartContext();
+        }
+    }
 }
