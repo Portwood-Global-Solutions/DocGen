@@ -325,4 +325,89 @@ private class DocGenTemplateLinterTest {
             (Integer) res.get('warningCount')
         );
     }
+
+    // -------------------------------------------------------------------------
+    // Canvas-authored bodies must not get a fidelity report.
+    // -------------------------------------------------------------------------
+
+    @isTest
+    static void trailingNewlineIsNotAMarkdownFence() {
+        // The fence rule snapshotted the html BEFORE trim(), so anything with a
+        // leading or trailing newline reported a ``` fence it never had. Canvas
+        // output always ends with one; so does most hand-authored HTML.
+        List<DocGenAiHtmlValidator.Finding> findings = DocGenTemplateLinter.lint(
+            '\n<html><body><p>{Name}</p></body></html>\n',
+            accountTemplate(null)
+        );
+        for (DocGenAiHtmlValidator.Finding f : findings) {
+            System.assertNotEquals(
+                'Markdown code fence',
+                f.rule,
+                'A trailing newline is not a code fence.'
+            );
+        }
+    }
+
+    @isTest
+    static void realMarkdownFenceIsStillReported() {
+        // Control: the rule must keep catching an actual fence, or the fix above
+        // would have quietly disabled it.
+        List<DocGenAiHtmlValidator.Finding> findings = DocGenTemplateLinter.lint(
+            '```html\n<html><body><p>{Name}</p></body></html>\n```',
+            accountTemplate(null)
+        );
+        Boolean found = false;
+        for (DocGenAiHtmlValidator.Finding f : findings) {
+            if (f.rule == 'Markdown code fence') {
+                found = true;
+            }
+        }
+        System.assert(found, 'An actual ``` fence must still be reported.');
+    }
+
+    @isTest
+    static void canvasAuthoredBodySkipsTheFidelityReport() {
+        // A canvas body legitimately uses position:absolute for pinned boxes and
+        // already wraps its row loop in <tbody>. Reporting those tells the author
+        // their own designer produced something questionable, about markup they
+        // never wrote. saveHtmlTemplateBody skips the report when it sees the
+        // canvas marker.
+        DocGen_Template__c tpl = accountTemplate('Name');
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+
+        String canvasBody =
+            '<!DOCTYPE html><html><head><style>' +
+            '.dg-artboard { position: relative; width: 8.5in; }' +
+            '.dg-pin { position: absolute; }' +
+            '</style></head><body><div class="dg-artboard">' +
+            '<div class="dg-pin" data-dg-x="1" data-dg-y="1">{Name}</div>' +
+            '</div></body></html>';
+
+        Test.startTest();
+        Map<String, Object> res = DocGenController.saveHtmlTemplateBody(tpl.Id, 'canvas.html', canvasBody);
+        Test.stopTest();
+
+        System.assertEquals(0, (Integer) res.get('warningCount'), 'Canvas bodies get no fidelity report.');
+    }
+
+    @isTest
+    static void handAuthoredBodyStillGetsTheFidelityReport() {
+        // Control for the skip: an imported file with the same construct must
+        // still be reported, or the exemption would have disabled the feature.
+        DocGen_Template__c tpl = accountTemplate('Name');
+        Database.insert(tpl, AccessLevel.SYSTEM_MODE);
+
+        String handAuthored =
+            '<html><head><style>.hero { position: absolute; top: 0; }</style></head>' +
+            '<body><div class="hero">{Name}</div></body></html>';
+
+        Test.startTest();
+        Map<String, Object> res = DocGenController.saveHtmlTemplateBody(tpl.Id, 'hand.html', handAuthored);
+        Test.stopTest();
+
+        System.assert(
+            (Integer) res.get('warningCount') > 0,
+            'Hand-authored HTML must still get the fidelity report.'
+        );
+    }
 }

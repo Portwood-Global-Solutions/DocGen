@@ -3476,7 +3476,23 @@ public with sharing class DocGenController { // NOPMD ExcessivePublicCount — c
                 WITH SYSTEM_MODE
                 LIMIT 1
             ];
-            if (!lintTpls.isEmpty()) {
+            // Skip the fidelity report for canvas-authored bodies.
+            //
+            // The report exists to tell an author what the PDF engine will do
+            // differently with HTML THEY wrote or imported. Canvas HTML is
+            // generated from the designer's own model, so every rule it can trip
+            // is either deliberate or already handled:
+            //
+            //   - `position: absolute` is how a pinned box lands where it was
+            //     drawn. That is the feature, not a mistake.
+            //   - the row loop is already emitted inside <tbody>, which is the
+            //     shape the engine expands; the between-rows rule misreads it.
+            //
+            // Reporting these tells the author their own tool produced something
+            // questionable, about markup they never wrote and cannot change, and
+            // points them at an edit view that does not govern the canvas.
+            Boolean fromCanvas = String.isNotBlank(htmlContent) && htmlContent.contains('dg-artboard');
+            if (!lintTpls.isEmpty() && !fromCanvas) {
                 warnings = DocGenTemplateLinter.lint(htmlContent, lintTpls[0]);
             }
         } catch (Exception lintErr) {

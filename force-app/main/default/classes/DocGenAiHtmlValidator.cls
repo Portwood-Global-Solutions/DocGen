@@ -139,8 +139,12 @@ public with sharing class DocGenAiHtmlValidator {
     // -----------------------------------------------------------------------
 
     private void stripMarkdownFences() {
-        String before = this.work;
+        // Trim BEFORE snapshotting. Comparing against the untrimmed original made
+        // any file with a leading or trailing newline report a markdown fence it
+        // never had — every canvas-authored body ends with one, and so does most
+        // hand-authored HTML. Only an actual ``` removal is worth reporting.
         this.work = this.work.trim();
+        String before = this.work;
         // ```html\n...\n``` or bare ```...```
         this.work = this.work.replaceAll('(?is)^```[a-z]*\\s*\\n', '').replaceAll('(?is)\\n?```\\s*$', '');
         if (before != this.work) {
